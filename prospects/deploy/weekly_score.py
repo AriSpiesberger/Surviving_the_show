@@ -93,6 +93,20 @@ def main():
         sys.exit("--score-only and --buylist-only are mutually exclusive")
 
     print(f"=== weekly_score for season={args.season} ===")
+
+    # Refresh prospects_snapshot.db from the live prospects.db so the buy-list
+    # build sees today's MiLB stats. daily_data.py writes to prospects.db;
+    # build_v17_buylist.py reads from prospects_snapshot.db. This bridge keeps
+    # the weekly buy list current. Idempotent.
+    live_db = REPO_ROOT / "prospects.db"
+    snap_db = REPO_ROOT / "prospects_snapshot.db"
+    if live_db.exists():
+        print(f"[snapshot] copying {live_db.name} -> {snap_db.name}")
+        shutil.copy2(live_db, snap_db)
+    else:
+        print(f"[snapshot] WARN: {live_db.name} not found; "
+              f"using existing {snap_db.name} if present")
+
     missing = check_artifacts()
     if missing:
         print(f"\nFATAL: required artifacts missing:")
