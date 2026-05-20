@@ -1,0 +1,32 @@
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+# Background worker — keeps the container alive so cron entries can fire.
+# Each cron block runs as a separate scheduled job.
+startCommand = "python -c \"import time; print('cron host alive'); time.sleep(10**9)\""
+
+# Each cron job runs detached. PROSPECT_DB / PRICES_DIR / HOLDINGS_PATH /
+# ALERTS_STATE_PATH should point at /data/* (mount a Railway volume there).
+# Set EBAY_BEARER_TOKEN (or EBAY_CLIENT_ID + EBAY_CLIENT_SECRET) and
+# SENDGRID_API_KEY / ALERT_FROM / ALERT_TO as Railway service env vars.
+
+[[deploy.cronJobs]]
+name = "daily_data"
+schedule = "30 4 * * *"                 # 04:30 UTC = 00:30 ET
+command  = "python -m prospects.deploy.daily_data"
+
+[[deploy.cronJobs]]
+name = "weekly_score"
+schedule = "0 9 * * 1"                  # 09:00 UTC Monday
+command  = "python -m prospects.deploy.weekly_score --season $(date -u +%Y)"
+
+[[deploy.cronJobs]]
+name = "daily_prices"
+schedule = "0 13 * * *"                 # 13:00 UTC = 09:00 ET
+command  = "python -m prospects.deploy.daily_prices --buy-list /data/buy_list_v1.17_FINAL.csv"
+
+[[deploy.cronJobs]]
+name = "daily_digest"
+schedule = "0 14 * * *"                 # 14:00 UTC = 10:00 ET
+command  = "python -m prospects.deploy.alerts"
