@@ -65,7 +65,9 @@ def build_card_spec(prospect_row: dict) -> CardSpec | None:
         else:
             return None
     else:
-        dy = int(dy)
+        # Accept "2025", "2025.0", or 2025 — pandas-exported CSVs are often
+        # the float-as-string form.
+        dy = int(float(dy))
         # Drafted: 1st Bowman is the year AFTER the draft.
         # IFA (when both draft_year and start_year are present and equal):
         # we set draft_year = first MiLB year via the IFA backfill, so the

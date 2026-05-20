@@ -30,7 +30,7 @@ FEAT = [
     "p_TOP_100_PROSPECT_x_yip_centered","p_MLB_DEBUT_x_yip_centered",
     "p_ESTABLISHED_MLB_x_yip_centered","p_STAR_PLUS_ELITE_x_yip_centered",
 ]
-YIP_THRESHOLDS = {0: 4.241, 1: 1.713, 2: 2.549, 3: 3.913, 4: 3.755}  # HONEST
+YIP_THRESHOLDS = {0: 4.691, 1: 1.938, 2: 2.754, 3: 4.226, 4: 4.853}  # HONEST, on overall_score
 LEVEL_RANK = {'RK':1,'DSL':1,'FCL':1,'CPX':1,'ROK':1,'A-':2,'A':3,'A+':4,'AA':5,'AAA':6,'MLB':7}
 
 
@@ -135,6 +135,12 @@ def main():
     for cls in m_b["classes"]:
         df[f"p_{cls}"] = df[f"p_{cls}_given_debut"] * df["p_debut"]
 
+    # 4b. Composite overall: debut amplified by breakout (α=2) and top100 (β=0.75)
+    ALPHA, BETA = 1.06, 2.60
+    df["overall_score"] = df["lasso_score"] * (
+        1.0 + ALPHA * df["p_breakout_given_debut"] + BETA * df["p_TOP_100_PROSPECT"]
+    )
+
     # 5. Universe filter for percentile computation + buy list
     universe = (df["bucket"] != "R1") & (df["first_top100_yr"].isna())
     print(f"Universe: {universe.sum():,} of {len(df):,} players")
@@ -186,7 +192,7 @@ def main():
         thresh = YIP_THRESHOLDS.get(yip)
         if thresh is None:
             return False
-        return r["lasso_score"] >= thresh
+        return r["overall_score"] >= thresh
     df["passes_filter"] = df.apply(passes, axis=1)
     print(f"Players passing yip-threshold filter (universe): {df['passes_filter'].sum():,}")
 
@@ -234,7 +240,7 @@ def main():
     out_cols = [
         "player_id","name","bucket","primary_position","current_org","cur_level_2026",
         "draft_year","draft_round","is_international","age_at_snap","years_in_pro",
-        "lasso_score","top100_score","pct_breakout","pct_top100",
+        "overall_score","lasso_score","top100_score","pct_breakout","pct_top100",
         "p_MLB_DEBUT","p_TOP_100_PROSPECT","p_ESTABLISHED_MLB","p_STAR_PLUS_ELITE",
         "p_debut","p_no_debut","p_cup","p_utility","p_regular","p_breakout",
         "p_cup_given_debut","p_utility_given_debut","p_regular_given_debut","p_breakout_given_debut",
@@ -248,12 +254,12 @@ def main():
     out_cols = [c for c in out_cols if c in df.columns]
 
     # Full annotated scored set (everyone scored)
-    full = df[out_cols].sort_values("lasso_score", ascending=False)
+    full = df[out_cols].sort_values("overall_score", ascending=False)
     full.to_csv("buy_list_v1.17_ALL_SCORED.csv", index=False)
     print(f"saved buy_list_v1.17_ALL_SCORED.csv ({len(full):,} players)")
 
     # Final filtered buy list (passes universe + yip threshold)
-    final = df[df["passes_filter"]].copy().sort_values("lasso_score", ascending=False)
+    final = df[df["passes_filter"]].copy().sort_values("overall_score", ascending=False)
     final["buy_rank"] = np.arange(1, len(final)+1)
     out_cols_final = ["buy_rank"] + out_cols
     final = final[out_cols_final]
@@ -268,7 +274,7 @@ def main():
     print(final["bucket"].value_counts().to_string())
     print(f"\n  top 20 by lasso_score:")
     show = ["buy_rank","name","years_in_pro","bucket","primary_position","cur_level_2026",
-            "lasso_score","p_MLB_DEBUT","pct_top100","pct_breakout","p_breakout",
+            "overall_score","lasso_score","p_MLB_DEBUT","pct_top100","pct_breakout","p_breakout",
             "y2026_pa","y2026_ip","y2026_avg","y2026_era","y2026_k9",
             "entry_price","EV_dollars","edge_dollars"]
     show = [c for c in show if c in final.columns]
