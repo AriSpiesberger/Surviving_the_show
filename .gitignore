@@ -1,0 +1,136 @@
+# =============================================================================
+# Secrets
+# =============================================================================
+.env
+.env.local
+secrets/
+secrets.json
+*.pem
+*.key
+
+# =============================================================================
+# Large data / model artifacts (keep code in git, data out)
+# =============================================================================
+
+# Databases
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Panels (regeneratable; >30MB each)
+panel_*.npz
+panel_*.joined.pkl
+panel_*.part*.npz
+panel_*.part*.joined.pkl
+panels/
+
+# Model artifacts (regeneratable from training scripts)
+models/*.pkl
+models/*.joblib
+models/*.npz
+# Keep small lookup files in git
+!models/player_position_from_stats.csv
+!models/*.txt
+
+# Generated CSV outputs
+*.csv
+# Keep reference baseline tables (small, hand-curated)
+!baselines/*.csv
+!data/*.csv
+
+# Backtest / buy list outputs (regenerated per cycle)
+buy_list_*.csv
+backtests/*.csv
+backtests/**/*.csv
+
+# Scoring intermediates (large, regeneratable)
+snap*_long.csv
+snap*_all_scored.csv
+v17_cohort*.csv
+v17_cohorts_*.csv
+v1.17h_*_long.csv
+v1.17_*_long.csv
+
+# =============================================================================
+# Scratch / regeneratable work
+# =============================================================================
+scratch/
+outputs/
+logs/
+archive/
+
+# DB dumps
+db_dump/
+
+# External data mount
+mnt/
+
+# Comparison outputs and validation tables
+cmp_*.csv
+cmp_*.txt
+cmp.log
+val_*.csv
+val_*.txt
+shap_*.csv
+
+# Cohort pid lists
+cohort*_pids.txt
+*_pids.txt
+
+# Score chunk dirs (always intermediate)
+v17_*_in/
+v17_*_out/
+v17h_*_in/
+v17h_*_out/
+s25_chunk_*
+s26_chunk_*
+v17_*_chunk_*
+v17h_*_chunk_*
+
+# =============================================================================
+# Python
+# =============================================================================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+.coverage
+htmlcov/
+
+# Virtual envs
+venv/
+.venv/
+env/
+
+# =============================================================================
+# Logs and run output
+# =============================================================================
+*.log
+buylist_run.log
+build_panel.log
+
+# =============================================================================
+# Editor / OS
+# =============================================================================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+.claude/
+.cursor/
+
+# =============================================================================
+# One-shot scripts
+# =============================================================================
+scripts/_pathfix_*.py
