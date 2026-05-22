@@ -12,6 +12,12 @@ secrets.json
 # Large data / model artifacts (keep code in git, data out)
 # =============================================================================
 
+# Seed bundles (built locally by scripts/prepare_seed.py, hosted out-of-band)
+seed_*.tar.gz
+
+# Per-job runtime logs from scripts/local/run_job.ps1
+logs/
+
 # Databases
 *.db
 *.db-journal

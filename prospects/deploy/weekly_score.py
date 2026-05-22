@@ -87,6 +87,8 @@ def main():
                     help="run only the buylist build step")
     ap.add_argument("--keep-chunks", action="store_true",
                     help="don't clean intermediate per-chunk CSVs after merge")
+    ap.add_argument("--skip-debut-comps", action="store_true",
+                    help="skip the trailing debut_comps eBay refresh")
     args = ap.parse_args()
 
     if args.score_only and args.buylist_only:
@@ -156,6 +158,18 @@ def main():
         ], REPO_ROOT)
         if rc != 0:
             sys.exit(2)
+
+    # Step 3: refresh debut comps (eBay prices for non-R1 current-season
+    # debutants). Fail-soft: a comp ingestion error must not block the buy
+    # list update.
+    if not args.skip_debut_comps and not args.score_only:
+        rc = run_step("debut_comps", [
+            sys.executable, "-m", "prospects.deploy.debut_comps",
+            "--year", str(args.season),
+        ], REPO_ROOT)
+        if rc != 0:
+            print(f"[debut_comps] WARN: exited {rc}; buy list still valid",
+                  flush=True)
 
     print(f"\n=== weekly_score season={args.season} OK ===")
     print(f"  snap long file: {snap_long}")
