@@ -26,6 +26,7 @@ from pathlib import Path
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
 SEED_URL = os.environ.get("SEED_URL", "")
+SEED_TOKEN = os.environ.get("SEED_TOKEN", "")
 
 # If both of these exist, we consider the volume already seeded.
 SENTINELS = [
@@ -42,7 +43,15 @@ def download(url: str, dst: Path) -> int:
     print(f"[auto_seed] downloading {url}")
     t0 = time.time()
     last_pct = -1
-    with urllib.request.urlopen(url) as r, open(dst, "wb") as out:
+    req = urllib.request.Request(url)
+    if SEED_TOKEN:
+        # GitHub Releases asset API: needs both headers to return the binary
+        # rather than the JSON asset metadata. urllib follows the 302 to the
+        # presigned S3 URL and (correctly) strips Authorization on the
+        # cross-origin hop.
+        req.add_header("Authorization", f"token {SEED_TOKEN}")
+        req.add_header("Accept", "application/octet-stream")
+    with urllib.request.urlopen(req) as r, open(dst, "wb") as out:
         total = int(r.headers.get("Content-Length") or 0)
         got = 0
         chunk = 1024 * 1024
