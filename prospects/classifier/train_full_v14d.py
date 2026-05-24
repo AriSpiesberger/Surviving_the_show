@@ -72,6 +72,11 @@ def main():
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--lasso-fit-frac", type=float, default=0.10)
     ap.add_argument("--lasso-val-frac", type=float, default=0.10)
+    ap.add_argument("--max-entry-year", type=int, default=None,
+                    help="If set, restrict the player universe to those whose "
+                         "entry year (= draft_year, or earliest non-MLB "
+                         "season_year for IFAs) is <= this. Used by the TEST "
+                         "pipeline so the 80/10/10 split has mature outcomes.")
     args = ap.parse_args()
 
     print("=" * 70)
