@@ -1,0 +1,67 @@
+validate_model_b.py  prefix=val_model_b_v17h_hype  out_dir=results\val_model_b_v17h_hype_2026-05-25
+  model=models\model_b_outcomes_v1.17h_hype.pkl  date=2026-05-25
+  panel=panel_v1.17.npz  val_players=models\event_classifiers_v1.17_lasso_val_players.txt
+  val debutees scored: 324
+
+Class distribution (val):
+  cup         308  95.1%
+  breakout     16  4.9%
+
+========================================================================
+PER-CLASS METRICS (val slice, held out)
+========================================================================
+class         base     AUC  Brier_raw  Brier_cal   LL_raw   LL_cal
+cup          95.1%   0.364     0.0510     0.0476   0.2299   0.2008
+breakout      4.9%   0.364     0.0510     0.0476   0.2299   0.2008
+
+multinomial log-loss   raw=0.2299  cal=0.2008  baseline=0.1967
+  improvement vs baseline: raw=-0.0332  cal=-0.0041 nats/sample
+
+========================================================================
+RELIABILITY (calibrated, val slice, decile bins)
+========================================================================
+
+  cup (base rate 95.1%):
+    decile    n   pred%    obs%
+         0   32   92.2%  100.0%
+         1   32   93.9%   96.9%
+         2   33   94.2%   90.9%
+         3   32   94.4%  100.0%
+         4   33   94.5%  100.0%
+         5   32   94.6%   93.8%
+         6   32   94.7%   90.6%
+         7   33   94.8%   93.9%
+         8   32   94.9%   93.8%
+         9   33   95.1%   90.9%
+
+  breakout (base rate 4.9%):
+    decile    n   pred%    obs%
+         0   32    4.9%    9.4%
+         1   32    5.1%    6.2%
+         2   33    5.2%    6.1%
+         3   32    5.3%    9.4%
+         4   33    5.4%    6.1%
+         5   32    5.5%    0.0%
+         6   32    5.6%    0.0%
+         7   33    5.8%    9.1%
+         8   32    6.1%    3.1%
+         9   33    7.8%    0.0%
+
+========================================================================
+CONFUSION MATRIX (rows=actual, cols=predicted argmax)
+========================================================================
+                   cup   breakout   total
+  cup              308          0     308
+  breakout          16          0      16
+  pred_tot         324          0
+
+  overall argmax accuracy: 95.1%
+
+saved per-player preds: 324 rows
+
+========================================================================
+TOP-DECILE PRECISION (calibrated)
+========================================================================
+class          k n_pos_in_top  precision  recall   lift
+cup           32           29      90.6%    9.4%  0.95x
+breakout      32            0       0.0%    0.0%  0.00x
