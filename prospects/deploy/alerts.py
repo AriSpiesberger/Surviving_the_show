@@ -4,12 +4,18 @@ Inputs:
   - holdings.csv             : your owned cards
   - prices_holdings_latest   : today's lowest_buynow for each held player
   - prices_buylist_latest    : today's buy-list prices
-  - alerts_state.json        : already-fired 2x triggers (don't re-spam)
+  - alerts_state.json        : already-fired triggers (don't re-spam)
+  - prospects_snapshot.db    : season_stats for MLB-debut detection
 
 Fires:
-  - 2x trigger: per held card where lowest_buynow_price >= 2 * buy_price_usd
-                (raw, base 1st Bowman Chrome auto)
-  - Daily digest: portfolio value at lowest_buynow + top N buy candidates
+  - DEBUT trigger: per held player whose first MLB-level row appeared in
+                   season_stats since the last alerts run. Detected directly
+                   from daily_data's stat ingest (level='MLB' row exists),
+                   so we don't need to wait for the slower
+                   career_outcomes/Chadwick batch.
+  - 2x trigger:    per held card where lowest_buynow_price >= 2 * buy_price_usd
+                   (raw, base 1st Bowman Chrome auto)
+  - Daily digest:  portfolio value at lowest_buynow + top N buy candidates
 
 Email via SendGrid (env: SENDGRID_API_KEY, ALERT_FROM, ALERT_TO).
 
@@ -18,6 +24,7 @@ Holdings CSV schema (user maintains):
   ebay_item_id, notes
 
 The 2x trigger requires `denominator == 0` (base) and `grade == "" or "raw"`.
+DEBUT triggers fire on ANY held card for the player regardless of grade.
 """
 from __future__ import annotations
 
@@ -25,6 +32,7 @@ import argparse
 import csv
 import json
 import os
+import sqlite3
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -60,6 +68,83 @@ def _to_float(v) -> float | None:
 def _is_raw(grade: str) -> bool:
     g = (grade or "").strip().lower()
     return g in ("", "raw")
+
+
+def evaluate_debuts(holdings: list[dict], db_path: Path,
+                    state: dict) -> list[dict]:
+    """Detect MLB debuts among held players.
+
+    Signal: a row exists in season_stats where UPPER(level)='MLB' for the
+    player. Detected from daily_data's ingest (level='MLB' is one of the
+    levels pulled), so this fires the day after the first MLB box score
+    lands rather than waiting for the slower Chadwick/Lahman refresh that
+    sets career_outcomes.mlb_debut_year.
+
+    State key: 'fired_debut_player_ids' — list of player_ids already alerted.
+    """
+    if not holdings or not db_path.exists():
+        return []
+    pids = sorted({h.get("player_id") for h in holdings if h.get("player_id")})
+    if not pids:
+        return []
+    placeholders = ",".join("?" * len(pids))
+    conn = sqlite3.connect(str(db_path))
+    try:
+        rows = conn.execute(
+            f"""SELECT player_id, MIN(season_year) AS first_mlb_year,
+                       SUM(COALESCE(pa, 0)) AS mlb_pa,
+                       SUM(COALESCE(ip, 0)) AS mlb_ip
+                FROM season_stats
+                WHERE UPPER(level) = 'MLB' AND player_id IN ({placeholders})
+                GROUP BY player_id""",
+            pids,
+        ).fetchall()
+    finally:
+        conn.close()
+    debut_by_pid = {r[0]: (r[1], r[2] or 0, r[3] or 0) for r in rows}
+
+    fired = set(state.get("fired_debut_player_ids", []))
+    # Dedupe holdings by player_id for the debut alert (one alert per player,
+    # not per card). Pick the earliest buy_date and lowest buy_price as the
+    # "anchor" card to show in the email.
+    by_pid: dict[str, dict] = {}
+    for h in holdings:
+        pid = h.get("player_id") or ""
+        if not pid or pid not in debut_by_pid:
+            continue
+        cur = by_pid.get(pid)
+        buy_date = h.get("buy_date") or ""
+        if cur is None or buy_date < (cur.get("buy_date") or ""):
+            by_pid[pid] = h
+
+    new_alerts: list[dict] = []
+    for pid, h in by_pid.items():
+        if pid in fired:
+            continue
+        first_year, mlb_pa, mlb_ip = debut_by_pid[pid]
+        first_year = int(first_year)
+        # Only fire if the debut is recent relative to the buy. Otherwise
+        # we'd spam alerts the first time the deploy runs against holdings of
+        # players who debuted years ago.
+        buy_date = h.get("buy_date") or ""
+        try:
+            buy_year = int(buy_date[:4]) if len(buy_date) >= 4 else 0
+        except ValueError:
+            buy_year = 0
+        if buy_year and first_year < buy_year:
+            continue
+        new_alerts.append({
+            "player_id": pid,
+            "name": h.get("name") or "",
+            "first_mlb_year": first_year,
+            "mlb_pa": int(mlb_pa),
+            "mlb_ip": float(mlb_ip),
+            "buy_date": buy_date,
+            "buy_price_usd": _to_float(h.get("buy_price_usd")),
+            "card_id": h.get("card_id") or "",
+        })
+    new_alerts.sort(key=lambda a: (a["first_mlb_year"], a["name"]))
+    return new_alerts
 
 
 def evaluate_holdings(holdings: list[dict], h_prices: list[dict],
@@ -137,16 +222,39 @@ def evaluate_holdings(holdings: list[dict], h_prices: list[dict],
 
 def render_email_html(snapshot_date: str, new_alerts: list[dict],
                       valued: list[dict], portfolio: float,
-                      buy_top: list[dict]) -> tuple[str, str]:
+                      buy_top: list[dict],
+                      debut_alerts: list[dict] | None = None) -> tuple[str, str]:
+    debut_alerts = debut_alerts or []
+    # Subject priority: debuts > 2x > digest. Debuts are the rarer, higher-
+    # value signal so they take the headline.
     subject = f"[prospects] {snapshot_date} digest"
     if new_alerts:
         subject = f"[prospects] {len(new_alerts)} 2x ALERT • {snapshot_date}"
+    if debut_alerts:
+        n = len(debut_alerts)
+        subject = (f"[prospects] \U0001F6A8 {n} DEBUT"
+                   f"{'S' if n > 1 else ''} • {snapshot_date}")
 
     def fmt_money(x):
         return f"${x:,.2f}" if isinstance(x, (int, float)) else "—"
 
     parts = []
     parts.append(f"<h2>{snapshot_date}</h2>")
+
+    if debut_alerts:
+        parts.append("<h3>\U0001F6A8 MLB debuts on holdings</h3><ul>")
+        for d in debut_alerts:
+            buy = fmt_money(d.get("buy_price_usd"))
+            pa_ip = (f"{d['mlb_pa']} PA" if d['mlb_pa']
+                     else f"{d['mlb_ip']:.1f} IP" if d['mlb_ip']
+                     else "first box score landed")
+            parts.append(
+                f"<li><b>{d['name']}</b> — first MLB row in "
+                f"{d['first_mlb_year']} ({pa_ip})"
+                + (f"; bought {d['buy_date']} @ {buy}" if d.get('buy_date') else "")
+                + "</li>"
+            )
+        parts.append("</ul>")
 
     if new_alerts:
         parts.append("<h3>\U0001f7e2 2x alerts (lowest buy-now &ge; 2&times; "
@@ -226,6 +334,9 @@ def main() -> int:
                                                           "/data/prices"))
     p.add_argument("--state", default=os.environ.get("ALERTS_STATE_PATH",
                                                      "/data/alerts_state.json"))
+    p.add_argument("--db", default=os.environ.get("PROSPECT_DB",
+                                                  "/data/prospects_snapshot.db"),
+                   help="DB with season_stats for MLB-debut detection")
     p.add_argument("--top-n-buy", type=int, default=15)
     p.add_argument("--dry-run", action="store_true",
                    help="Render to stdout instead of emailing")
@@ -243,6 +354,7 @@ def main() -> int:
     state_path = Path(args.state)
     state = json.loads(state_path.read_text()) if state_path.exists() else {}
 
+    debut_alerts = evaluate_debuts(holdings, Path(args.db), state)
     new_alerts, valued, portfolio = evaluate_holdings(holdings, h_prices, state)
 
     buy_top = [
@@ -255,7 +367,8 @@ def main() -> int:
     buy_top = buy_top[: args.top_n_buy]
 
     subject, html = render_email_html(snapshot_date, new_alerts, valued,
-                                      portfolio, buy_top)
+                                      portfolio, buy_top,
+                                      debut_alerts=debut_alerts)
 
     if args.dry_run:
         print(f"SUBJECT: {subject}")
@@ -273,16 +386,22 @@ def main() -> int:
     send_email(subject, html, to_addr, from_addr, api_key)
     print(f"[alerts] sent: {subject}")
 
-    # Persist fired-state so we don't re-spam the same card_id every day
+    # Persist fired-state so we don't re-spam the same triggers every day
     fired = set(state.get("fired_2x_card_ids", []))
     for a in new_alerts:
         if a["card_id"]:
             fired.add(a["card_id"])
     state["fired_2x_card_ids"] = sorted(fired)
+    fired_debuts = set(state.get("fired_debut_player_ids", []))
+    for d in debut_alerts:
+        if d["player_id"]:
+            fired_debuts.add(d["player_id"])
+    state["fired_debut_player_ids"] = sorted(fired_debuts)
     state["last_run"] = snapshot_date
     state_path.parent.mkdir(parents=True, exist_ok=True)
     state_path.write_text(json.dumps(state, indent=2))
-    print(f"[alerts] state -> {state_path} ({len(fired)} fired card_ids)")
+    print(f"[alerts] state -> {state_path}  "
+          f"({len(fired)} 2x card_ids, {len(fired_debuts)} debut player_ids)")
     return 0
 
 

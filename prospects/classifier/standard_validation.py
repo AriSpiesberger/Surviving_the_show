@@ -786,10 +786,12 @@ def main():
               f"(min={min(r['debut_score'] for r in long_rows):+.3f}, "
               f"max={max(r['debut_score'] for r in long_rows):+.3f})")
 
-    # Route artifacts into results/<prefix>/ unless --results-dir is empty.
+    # Route artifacts into results/<prefix>_<YYYY-MM-DD>/ unless --results-dir empty.
+    import datetime as _dt
     prefix_base = os.path.basename(args.out_prefix.rstrip(os.sep).rstrip("/"))
+    date = _dt.date.today().isoformat()
     if args.results_dir:
-        out_dir = os.path.join(args.results_dir, prefix_base)
+        out_dir = os.path.join(args.results_dir, f"{prefix_base}_{date}")
         artifact = lambda name: os.path.join(out_dir, name)
         long_path   = artifact("long.csv")
         bucket_path = artifact("bucket.csv")

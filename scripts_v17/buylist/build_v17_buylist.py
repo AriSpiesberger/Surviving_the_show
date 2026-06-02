@@ -18,6 +18,7 @@ Output: buy_list_v1.17_FINAL.csv
 """
 from __future__ import annotations
 
+import argparse
 import pickle
 import sqlite3
 
@@ -53,10 +54,24 @@ def pos_group(p):
 
 
 def main():
-    db = "prospects_snapshot.db"
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--snap-long", default="snap2026_v17_all_long.csv",
+                    help="Output of score_panel_v17.py for the snap year.")
+    ap.add_argument("--debut-lasso",
+                    default="models/debut_lasso_universe_v1.17_prod.pkl")
+    ap.add_argument("--top100-lasso",
+                    default="models/top100_lasso_v1.17_prod.pkl")
+    ap.add_argument("--model-b",
+                    default="models/model_b_outcomes_v1.17_prod.pkl")
+    ap.add_argument("--out-prefix", default="buy_list_v1.17",
+                    help="Output files: <prefix>_ALL_SCORED.csv and "
+                         "<prefix>_FINAL.csv")
+    ap.add_argument("--db", default="prospects_snapshot.db")
+    args = ap.parse_args()
+    db = args.db
 
-    print("Loading scored snap=2026 prospects...")
-    df = pd.read_csv("snap2026_v17_all_long.csv")
+    print(f"Loading scored snap prospects from {args.snap_long}...")
+    df = pd.read_csv(args.snap_long)
     df = df[df.snap_year == 2026].copy()
     df = df.drop_duplicates("player_id")
     print(f"  {len(df):,} unique players")
@@ -88,21 +103,18 @@ def main():
     for ev in ("TOP_100_PROSPECT","MLB_DEBUT","ESTABLISHED_MLB","STAR_PLUS_ELITE"):
         df[f"p_{ev}_x_yip_centered"] = df[f"p_{ev}"] * df["yip_centered"]
 
-    # 2. Debut lasso (HONEST - trained on 80%-hazard fit data)
-    print("Applying HONEST debut lasso...")
-    with open("models/debut_lasso_universe_v1.17h.pkl","rb") as fh:
+    print(f"Applying debut lasso: {args.debut_lasso}")
+    with open(args.debut_lasso,"rb") as fh:
         m_debut = pickle.load(fh)
     df["lasso_score"] = m_debut["lasso"].predict(m_debut["scaler"].transform(df[FEAT].values))
 
-    # 3. Top100 lasso (HONEST)
-    print("Applying HONEST top100 lasso...")
-    with open("models/top100_lasso_v1.17h.pkl","rb") as fh:
+    print(f"Applying top100 lasso: {args.top100_lasso}")
+    with open(args.top100_lasso,"rb") as fh:
         m_top100 = pickle.load(fh)
     df["top100_score"] = m_top100["lasso"].predict(m_top100["scaler"].transform(df[FEAT].values))
 
-    # 4. Model B (HONEST)
-    print("Applying HONEST model B...")
-    with open("models/model_b_outcomes_v1.17h.pkl","rb") as fh:
+    print(f"Applying model B: {args.model_b}")
+    with open(args.model_b,"rb") as fh:
         m_b = pickle.load(fh)
     df = df.merge(pos_lk, on="player_id", how="left")
     df["position_corrected"] = df["pos_seasonstats"].fillna(df["primary_position"])
@@ -152,35 +164,70 @@ def main():
     df.loc[universe, "pct_breakout"] = uni_df["p_breakout"].rank(pct=True) * 100
     df.loc[universe, "pct_top100"] = uni_df["top100_score"].rank(pct=True) * 100
 
-    # 7. Merge 2026 stats (PA-weighted within season across levels)
-    print("Merging 2026 MiLB stats (PA/IP-weighted)...")
+    # 7. Merge 2026 stats. Two views per player:
+    #    (a) PA/IP-weighted BLEND across all 2026 levels (y2026_*) — historical
+    #        default; useful for season-totals like HR/SB and for stable-level
+    #        guys.
+    #    (b) CURRENT-LEVEL-ONLY (y2026_cur_*) — uses only rows at the player's
+    #        highest 2026 level. For recently-promoted players (e.g. an AA guy
+    #        with 13 PA at AAA) the blended slash is dominated by the lower
+    #        level while cur_level_2026 says AAA; (b) makes that mismatch
+    #        legible. recently_promoted=True flags <50 PA / <15 IP at the
+    #        current level when they ALSO have meaningful stats at a lower
+    #        level the same season.
+    print("Merging 2026 MiLB stats (blended + current-level-only)...")
     s26 = stats_all[stats_all.season_year == 2026].copy()
     s26["pa"] = s26["pa"].fillna(0); s26["ip"] = s26["ip"].fillna(0)
     s26["lvl_rank"] = s26["level"].str.upper().map(LEVEL_RANK).fillna(0)
-    # Highest level + sum PA/IP/HR/SB
+    # Highest level
     s26 = s26.sort_values(["player_id","lvl_rank"], ascending=[True, False])
-    high = s26.groupby("player_id").first().reset_index()[["player_id","level"]]
-    high = high.rename(columns={"level":"cur_level_2026"})
+    high = s26.groupby("player_id").first().reset_index()[["player_id","level","lvl_rank"]]
+    high = high.rename(columns={"level":"cur_level_2026",
+                                "lvl_rank":"_cur_lvl_rank"})
     sums = s26.groupby("player_id").agg(
         y2026_pa=("pa","sum"), y2026_ip=("ip","sum"),
-        y2026_home_runs=("home_runs","sum"), y2026_stolen_bases=("stolen_bases","sum"),
+        y2026_home_runs=("home_runs","sum"),
+        y2026_stolen_bases=("stolen_bases","sum"),
     ).reset_index()
-    # Weighted avgs
+
     def wavg(s, val, w):
         d = s[[val, w]].dropna(subset=[val])
         d = d[d[w] > 0]
         if len(d) == 0: return np.nan
         return float((d[val] * d[w]).sum() / d[w].sum())
+
+    # Build BLEND + CUR rows side by side
+    s26_with_high = s26.merge(high[["player_id","_cur_lvl_rank"]], on="player_id", how="left")
     rows = []
-    for pid, grp in s26.groupby("player_id"):
+    for pid, grp in s26_with_high.groupby("player_id"):
+        cur_mask = grp["lvl_rank"] == grp["_cur_lvl_rank"].iloc[0]
+        cur = grp[cur_mask]
+        lower = grp[~cur_mask]
         r = {"player_id": pid}
+        # Blended (PA/IP-weighted across all levels)
         for v in ("avg","obp","slg","iso","k_pct","bb_pct"):
             r[f"y2026_{v}"] = wavg(grp, v, "pa")
         for v in ("era","k9","bb9","whip","fip"):
             r[f"y2026_{v}"] = wavg(grp, v, "ip")
+        # Current-level-only
+        r["y2026_cur_pa"] = float(cur["pa"].sum())
+        r["y2026_cur_ip"] = float(cur["ip"].sum())
+        for v in ("avg","obp","slg","iso","k_pct","bb_pct"):
+            r[f"y2026_cur_{v}"] = wavg(cur, v, "pa")
+        for v in ("era","k9","bb9","whip","fip"):
+            r[f"y2026_cur_{v}"] = wavg(cur, v, "ip")
+        # Promotion flag: small sample at cur level AND meaningful lower-level
+        # sample the same season => "their headline blend is mostly lower level"
+        lower_pa = float(lower["pa"].sum()); lower_ip = float(lower["ip"].sum())
+        cur_pa = r["y2026_cur_pa"]; cur_ip = r["y2026_cur_ip"]
+        is_hitter = cur_pa + lower_pa > cur_ip + lower_ip  # rough
+        if is_hitter:
+            r["recently_promoted"] = bool(cur_pa < 50 and lower_pa >= 50)
+        else:
+            r["recently_promoted"] = bool(cur_ip < 15 and lower_ip >= 15)
         rows.append(r)
     wstats = pd.DataFrame(rows)
-    df = df.merge(high, on="player_id", how="left")
+    df = df.merge(high.drop(columns=["_cur_lvl_rank"]), on="player_id", how="left")
     df = df.merge(sums, on="player_id", how="left")
     df = df.merge(wstats, on="player_id", how="left")
 
@@ -208,19 +255,6 @@ def main():
         prices_keep = prices[["player_id"] + price_cols].drop_duplicates("player_id")
         prices_keep.columns = ["player_id"] + [f"ebay_{c}" for c in price_cols]
         df = df.merge(prices_keep, on="player_id", how="left")
-        # Also try backfill from v14i highconviction prices
-        extra = pd.read_csv("buy_lists/prices_v14i_HIGHCONVICTION.csv")
-        extra = extra[(extra["has_market"].astype(str) == "1") &
-                      (extra["denominator"].astype(str).isin(["0","0.0"]))]
-        pc = [c for c in price_cols if c in extra.columns]
-        extra_keep = extra[["player_id"] + pc].drop_duplicates("player_id")
-        extra_keep.columns = ["player_id"] + [f"ebay_{c}" for c in pc]
-        for col in extra_keep.columns:
-            if col == "player_id": continue
-            if col in df.columns:
-                merged = df.merge(extra_keep[["player_id", col]], on="player_id",
-                                  how="left", suffixes=("","_x"))
-                df[col] = merged[col].fillna(merged[col+"_x"])
     except FileNotFoundError as e:
         print(f"  no prices file: {e}")
 
@@ -247,24 +281,46 @@ def main():
         "y2026_pa","y2026_ip","y2026_avg","y2026_obp","y2026_slg","y2026_iso",
         "y2026_k_pct","y2026_bb_pct","y2026_home_runs","y2026_stolen_bases",
         "y2026_era","y2026_k9","y2026_bb9","y2026_whip","y2026_fip",
+        "y2026_cur_pa","y2026_cur_ip","y2026_cur_avg","y2026_cur_obp",
+        "y2026_cur_slg","y2026_cur_iso","y2026_cur_k_pct","y2026_cur_bb_pct",
+        "y2026_cur_era","y2026_cur_k9","y2026_cur_bb9","y2026_cur_whip",
+        "y2026_cur_fip","recently_promoted",
         "ebay_price_median","ebay_price_p25","ebay_n_listings","ebay_top_listing_url",
         "EV_dollars","entry_price","edge_dollars",
         "passes_filter",
     ]
     out_cols = [c for c in out_cols if c in df.columns]
 
+    all_path = f"{args.out_prefix}_ALL_SCORED.csv"
+    final_path = f"{args.out_prefix}_FINAL.csv"
+
+    def _safe_to_csv(df_out, path):
+        """Write CSV, falling back to a timestamped sidecar if the target is
+        locked (Excel/Numbers/IDE open on the file). Returns the path actually
+        written. Failing the whole weekly run because someone left the buy
+        list open in Excel is not acceptable for an autonomous deploy."""
+        import time
+        try:
+            df_out.to_csv(path, index=False)
+            return path
+        except PermissionError:
+            stamp = time.strftime("%Y-%m-%d_%H%M%S")
+            base, ext = path.rsplit(".", 1)
+            fallback = f"{base}.{stamp}.{ext}"
+            df_out.to_csv(fallback, index=False)
+            print(f"  WARN {path} is locked (open in Excel?); wrote {fallback}")
+            return fallback
+
     # Full annotated scored set (everyone scored)
     full = df[out_cols].sort_values("overall_score", ascending=False)
-    full.to_csv("buy_list_v1.17_ALL_SCORED.csv", index=False)
-    print(f"saved buy_list_v1.17_ALL_SCORED.csv ({len(full):,} players)")
+    print(f"saved {_safe_to_csv(full, all_path)} ({len(full):,} players)")
 
     # Final filtered buy list (passes universe + yip threshold)
     final = df[df["passes_filter"]].copy().sort_values("overall_score", ascending=False)
     final["buy_rank"] = np.arange(1, len(final)+1)
     out_cols_final = ["buy_rank"] + out_cols
     final = final[out_cols_final]
-    final.to_csv("buy_list_v1.17_FINAL.csv", index=False)
-    print(f"saved buy_list_v1.17_FINAL.csv ({len(final):,} players passing filter)")
+    print(f"saved {_safe_to_csv(final, final_path)} ({len(final):,} players passing filter)")
 
     # Headline
     print(f"\n=== FINAL BUY LIST  (v1.17, universe + per-yip threshold) ===")

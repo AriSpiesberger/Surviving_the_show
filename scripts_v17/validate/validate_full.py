@@ -35,6 +35,10 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import contextlib
+import datetime as _dt
+import io
+import os
 import pickle
 import sqlite3
 
@@ -43,6 +47,26 @@ import pandas as pd
 from sklearn.metrics import (
     average_precision_score, brier_score_loss, roc_auc_score,
 )
+
+
+def _make_out_dir(prefix: str) -> str:
+    """results/<prefix>_<YYYY-MM-DD>/ — created if missing."""
+    date = _dt.date.today().isoformat()
+    out_dir = os.path.join("results", f"{prefix}_{date}")
+    os.makedirs(out_dir, exist_ok=True)
+    return out_dir
+
+
+class _Tee:
+    """Mirror writes to multiple text streams (stdout + report buffer)."""
+    def __init__(self, *streams):
+        self._streams = streams
+    def write(self, s):
+        for st in self._streams:
+            st.write(s)
+    def flush(self):
+        for st in self._streams:
+            st.flush()
 
 EVENTS = ["MLB_DEBUT", "TOP_100_PROSPECT", "ESTABLISHED_MLB", "STAR_PLUS_ELITE"]
 SLABS = [
@@ -99,6 +123,196 @@ def slab_metrics(scores, y, lo_pct, hi_pct):
         "tp": int(seg_y.sum()),
         "idx": idx,
     }
+
+
+# Percentile cut points used by both cumulative-threshold and score-bucket
+# views. Coarse 5% steps from bottom to 95th percentile, then 1% steps inside
+# the top 5%. Direction note: percentile p here means "score floor at the p-th
+# percentile of this yip's scores", so "above p" = top (100-p)% of players.
+PCTILE_CUTS = list(range(5, 96, 5)) + [96, 97, 98, 99]
+
+
+def cumulative_above_threshold(df, event):
+    """Per (yip, percentile cut p): score floor T = score at p-th pctile;
+    n_above = players with score >= T; rate_above = mean realized; lift vs base.
+
+    Lets you pick (yip, T) and see what your pool looks like above that score.
+    """
+    rows = []
+    for yip in sorted(df.snap_offset.unique()):
+        sub = df[df.snap_offset == yip]
+        if len(sub) < 50:
+            continue
+        elig = sub[sub[f"eligible_{event}"] == 1]
+        if len(elig) < 50:
+            continue
+        y = elig[f"realized_{event}"].values.astype(int)
+        if y.sum() == 0:
+            continue
+        scores = elig["lasso_score"].values
+        base = float(y.mean())
+        for p in PCTILE_CUTS:
+            T = float(np.percentile(scores, p))
+            mask = scores >= T
+            n_above = int(mask.sum())
+            if n_above == 0:
+                continue
+            rate = float(y[mask].mean())
+            rows.append({
+                "event": event, "yip": int(yip), "pctile_cut": p,
+                "score_floor": T, "n_above": n_above,
+                "rate_above": rate, "base_rate": base,
+                "lift": rate / base if base > 0 else float("nan"),
+                "tp_above": int(y[mask].sum()),
+            })
+    return pd.DataFrame(rows)
+
+
+def per_yip_score_buckets(df, event):
+    """Per (yip, score bucket): non-cumulative — players whose score falls
+    between consecutive percentile cuts. Same percentile grid as the
+    cumulative view, so the cuts line up.
+
+    Buckets in ascending percentile order:
+        [0,5), [5,10), ..., [90,95), [95,96), [96,97), [97,98), [98,99), [99,100]
+    """
+    bucket_edges = [0] + PCTILE_CUTS + [100]
+    rows = []
+    for yip in sorted(df.snap_offset.unique()):
+        sub = df[df.snap_offset == yip]
+        if len(sub) < 50:
+            continue
+        elig = sub[sub[f"eligible_{event}"] == 1]
+        if len(elig) < 50:
+            continue
+        y = elig[f"realized_{event}"].values.astype(int)
+        if y.sum() == 0:
+            continue
+        scores = elig["lasso_score"].values
+        base = float(y.mean())
+        # Score thresholds at every edge (inclusive of 0 = min, 100 = max+eps)
+        edge_T = {p: float(np.percentile(scores, p)) for p in bucket_edges}
+        for lo, hi in zip(bucket_edges[:-1], bucket_edges[1:]):
+            T_lo, T_hi = edge_T[lo], edge_T[hi]
+            if hi == 100:
+                mask = scores >= T_lo
+            else:
+                mask = (scores >= T_lo) & (scores < T_hi)
+            n = int(mask.sum())
+            if n == 0:
+                continue
+            rate = float(y[mask].mean())
+            rows.append({
+                "event": event, "yip": int(yip),
+                "pctile_lo": lo, "pctile_hi": hi,
+                "bucket": f"p{lo}-p{hi}",
+                "score_lo": T_lo, "score_hi": T_hi,
+                "n": n, "tp": int(y[mask].sum()),
+                "rate": rate, "base_rate": base,
+                "lift": rate / base if base > 0 else float("nan"),
+            })
+    return pd.DataFrame(rows)
+
+
+# Absolute lasso-score bins (stable across yip and draft bucket — unlike the
+# percentile slabs above, these let you read off "what score threshold do I
+# need" directly).
+SCORE_BINS = [
+    (-np.inf, 0.0,   "<0.0"),
+    (0.0,     0.5,   "0.0-0.5"),
+    (0.5,     1.0,   "0.5-1.0"),
+    (1.0,     1.5,   "1.0-1.5"),
+    (1.5,     2.0,   "1.5-2.0"),
+    (2.0,     3.0,   "2.0-3.0"),
+    (3.0,     5.0,   "3.0-5.0"),
+    (5.0,     np.inf,"5.0+"),
+]
+DRAFT_BUCKETS = ["R1", "R2-R3", "R4-R10", "R10+", "IFA"]
+
+
+def _score_bin_rows(elig_df, event, group_col, group_values):
+    """Per (group_value, score_bin) → n, rate, base, lift, score range."""
+    rows = []
+    for gv in group_values:
+        sub = elig_df[elig_df[group_col] == gv]
+        if len(sub) < 30:
+            continue
+        y = sub[f"realized_{event}"].values.astype(int)
+        if y.sum() == 0:
+            continue
+        scores = sub["lasso_score"].values
+        base = float(y.mean())
+        for lo, hi, label in SCORE_BINS:
+            mask = (scores >= lo) & (scores < hi)
+            n = int(mask.sum())
+            if n == 0:
+                continue
+            rate = float(y[mask].mean())
+            rows.append({
+                "event": event, group_col: gv,
+                "score_bin": label, "score_lo": lo, "score_hi": hi,
+                "n": n, "tp": int(y[mask].sum()),
+                "rate": rate, "base_rate": base,
+                "lift": rate / base if base > 0 else float("nan"),
+            })
+    return pd.DataFrame(rows)
+
+
+def score_vs_yip(df, event):
+    elig = df[df[f"eligible_{event}"] == 1]
+    return _score_bin_rows(elig, event, "snap_offset",
+                           sorted(elig.snap_offset.unique()))
+
+
+def score_vs_draft_bucket(df, event):
+    elig = df[df[f"eligible_{event}"] == 1]
+    buckets = [b for b in DRAFT_BUCKETS if b in set(elig.bucket.unique())]
+    return _score_bin_rows(elig, event, "bucket", buckets)
+
+
+def walkforward_summary(df, event):
+    """Per snap_offset: n, pos, base%, pred%, AUC, lift@5, ECE."""
+    from sklearn.metrics import roc_auc_score
+    rows = []
+    for off in sorted(df.snap_offset.unique()):
+        sub = df[(df.snap_offset == off) & (df[f"eligible_{event}"] == 1)]
+        if len(sub) < 50:
+            continue
+        y = sub[f"realized_{event}"].values.astype(int)
+        if y.sum() == 0:
+            rows.append({"event": event, "snap_offset": int(off),
+                         "n": len(sub), "pos": 0,
+                         "base_pct": 0.0, "pred_pct": float("nan"),
+                         "auc": float("nan"), "lift@5": float("nan"),
+                         "ece": float("nan")})
+            continue
+        p = sub[f"p_{event}"].values
+        base = float(y.mean())
+        pred = float(p.mean())
+        try:
+            auc = float(roc_auc_score(y, p))
+        except Exception:
+            auc = float("nan")
+        # Lift @ top 5% by predicted prob
+        n = len(sub)
+        k = max(1, int(round(0.05 * n)))
+        order = np.argsort(-p)[:k]
+        rate_top = float(y[order].mean())
+        lift5 = rate_top / base if base > 0 else float("nan")
+        # ECE: 10 equal-width bins on p
+        bins = np.linspace(0, 1, 11)
+        idx = np.clip(np.digitize(p, bins) - 1, 0, 9)
+        ece = 0.0
+        for b in range(10):
+            m = idx == b
+            if not m.any():
+                continue
+            ece += (m.mean()) * abs(p[m].mean() - y[m].mean())
+        rows.append({"event": event, "snap_offset": int(off),
+                     "n": int(n), "pos": int(y.sum()),
+                     "base_pct": base * 100, "pred_pct": pred * 100,
+                     "auc": auc, "lift@5": lift5, "ece": ece})
+    return pd.DataFrame(rows)
 
 
 def per_yip_slabs(df, event, slabs):
@@ -204,6 +418,19 @@ def main():
                          "look-back at snap=2022 and snap=2023.")
     args = ap.parse_args()
 
+    out_dir = _make_out_dir(args.out_prefix)
+    report_buf = io.StringIO()
+    import sys as _sys
+    _real_stdout = _sys.stdout
+    _sys.stdout = _Tee(_real_stdout, report_buf)
+
+    print(f"validate_full.py  prefix={args.out_prefix}  out_dir={out_dir}")
+    print(f"  long={args.long}")
+    print(f"  lasso={args.lasso}")
+    print(f"  model_b={args.model_b}")
+    print(f"  db={args.db}")
+    print(f"  date={_dt.date.today().isoformat()}\n")
+
     df = score_with_lasso(args.long, args.lasso, db=args.db)
     print(f"scored val: {len(df):,} rows, {df.player_id.nunique():,} players")
 
@@ -221,7 +448,7 @@ def main():
         slab_df, base_by_yip = per_yip_slabs(df, ev, SLABS)
         if slab_df.empty:
             print("  (no data)"); continue
-        out_slab = f"val_{args.out_prefix}_{ev}_pct_slabs.csv"
+        out_slab = os.path.join(out_dir, f"{ev}_pct_slabs.csv")
         slab_df.to_csv(out_slab, index=False)
         print(f"saved {out_slab}")
 
@@ -239,12 +466,124 @@ def main():
         for y, b in sorted(base_by_yip.items()):
             print(f"  yip={y}: {b:.2%}")
 
+        # ---- A. Cumulative rate above a score floor (per yip × percentile cut)
+        cum_df = cumulative_above_threshold(df, ev)
+        if not cum_df.empty:
+            out_cum = os.path.join(out_dir, f"{ev}_cum_above_threshold.csv")
+            cum_df.to_csv(out_cum, index=False)
+            print(f"\nsaved {out_cum}")
+            print(f"\n--- {ev}: rate above score floor (%) by yip × pctile cut "
+                  f"[cut p = top (100-p)%] ---")
+            rate_piv = cum_df.pivot(index="pctile_cut", columns="yip",
+                                    values="rate_above")
+            print(rate_piv.map(
+                lambda x: f"{x*100:>5.1f}" if pd.notna(x) else "  -  "
+            ).to_string())
+            print(f"\n--- {ev}: n above score floor by yip × pctile cut ---")
+            n_piv = cum_df.pivot(index="pctile_cut", columns="yip",
+                                 values="n_above")
+            print(n_piv.map(
+                lambda x: f"{int(x):>5d}" if pd.notna(x) else "     "
+            ).to_string())
+            print(f"\n--- {ev}: score floor by yip × pctile cut ---")
+            sf_piv = cum_df.pivot(index="pctile_cut", columns="yip",
+                                  values="score_floor")
+            print(sf_piv.map(
+                lambda x: f"{x:>+6.3f}" if pd.notna(x) else "       "
+            ).to_string())
+
+        # ---- B. Per-yip × score bucket (non-cumulative, same percentile grid)
+        bkt_df = per_yip_score_buckets(df, ev)
+        if not bkt_df.empty:
+            out_bkt = os.path.join(out_dir, f"{ev}_score_buckets.csv")
+            bkt_df.to_csv(out_bkt, index=False)
+            print(f"\nsaved {out_bkt}")
+            print(f"\n--- {ev}: realized rate (%) within score bucket "
+                  f"by yip × bucket ---")
+            r_piv = bkt_df.pivot(index="bucket", columns="yip", values="rate")
+            order = [f"p{lo}-p{hi}" for lo, hi in
+                     zip([0] + PCTILE_CUTS, PCTILE_CUTS + [100])]
+            order = [b for b in order if b in r_piv.index]
+            print(r_piv.loc[order].map(
+                lambda x: f"{x*100:>5.1f}" if pd.notna(x) else "  -  "
+            ).to_string())
+            print(f"\n--- {ev}: n per bucket ---")
+            n_piv = bkt_df.pivot(index="bucket", columns="yip", values="n")
+            print(n_piv.loc[order].map(
+                lambda x: f"{int(x):>5d}" if pd.notna(x) else "     "
+            ).to_string())
+            print(f"\n--- {ev}: score floor per bucket ---")
+            sl_piv = bkt_df.pivot(index="bucket", columns="yip",
+                                  values="score_lo")
+            print(sl_piv.loc[order].map(
+                lambda x: f"{x:>+6.3f}" if pd.notna(x) else "       "
+            ).to_string())
+
+        # ---- C. Score × yip → success rate (absolute score bins)
+        sy_df = score_vs_yip(df, ev)
+        if not sy_df.empty:
+            out_sy = os.path.join(out_dir, f"{ev}_score_vs_yip.csv")
+            sy_df.to_csv(out_sy, index=False)
+            print(f"\nsaved {out_sy}")
+            print(f"\n--- {ev}: realized rate (%) by absolute score bin × yip ---")
+            r_piv = sy_df.pivot(index="score_bin", columns="snap_offset",
+                                values="rate")
+            order_b = [b[2] for b in SCORE_BINS if b[2] in r_piv.index]
+            print(r_piv.loc[order_b].map(
+                lambda x: f"{x*100:>5.1f}" if pd.notna(x) else "  -  "
+            ).to_string())
+            print(f"\n--- {ev}: n per (score bin, yip) ---")
+            n_piv = sy_df.pivot(index="score_bin", columns="snap_offset",
+                                values="n")
+            print(n_piv.loc[order_b].map(
+                lambda x: f"{int(x):>5d}" if pd.notna(x) else "     "
+            ).to_string())
+
+        # ---- D. Score × draft bucket → success rate
+        sb_df = score_vs_draft_bucket(df, ev)
+        if not sb_df.empty:
+            out_sb = os.path.join(out_dir, f"{ev}_score_vs_bucket.csv")
+            sb_df.to_csv(out_sb, index=False)
+            print(f"\nsaved {out_sb}")
+            print(f"\n--- {ev}: realized rate (%) by absolute score bin "
+                  f"× draft bucket ---")
+            r_piv = sb_df.pivot(index="score_bin", columns="bucket",
+                                values="rate")
+            cols = [b for b in DRAFT_BUCKETS if b in r_piv.columns]
+            order_b = [b[2] for b in SCORE_BINS if b[2] in r_piv.index]
+            print(r_piv.loc[order_b, cols].map(
+                lambda x: f"{x*100:>5.1f}" if pd.notna(x) else "  -  "
+            ).to_string())
+            print(f"\n--- {ev}: n per (score bin, draft bucket) ---")
+            n_piv = sb_df.pivot(index="score_bin", columns="bucket",
+                                values="n")
+            print(n_piv.loc[order_b, cols].map(
+                lambda x: f"{int(x):>5d}" if pd.notna(x) else "     "
+            ).to_string())
+
+        # ---- E. Walk-forward summary (per snap_offset)
+        wf_df = walkforward_summary(df, ev)
+        if not wf_df.empty:
+            out_wf = os.path.join(out_dir, f"{ev}_walkforward.csv")
+            wf_df.to_csv(out_wf, index=False)
+            print(f"\nsaved {out_wf}")
+            print(f"\n--- {ev}: walk-forward by snap_offset ---")
+            print(f"{'offset':>6} {'n':>5} {'pos':>4} {'base%':>6} "
+                  f"{'pred%':>6} {'AUC':>6} {'lift@5':>7} {'ECE':>6}")
+            for _, r in wf_df.iterrows():
+                fmt = lambda v, w, p: (f"{v:>{w}.{p}f}" if pd.notna(v)
+                                       else f"{'nan':>{w}}")
+                print(f"{r.snap_offset:>6d} {r.n:>5d} {r.pos:>4d} "
+                      f"{fmt(r.base_pct, 6, 2)} {fmt(r.pred_pct, 6, 2)} "
+                      f"{fmt(r.auc, 6, 3)} {fmt(r['lift@5'], 7, 2)} "
+                      f"{fmt(r.ece, 6, 3)}")
+
         # Look-back: actual top picks
         lb = lookback_top_picks(df, ev, SLABS, top_slab_idx=4,
                                 model_b=model_b, scaler_b=scaler_b,
                                 classes_b=classes_b, feat_names_b=feat_names_b)
         if not lb.empty:
-            out_lb = f"val_{args.out_prefix}_{ev}_top_lookback.csv"
+            out_lb = os.path.join(out_dir, f"{ev}_top_lookback.csv")
             lb.to_csv(out_lb, index=False)
             print(f"\nsaved {out_lb}  ({len(lb)} top-2% rows)")
             # Show summary: per yip × slab → realized rate
@@ -256,14 +595,22 @@ def main():
             print(agg.to_string(index=False))
 
     if args.cohort2021_long:
-        cohort2021_lookback(args.cohort2021_long, args.lasso, args.out_prefix, db=args.db)
+        cohort2021_lookback(args.cohort2021_long, args.lasso, args.out_prefix,
+                            db=args.db, out_dir=out_dir)
+
+    _sys.stdout = _real_stdout
+    report_path = os.path.join(out_dir, "report.txt")
+    with open(report_path, "w", encoding="utf-8") as fh:
+        fh.write(report_buf.getvalue())
+    print(f"\nwrote {report_path}")
 
 
 def _unused_cohort2021_lookback_placeholder():
     pass
 
 
-def cohort2021_lookback(long_csv, lasso_pkl, prefix, db="prospects_snapshot.db"):
+def cohort2021_lookback(long_csv, lasso_pkl, prefix, db="prospects_snapshot.db",
+                        out_dir="."):
     """Score 2021 draftees with the same lasso at snap=2022 and snap=2023,
     bin by per-yip percentile slab, and report realized rates so far."""
     print(f"\n{'='*78}\n2021 DRAFTEE LOOK-BACK — apply same lasso at snap 2022/2023\n{'='*78}")
@@ -349,12 +696,13 @@ def cohort2021_lookback(long_csv, lasso_pkl, prefix, db="prospects_snapshot.db")
         top_k = max(1, int(len(sub) * 0.02))
         order = np.argsort(-scores)[:top_k]
         top = sub.iloc[order][["player_id","name","snap_offset","lasso_score","realized_MLB_DEBUT","p_MLB_DEBUT"]].copy()
-        out_lb = f"val_{prefix}_2021lookback_snap{snap}_top2pct.csv"
+        out_lb = os.path.join(out_dir, f"2021lookback_snap{snap}_top2pct.csv")
         top.to_csv(out_lb, index=False)
         print(f"  saved top-2% picks → {out_lb}")
 
     if rows:
-        pd.DataFrame(rows).to_csv(f"val_{prefix}_2021lookback_slabs.csv", index=False)
+        pd.DataFrame(rows).to_csv(
+            os.path.join(out_dir, "2021lookback_slabs.csv"), index=False)
 
 
 if __name__ == "__main__":

@@ -7,6 +7,9 @@ Outputs:
 """
 from __future__ import annotations
 
+import datetime as _dt
+import io
+import os
 import pickle
 import sys
 
@@ -18,8 +21,23 @@ def main():
     long_csv = sys.argv[1] if len(sys.argv) > 1 else "v14i_val_pre2021_raw_long.csv"
     lasso_pkl = sys.argv[2] if len(sys.argv) > 2 else "lasso_v14i_td.pkl"
     prefix = long_csv.replace("_val_long.csv", "").replace("_val_pre2021_raw_long.csv", "")
-    out_pctile = f"val_{prefix}_lasso_pctile.csv"
-    out_score = f"val_{prefix}_lasso_score.csv"
+    date = _dt.date.today().isoformat()
+    out_dir = os.path.join("results", f"val_{prefix}_lasso_{date}")
+    os.makedirs(out_dir, exist_ok=True)
+    out_pctile = os.path.join(out_dir, "lasso_pctile.csv")
+    out_score = os.path.join(out_dir, "lasso_score.csv")
+
+    class _Tee:
+        def __init__(self, *s): self._s = s
+        def write(self, x):
+            for s in self._s: s.write(x)
+        def flush(self):
+            for s in self._s: s.flush()
+    _buf = io.StringIO()
+    _real = sys.stdout
+    sys.stdout = _Tee(_real, _buf)
+    print(f"validate_lasso.py  prefix={prefix}  out_dir={out_dir}  date={date}")
+    print(f"  long={long_csv}  lasso={lasso_pkl}")
 
     print(f"Loading {long_csv}")
     df = pd.read_csv(long_csv)
@@ -133,6 +151,11 @@ def main():
         print(view.loc[order].map(lambda x: f"{x:.1%}" if pd.notna(x) else "").to_string())
         print("\nn per cell:")
         print(n_view.loc[order].map(lambda x: f"{int(x):>4d}" if pd.notna(x) else "").to_string())
+
+    sys.stdout = _real
+    with open(os.path.join(out_dir, "report.txt"), "w", encoding="utf-8") as fh:
+        fh.write(_buf.getvalue())
+    print(f"\nwrote {os.path.join(out_dir, 'report.txt')}")
 
 
 if __name__ == "__main__":

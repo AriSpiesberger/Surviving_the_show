@@ -46,6 +46,14 @@ $env:PROSPECT_DB       = Join-Path $RepoRoot 'prospects.db'
 $env:PRICES_DIR        = Join-Path $RepoRoot 'prices'
 $env:HOLDINGS_PATH     = Join-Path $RepoRoot 'holdings.csv'
 $env:ALERTS_STATE_PATH = Join-Path $RepoRoot 'alerts_state.json'
+# Force UTF-8 stdout/stderr so debut-alert subject lines containing
+# emojis / accented names don't crash on cp1252 consoles.
+$env:PYTHONIOENCODING  = 'utf-8'
+# Single-thread BLAS for the heavy panel+train steps in weekly_score
+# (one thread per worker process scores better).
+$env:OMP_NUM_THREADS      = '1'
+$env:OPENBLAS_NUM_THREADS = '1'
+$env:MKL_NUM_THREADS      = '1'
 
 if (-not (Test-Path $env:PRICES_DIR)) {
     New-Item -ItemType Directory -Path $env:PRICES_DIR | Out-Null
