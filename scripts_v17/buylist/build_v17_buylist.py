@@ -55,7 +55,8 @@ def pos_group(p):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--snap-long", default="snap2026_v17_all_long.csv",
+    ap.add_argument("--snap-long",
+                    default="results/scored/snap2026_v17_all_long.csv",
                     help="Output of score_panel_v17.py for the snap year.")
     ap.add_argument("--debut-lasso",
                     default="models/debut_lasso_universe_v1.17_prod.pkl")
@@ -63,9 +64,11 @@ def main():
                     default="models/top100_lasso_v1.17_prod.pkl")
     ap.add_argument("--model-b",
                     default="models/model_b_outcomes_v1.17_prod.pkl")
-    ap.add_argument("--out-prefix", default="buy_list_v1.17",
-                    help="Output files: <prefix>_ALL_SCORED.csv and "
-                         "<prefix>_FINAL.csv")
+    ap.add_argument("--out-prefix",
+                    default="results/buy_lists/buy_list_v1.17",
+                    help="Output files: <prefix>_ALL_SCORED.csv, "
+                         "<prefix>_FINAL.csv, plus a dated copy under "
+                         "results/buy_lists/history/.")
     ap.add_argument("--db", default="prospects_snapshot.db")
     args = ap.parse_args()
     db = args.db
@@ -291,8 +294,19 @@ def main():
     ]
     out_cols = [c for c in out_cols if c in df.columns]
 
+    import os, time
+    out_dir = os.path.dirname(args.out_prefix)
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
+        os.makedirs(os.path.join(out_dir, "history"), exist_ok=True)
     all_path = f"{args.out_prefix}_ALL_SCORED.csv"
     final_path = f"{args.out_prefix}_FINAL.csv"
+    today = time.strftime("%Y-%m-%d")
+    history_dir = os.path.join(out_dir, "history") if out_dir else "history"
+    final_history = os.path.join(history_dir,
+                                 f"buy_list_v1.17_FINAL_{today}.csv")
+    all_history = os.path.join(history_dir,
+                               f"buy_list_v1.17_ALL_SCORED_{today}.csv")
 
     def _safe_to_csv(df_out, path):
         """Write CSV, falling back to a timestamped sidecar if the target is
@@ -311,16 +325,18 @@ def main():
             print(f"  WARN {path} is locked (open in Excel?); wrote {fallback}")
             return fallback
 
-    # Full annotated scored set (everyone scored)
+    # Full annotated scored set (everyone scored) + dated copy
     full = df[out_cols].sort_values("overall_score", ascending=False)
     print(f"saved {_safe_to_csv(full, all_path)} ({len(full):,} players)")
+    _safe_to_csv(full, all_history)
 
-    # Final filtered buy list (passes universe + yip threshold)
+    # Final filtered buy list (passes universe + yip threshold) + dated copy
     final = df[df["passes_filter"]].copy().sort_values("overall_score", ascending=False)
     final["buy_rank"] = np.arange(1, len(final)+1)
     out_cols_final = ["buy_rank"] + out_cols
     final = final[out_cols_final]
     print(f"saved {_safe_to_csv(final, final_path)} ({len(final):,} players passing filter)")
+    _safe_to_csv(final, final_history)
 
     # Headline
     print(f"\n=== FINAL BUY LIST  (v1.17, universe + per-yip threshold) ===")

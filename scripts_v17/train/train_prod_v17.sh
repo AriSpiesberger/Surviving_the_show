@@ -22,7 +22,7 @@
 set -e
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
 
-PANEL=${PANEL:-panel_v1.17.npz}
+PANEL=${PANEL:-panels/panel_v1.17.npz}
 HAZ=models/event_classifiers_v1.17_prod.pkl
 CAL=models/event_classifiers_v1.17_prod_calibrated.pkl
 
@@ -44,7 +44,7 @@ python -m prospects.classifier.train_full_v14d \
 echo "=== [2/6] Reproducing seed=42 fit/val pids ==="
 python <<'EOF'
 import numpy as np
-with np.load("panel_v1.17.npz", allow_pickle=True) as d:
+with np.load("panels/panel_v1.17.npz", allow_pickle=True) as d:
     pids = sorted(set(d["pids"].tolist()))
 rng = np.random.default_rng(42)
 perm = rng.permutation(len(pids))

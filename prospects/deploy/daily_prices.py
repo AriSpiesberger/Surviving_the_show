@@ -15,7 +15,7 @@ what the alerts job consumes for 2x triggers and what you use for buys.
 
 Usage (local):
     python -m prospects.deploy.daily_prices \\
-        --buy-list buy_list_v1.17_FINAL.csv \\
+        --buy-list results/buy_lists/buy_list_v1.18_FINAL.csv \\
         --db prospects.db \\
         --out-dir prices \\
         --holdings holdings.csv

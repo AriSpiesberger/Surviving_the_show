@@ -82,7 +82,7 @@ def main():
     ap.add_argument("--max-tries", type=int, default=3)
     ap.add_argument("--output-dir", default="scratch/v17_score_panel")
     ap.add_argument("--hazards", default="models/event_classifiers_v1.17_prod.pkl")
-    ap.add_argument("--panel", default="panel_v1.17.npz")
+    ap.add_argument("--panel", default="panels/panel_v1.17.npz")
     ap.add_argument("--db", default="prospects_snapshot.db")
     ap.add_argument("--out", default=None)
     ap.add_argument("--keep-chunks", action="store_true",

@@ -6,7 +6,7 @@ Pipeline (default order):
   1. SCORE:   scripts_v17/score/score_panel_v17.py
               -> snap{season}_v17_all_long.csv
   2. BUYLIST: scripts_v17/buylist/build_v17_buylist.py
-              -> buy_list_v1.17_FINAL.csv
+              -> buy_list_v1.18_FINAL.csv
   3. COMPS:   prospects.deploy.debut_comps (eBay refresh, fail-soft)
 
 The retrain block is the slow part (~60-75 min total: panel ~25, hazards
@@ -52,26 +52,24 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-# Required artifacts. If any missing AFTER the retrain step, abort early (3).
-# These names track the v1.17 prod retrain (refit_models_honest.py renamed in
-# train_prod_v17.sh: *_v1.17h.pkl -> *_v1.17_prod.pkl). The panel lives at
-# repo root now (the panels/ dir was removed in the May cleanup).
+# Required artifacts for the v1.18 production pipeline. The v1.17 hazard
+# pkl is still needed (we score the panel with prod hazards); the v1.18
+# changes only the downstream lasso + timing artifacts.
 REQUIRED = [
     "models/event_classifiers_v1.17_prod.pkl",
-    "models/debut_lasso_universe_v1.17_prod.pkl",
-    "models/top100_lasso_v1.17_prod.pkl",
-    "models/model_b_outcomes_v1.17_prod.pkl",
+    "models/lasso_logits_v1.18_prod.pkl",
+    "models/time_to_debut_v1.18_prod.pkl",
     "models/player_position_from_stats.csv",
-    "panel_v1.17.npz",
+    "panels/panel_v1.17.npz",
     "prospects_snapshot.db",
     "scripts_v17/score/score_panel_v17.py",
-    "scripts_v17/buylist/build_v17_buylist.py",
+    "scripts_v17/buylist/build_v1.18_buylist.py",
 ]
 
 # Retrain pipeline knobs.
 RETRAIN_PARTITIONS = 64
 RETRAIN_PART_RETRIES = 7
-RETRAIN_PANEL_NAME = "panel_v1.17.npz"
+RETRAIN_PANEL_NAME = "panels/panel_v1.17.npz"
 
 
 def check_artifacts() -> list[str]:
@@ -240,8 +238,10 @@ def _train_hazards_and_models() -> int:
     perm = rng.permutation(len(pids))
     n_fit = int(round(0.10 * len(pids)))
     n_val = int(round(0.10 * len(pids)))
-    fit_pids_path = REPO_ROOT / "v17_prod_fit_pids.txt"
-    val_pids_path = REPO_ROOT / "v17_prod_val_pids.txt"
+    train_dir = REPO_ROOT / "results" / "training"
+    train_dir.mkdir(parents=True, exist_ok=True)
+    fit_pids_path = train_dir / "v17_prod_fit_pids.txt"
+    val_pids_path = train_dir / "v17_prod_val_pids.txt"
     fit_pids_path.write_text(
         "\n".join(pids[i] for i in perm[:n_fit]) + "\n")
     val_pids_path.write_text(
@@ -271,7 +271,7 @@ def _train_hazards_and_models() -> int:
     for slice_name, plist in (
         ("fit", fit_pids_path), ("val", val_pids_path),
     ):
-        out_csv = REPO_ROOT / f"v1.17_prod_{slice_name}_long.csv"
+        out_csv = train_dir / f"v1.17_prod_{slice_name}_long.csv"
         chunk_dir = REPO_ROOT / "scratch" / f"v17_prod_{slice_name}_out"
         if out_csv.exists():
             print(f"[retrain/score-{slice_name}] wiping stale {out_csv.name} "
@@ -295,32 +295,18 @@ def _train_hazards_and_models() -> int:
         print(f"[retrain/score-{slice_name}] wrote {out_csv.name} "
               f"({len(df):,} rows)", flush=True)
 
-    # refit_models_honest.py reads literal v1.17h_*_long.csv names; alias.
-    # We delete the aliases after to keep the workspace clean.
-    fit_alias = REPO_ROOT / "v1.17h_fit_long.csv"
-    val_alias = REPO_ROOT / "v1.17h_val_long.csv"
-    shutil.copy2(REPO_ROOT / "v1.17_prod_fit_long.csv", fit_alias)
-    shutil.copy2(REPO_ROOT / "v1.17_prod_val_long.csv", val_alias)
-    try:
-        rc = run_step("retrain/refit",
-                      [sys.executable,
-                       str(REPO_ROOT / "scripts_v17" / "train" /
-                           "refit_models_honest.py")],
-                      REPO_ROOT)
-        if rc != 0:
-            return rc
-        # refit writes *_v1.17h.pkl; rename to *_v1.17_prod.pkl so the buy
-        # list (and our REQUIRED list) finds them.
-        for stem in ("debut_lasso_universe", "top100_lasso",
-                     "model_b_outcomes"):
-            src = REPO_ROOT / "models" / f"{stem}_v1.17h.pkl"
-            dst = REPO_ROOT / "models" / f"{stem}_v1.17_prod.pkl"
-            if src.exists():
-                src.replace(dst)
-    finally:
-        for f in (fit_alias, val_alias):
-            if f.exists():
-                f.unlink()
+    # v1.18 retrain: train the per-event lasso bundle + time-to-debut
+    # regression on prod fit+val combined. Replaces the prior v1.17 refit
+    # which produced debut_lasso + top100_lasso + model_b.
+    rc = run_step("retrain/v1.18",
+                  [sys.executable, "-m",
+                   "scripts_v17.train.train_v1_18_prod",
+                   "--fit", str(train_dir / "v1.17_prod_fit_long.csv"),
+                   "--val", str(train_dir / "v1.17_prod_val_long.csv"),
+                   "--db", str(REPO_ROOT / "prospects_snapshot.db")],
+                  REPO_ROOT)
+    if rc != 0:
+        return rc
     return 0
 
 
@@ -435,7 +421,9 @@ def main():
             print(f"  - {m}")
         sys.exit(3)
 
-    snap_long = REPO_ROOT / f"snap{args.season}_v17_all_long.csv"
+    scored_dir = REPO_ROOT / "results" / "scored"
+    scored_dir.mkdir(parents=True, exist_ok=True)
+    snap_long = scored_dir / f"snap{args.season}_v17_all_long.csv"
     scratch_dir = REPO_ROOT / "scratch" / "v17_score_panel"
 
     # Step 1: score panel
@@ -462,21 +450,18 @@ def main():
             print(f"FATAL: score step exited 0 but {snap_long.name} not written")
             sys.exit(1)
 
-    # Step 2: build buy list
+    # Step 2: build buy list. Pass the snap_long path explicitly so the
+    # buylist script doesn't have to assume a season-specific filename.
     if not args.score_only:
         if not snap_long.exists():
             print(f"FATAL: need {snap_long.name} but it doesn't exist; "
                   f"run without --buylist-only first")
             sys.exit(3)
-        # build_v17_buylist.py reads snap2026_v17_all_long.csv from cwd
-        # (its current default). Symlink-or-copy if season differs:
-        canonical = REPO_ROOT / f"snap{args.season}_v17_all_long.csv"
-        expected = REPO_ROOT / "snap2026_v17_all_long.csv"
-        if args.season != 2026 and canonical != expected:
-            shutil.copy2(canonical, expected)
-            print(f"[buylist] copied {canonical.name} -> {expected.name}")
         rc = run_step("buylist", [
-            sys.executable, str(REPO_ROOT / "scripts_v17" / "buylist" / "build_v17_buylist.py"),
+            sys.executable,
+            str(REPO_ROOT / "scripts_v17" / "buylist" /
+                "build_v1.18_buylist.py"),
+            "--snap-long", str(snap_long),
         ], REPO_ROOT)
         if rc != 0:
             sys.exit(2)
@@ -493,10 +478,11 @@ def main():
             print(f"[debut_comps] WARN: exited {rc}; buy list still valid",
                   flush=True)
 
+    bl_dir = REPO_ROOT / "results" / "buy_lists"
     print(f"\n=== weekly_score season={args.season} OK ===")
     print(f"  snap long file: {snap_long}")
-    print(f"  buy list:       {REPO_ROOT / 'buy_list_v1.17_FINAL.csv'}")
-    print(f"  all scored:     {REPO_ROOT / 'buy_list_v1.17_ALL_SCORED.csv'}")
+    print(f"  buy list:       {bl_dir / 'buy_list_v1.18_FINAL.csv'}")
+    print(f"  all scored:     {bl_dir / 'buy_list_v1.18_ALL_SCORED.csv'}")
 
 
 if __name__ == "__main__":
