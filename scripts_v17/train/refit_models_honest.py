@@ -212,7 +212,9 @@ print(f"\nFINAL per-yip thresholds (use these in buy list):")
 for yip, t in thresholds.items():
     print(f"  yip {yip}: lasso_score >= {t:.3f}")
 
-import json
-with open("v17h_thresholds.json","w") as fh:
+import json, os
+os.makedirs("results/training", exist_ok=True)
+_thr_path = "results/training/v17h_thresholds.json"
+with open(_thr_path, "w") as fh:
     json.dump({str(k): v for k,v in thresholds.items()}, fh, indent=2)
-print(f"\nsaved v17h_thresholds.json")
+print(f"\nsaved {_thr_path}")

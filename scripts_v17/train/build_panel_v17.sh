@@ -1,6 +1,7 @@
 #!/bin/bash
 set -e
-OUT="panel_v1.17.npz"
+OUT="panels/panel_v1.17.npz"
+mkdir -p panels
 N=64
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
 

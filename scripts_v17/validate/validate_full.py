@@ -84,25 +84,110 @@ SLABS = [
 ]
 
 
-def score_with_lasso(long_csv, lasso_pkl, age_center=22, yip_center=3, db="prospects_snapshot.db"):
+_LEVEL_RANK = {  # higher = higher tier
+    "RK": 0, "A-": 1, "A": 2, "A+": 3, "AA": 4, "AAA": 5, "MLB": 6,
+}
+_RANK_TO_LABEL = {0: "RK", 1: "A-", 2: "A", 3: "A+",
+                   4: "AA", 5: "AAA", 6: "MLB"}
+
+
+def _attach_current_level(df: pd.DataFrame, db: str) -> pd.DataFrame:
+    """For each (player_id, snap_year), look up the highest level the
+    player played at in snap_year (from season_stats). Adds a `cur_level`
+    column with values in {RK, A-, A, A+, AA, AAA, MLB, NONE}.
+    """
+    c = sqlite3.connect(db)
+    s = pd.read_sql(
+        "SELECT player_id, season_year, level FROM season_stats", c)
+    c.close()
+    s = s.dropna(subset=["season_year"])
+    s["season_year"] = s["season_year"].astype(int)
+    s["rank"] = s["level"].astype(str).str.upper().map(_LEVEL_RANK)
+    s = s.dropna(subset=["rank"])
+    s["rank"] = s["rank"].astype(int)
+    hi = (s.groupby(["player_id", "season_year"])["rank"].max()
+            .rename("cur_rank").reset_index())
+    df = df.merge(hi, left_on=["player_id", "snap_year"],
+                   right_on=["player_id", "season_year"], how="left")
+    df = df.drop(columns=["season_year"], errors="ignore")
+    df["cur_level"] = (df["cur_rank"].map(_RANK_TO_LABEL)
+                         .fillna("NONE"))
+    df = df.drop(columns=["cur_rank"])
+    return df
+
+
+def _prepare_long(long_csv, age_center=22, yip_center=3,
+                   db="prospects_snapshot.db"):
+    """Load val long, add the standard centered + interaction columns, and
+    filter to entry_year <= 2020 + eligible_{TOP_100,MLB_DEBUT}."""
     df = pd.read_csv(long_csv)
     df = df[df.entry_year <= 2020].copy()
-    for ev in ("TOP_100_PROSPECT","MLB_DEBUT"):
-        df = df[df[f"eligible_{ev}"]==1]
+    for ev in ("TOP_100_PROSPECT", "MLB_DEBUT"):
+        df = df[df[f"eligible_{ev}"] == 1]
     c = sqlite3.connect(db)
-    birth = pd.read_sql("SELECT player_id, birth_date FROM prospects", c); c.close()
-    birth["birth_year"] = pd.to_datetime(birth["birth_date"], errors="coerce").dt.year
-    df = df.merge(birth[["player_id","birth_year"]], on="player_id", how="left")
-    df["age_at_snap_centered"] = ((df["snap_year"]-df["birth_year"]).fillna(22.0) - age_center)
+    birth = pd.read_sql("SELECT player_id, birth_date FROM prospects", c)
+    c.close()
+    birth["birth_year"] = pd.to_datetime(
+        birth["birth_date"], errors="coerce").dt.year
+    df = df.merge(birth[["player_id", "birth_year"]],
+                  on="player_id", how="left")
+    df = _attach_current_level(df, db)
+    df["age_at_snap_centered"] = (
+        (df["snap_year"] - df["birth_year"]).fillna(22.0) - age_center
+    )
     df["years_in_pro"] = df["snap_offset"]
     df["yip_centered"] = df["snap_offset"] - yip_center
-    for ev in ("TOP_100_PROSPECT","MLB_DEBUT","ESTABLISHED_MLB","STAR_PLUS_ELITE"):
-        df[f"p_{ev}_x_yip_centered"] = df[f"p_{ev}"] * df["yip_centered"]
-    with open(lasso_pkl,"rb") as fh:
+    # Compute yip-interactions for every p_<event> column actually present
+    # in the long. This way the same code handles v1.17/v1.18 (which carry
+    # p_TOP_100_PROSPECT/p_MLB_DEBUT/p_ESTABLISHED_MLB/p_STAR_PLUS_ELITE etc)
+    # and v1.19 (which carries p_Minors/p_MLB_service/p_All_Star).
+    for col in [c for c in df.columns if c.startswith("p_")]:
+        df[f"{col}_x_yip_centered"] = df[col] * df["yip_centered"]
+    return df
+
+
+def score_with_lasso(long_csv, lasso_pkl, age_center=22, yip_center=3,
+                      db="prospects_snapshot.db"):
+    """Legacy single-lasso path: one `lasso_score` column used for every
+    event. Kept for backwards compatibility with the v1.17 debut lasso."""
+    df = _prepare_long(long_csv, age_center, yip_center, db)
+    with open(lasso_pkl, "rb") as fh:
         m = pickle.load(fh)
     sc, lasso, feat = m["scaler"], m["lasso"], m["feature_names"]
     df["lasso_score"] = lasso.predict(sc.transform(df[feat].values))
     return df
+
+
+def score_with_lasso_bundle(long_csv, bundle_pkl,
+                             age_center=22, yip_center=3,
+                             db="prospects_snapshot.db"):
+    """v1.18 multi-event path: writes one column per event,
+    `lasso_score_<EVENT>`, holding the L1-logistic's predicted probability
+    of the positive class (i.e., sigmoid of the decision function). Range
+    is [0, 1], directly readable as P(event).
+
+    Ranking is identical to using the raw logit, but score floors / slabs
+    / thresholds are now interpretable as event probabilities.
+    """
+    with open(bundle_pkl, "rb") as fh:
+        bundle = pickle.load(fh)
+    age_center = bundle.get("age_center", age_center)
+    yip_center = bundle.get("yip_center", yip_center)
+    df = _prepare_long(long_csv, age_center, yip_center, db)
+
+    per_event = bundle["per_event"]
+    feat = bundle["feature_names"]
+    for ev, art in per_event.items():
+        sc = art["scaler"]
+        lasso = art["lasso"]
+        f_ev = art.get("feature_names", feat)
+        # LogisticRegression: predict_proba[:, 1] = P(positive class).
+        # This is the logistic/sigmoid transform of decision_function.
+        prob = lasso.predict_proba(sc.transform(df[f_ev].values))[:, 1]
+        df[f"lasso_score_{ev}"] = prob
+    if "MLB_DEBUT" in per_event:
+        df["lasso_score"] = df["lasso_score_MLB_DEBUT"]
+    return df, list(per_event.keys())
 
 
 def slab_metrics(scores, y, lo_pct, hi_pct):
@@ -271,8 +356,14 @@ def score_vs_draft_bucket(df, event):
 
 
 def walkforward_summary(df, event):
-    """Per snap_offset: n, pos, base%, pred%, AUC, lift@5, ECE."""
-    from sklearn.metrics import roc_auc_score
+    """Per snap_offset: n, pos, base%, pred%, AU-PR (avg precision),
+    AU-PR_lift, lift@5, ECE.
+
+    Dropping AUC: with rare positives + many easy negatives, AUC is dominated
+    by the negative ranking. AU-PR (= average precision) integrates precision
+    over recall and is the balanced rare-positive metric.
+    """
+    from sklearn.metrics import average_precision_score
     rows = []
     for off in sorted(df.snap_offset.unique()):
         sub = df[(df.snap_offset == off) & (df[f"eligible_{event}"] == 1)]
@@ -286,19 +377,32 @@ def walkforward_summary(df, event):
                          "auc": float("nan"), "lift@5": float("nan"),
                          "ece": float("nan")})
             continue
-        p = sub[f"p_{event}"].values
+        # Predicted prob for this event: use whatever ranker we're
+        # validating (lasso first, raw hazard only as last resort).
+        # Priority:
+        #   1) lasso_score_<event>  — per-event lasso bundle: ALREADY a
+        #      probability (logistic of decision_function).
+        #   2) lasso_score          — single composite lasso (v1.17-prod):
+        #      raw regression score, sigmoid for an ECE-comparable prob.
+        #   3) p_<event>            — raw hazard if no lasso scored at all.
+        if f"lasso_score_{event}" in sub.columns:
+            p = sub[f"lasso_score_{event}"].values
+        elif "lasso_score" in sub.columns:
+            p = 1.0 / (1.0 + np.exp(-sub["lasso_score"].values))
+        else:
+            p = sub[f"p_{event}"].values
         base = float(y.mean())
         pred = float(p.mean())
         try:
-            auc = float(roc_auc_score(y, p))
+            ap = float(average_precision_score(y, p))
         except Exception:
-            auc = float("nan")
-        # Lift @ top 5% by predicted prob
+            ap = float("nan")
+        # Lift @ top 2% by predicted prob (where buy-list cutoffs actually live)
         n = len(sub)
-        k = max(1, int(round(0.05 * n)))
+        k = max(1, int(round(0.02 * n)))
         order = np.argsort(-p)[:k]
         rate_top = float(y[order].mean())
-        lift5 = rate_top / base if base > 0 else float("nan")
+        lift2 = rate_top / base if base > 0 else float("nan")
         # ECE: 10 equal-width bins on p
         bins = np.linspace(0, 1, 11)
         idx = np.clip(np.digitize(p, bins) - 1, 0, 9)
@@ -308,10 +412,117 @@ def walkforward_summary(df, event):
             if not m.any():
                 continue
             ece += (m.mean()) * abs(p[m].mean() - y[m].mean())
+        ap_lift = ap / base if base > 0 else float("nan")
         rows.append({"event": event, "snap_offset": int(off),
                      "n": int(n), "pos": int(y.sum()),
                      "base_pct": base * 100, "pred_pct": pred * 100,
-                     "auc": auc, "lift@5": lift5, "ece": ece})
+                     "au_pr": ap, "au_pr_lift": ap_lift,
+                     "lift@2": lift2, "ece": ece})
+    return pd.DataFrame(rows)
+
+
+def per_yip_threshold(df, event, target_precision=0.60, min_n=10):
+    """For each yip, find the lowest lasso_score s.t. cumulative-from-top
+    realized rate stays at or above target_precision (with at least min_n
+    players above the cut).
+
+    Returns rows: yip, threshold, n_above, n_pos_above, precision, recall.
+    """
+    rows = []
+    elig = df[df[f"eligible_{event}"] == 1].copy()
+    for yip in sorted(elig.snap_offset.unique()):
+        sub = elig[elig.snap_offset == yip]
+        if len(sub) < min_n:
+            continue
+        y_all = sub[f"realized_{event}"].values.astype(int)
+        n_pos_total = int(y_all.sum())
+        if n_pos_total == 0:
+            continue
+        # Sort by score descending; walk from top, find largest k s.t.
+        # cumulative realized rate >= target AND k >= min_n
+        order = np.argsort(-sub["lasso_score"].values)
+        scores_sorted = sub["lasso_score"].values[order]
+        y_sorted = y_all[order]
+        cum_tp = np.cumsum(y_sorted)
+        counts = np.arange(1, len(y_sorted) + 1)
+        rate = cum_tp / counts
+        ok = (rate >= target_precision) & (counts >= min_n)
+        if not ok.any():
+            rows.append({"yip": int(yip), "threshold": float("nan"),
+                         "n_above": 0, "tp_above": 0,
+                         "precision": float("nan"), "recall": float("nan"),
+                         "n_total": len(sub), "n_pos_total": n_pos_total})
+            continue
+        k = int(counts[ok].max())
+        thr = float(scores_sorted[k - 1])
+        prec = float(rate[k - 1])
+        rec = cum_tp[k - 1] / n_pos_total if n_pos_total else float("nan")
+        rows.append({"yip": int(yip), "threshold": thr,
+                     "n_above": k, "tp_above": int(cum_tp[k - 1]),
+                     "precision": prec, "recall": float(rec),
+                     "n_total": len(sub), "n_pos_total": n_pos_total})
+    return pd.DataFrame(rows)
+
+
+def _score_time_to_debut(df, model_pkl):
+    """Score df with the time-to-debut regression. Adds `t_pred` column
+    (predicted years-to-debut)."""
+    with open(model_pkl, "rb") as fh:
+        m = pickle.load(fh)
+    sc, lasso, feat = m["scaler"], m["lasso"], m["feature_names"]
+    if "p_debut_lasso" in feat and "p_debut_lasso" not in df.columns:
+        # The regression expects p_debut_lasso — synthesize it from
+        # lasso_score_MLB_DEBUT if available (it's the same thing).
+        if "lasso_score_MLB_DEBUT" in df.columns:
+            df["p_debut_lasso"] = df["lasso_score_MLB_DEBUT"]
+        else:
+            df["p_debut_lasso"] = 0.0  # fallback
+    df["t_pred"] = lasso.predict(sc.transform(df[feat].values))
+    return df
+
+
+def per_current_level(df, event):
+    """For each cur_level value (RK, A-, A, A+, AA, AAA, NONE — MLB excluded
+    because debut already triggered), report:
+      n      eligible rows at that current level
+      pos    realized positives
+      base%  realized rate
+      AU-PR  average precision on lasso_score
+      lift@5 realized-rate@top-5 / base
+      lift@10 realized-rate@top-10 / base
+    """
+    from sklearn.metrics import average_precision_score
+    order = ["NONE", "RK", "A-", "A", "A+", "AA", "AAA"]
+    rows = []
+    elig = df[df[f"eligible_{event}"] == 1].copy()
+    if "cur_level" not in elig.columns:
+        return pd.DataFrame()
+    for lv in order:
+        sub = elig[elig["cur_level"] == lv]
+        if len(sub) < 30:
+            continue
+        y = sub[f"realized_{event}"].values.astype(int)
+        n = len(sub)
+        n_pos = int(y.sum())
+        base = float(y.mean()) if n else float("nan")
+        s = sub["lasso_score"].values
+        try:
+            ap = (float(average_precision_score(y, s))
+                  if n_pos and n_pos < n else float("nan"))
+        except Exception:
+            ap = float("nan")
+        # Top-5 / top-10 lift
+        def _lift(pct):
+            k = max(1, int(round(pct/100 * n)))
+            top = np.argsort(-s)[:k]
+            rate = float(y[top].mean())
+            return rate / base if base > 0 else float("nan"), rate
+        l5, r5 = _lift(5)
+        l10, r10 = _lift(10)
+        rows.append({"event": event, "cur_level": lv,
+                     "n": n, "pos": n_pos, "base_pct": base * 100,
+                     "au_pr": ap, "lift@5": l5, "rate@5": r5 * 100,
+                     "lift@10": l10, "rate@10": r10 * 100})
     return pd.DataFrame(rows)
 
 
@@ -407,7 +618,12 @@ def lookback_top_picks(df, event, slabs, top_slab_idx=4, model_b=None, scaler_b=
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--long", required=True)
-    ap.add_argument("--lasso", required=True)
+    ap.add_argument("--lasso", default=None,
+                    help="Path to v1.17 single-lasso .pkl (one score for "
+                         "all events). Mutually exclusive with --lasso-bundle.")
+    ap.add_argument("--lasso-bundle", default=None,
+                    help="Path to v1.18+ per-event lasso bundle .pkl. When "
+                         "set, each event is ranked by its own lasso logit.")
     ap.add_argument("--model-b", default=None)
     ap.add_argument("--out-prefix", default="val")
     ap.add_argument("--db", default="prospects_snapshot.db")
@@ -416,7 +632,16 @@ def main():
                     help="Path to long file scored on 2021 draftees (e.g. "
                          "walkforward_v1.14n_2021_long.csv). If set, runs a "
                          "look-back at snap=2022 and snap=2023.")
+    ap.add_argument("--time-to-debut-model", default=None,
+                    help="Path to a time-to-debut regression .pkl. If "
+                         "given, reports MAE / Spearman by snap_offset for "
+                         "the MLB_DEBUT event.")
+    ap.add_argument("--target-precision", type=float, default=0.60,
+                    help="Per-yip MLB_DEBUT threshold target (default 0.60).")
     args = ap.parse_args()
+
+    if (args.lasso is None) == (args.lasso_bundle is None):
+        ap.error("Pass exactly one of --lasso or --lasso-bundle.")
 
     out_dir = _make_out_dir(args.out_prefix)
     report_buf = io.StringIO()
@@ -427,12 +652,22 @@ def main():
     print(f"validate_full.py  prefix={args.out_prefix}  out_dir={out_dir}")
     print(f"  long={args.long}")
     print(f"  lasso={args.lasso}")
+    print(f"  lasso_bundle={args.lasso_bundle}")
     print(f"  model_b={args.model_b}")
     print(f"  db={args.db}")
     print(f"  date={_dt.date.today().isoformat()}\n")
 
-    df = score_with_lasso(args.long, args.lasso, db=args.db)
-    print(f"scored val: {len(df):,} rows, {df.player_id.nunique():,} players")
+    bundle_events = None
+    if args.lasso_bundle:
+        df, bundle_events = score_with_lasso_bundle(
+            args.long, args.lasso_bundle, db=args.db)
+        print(f"scored val (per-event bundle): {len(df):,} rows, "
+              f"{df.player_id.nunique():,} players")
+        print(f"  bundle events: {bundle_events}")
+    else:
+        df = score_with_lasso(args.long, args.lasso, db=args.db)
+        print(f"scored val: {len(df):,} rows, "
+              f"{df.player_id.nunique():,} players")
 
     # Optional model B
     model_b = scaler_b = classes_b = feat_names_b = None
@@ -445,6 +680,18 @@ def main():
 
     for ev in args.events:
         print(f"\n{'='*78}\nEVENT: {ev}\n{'='*78}")
+        # When a per-event bundle is loaded, point `lasso_score` at that
+        # event's column so every downstream function (slabs, cumulative,
+        # buckets, score_vs_yip, score_vs_bucket, top-lookback) ranks by
+        # the event-specific logit without further refactoring.
+        if bundle_events is not None:
+            col = f"lasso_score_{ev}"
+            if col not in df.columns:
+                print(f"  (no {col} in bundle — skipping {ev})")
+                continue
+            df["lasso_score"] = df[col]
+            print(f"  ranking by {col} "
+                  f"(range [{df[col].min():+.2f}, {df[col].max():+.2f}])")
         slab_df, base_by_yip = per_yip_slabs(df, ev, SLABS)
         if slab_df.empty:
             print("  (no data)"); continue
@@ -492,74 +739,99 @@ def main():
                 lambda x: f"{x:>+6.3f}" if pd.notna(x) else "       "
             ).to_string())
 
-        # ---- B. Per-yip × score bucket (non-cumulative, same percentile grid)
-        bkt_df = per_yip_score_buckets(df, ev)
-        if not bkt_df.empty:
-            out_bkt = os.path.join(out_dir, f"{ev}_score_buckets.csv")
-            bkt_df.to_csv(out_bkt, index=False)
-            print(f"\nsaved {out_bkt}")
-            print(f"\n--- {ev}: realized rate (%) within score bucket "
-                  f"by yip × bucket ---")
-            r_piv = bkt_df.pivot(index="bucket", columns="yip", values="rate")
-            order = [f"p{lo}-p{hi}" for lo, hi in
-                     zip([0] + PCTILE_CUTS, PCTILE_CUTS + [100])]
-            order = [b for b in order if b in r_piv.index]
-            print(r_piv.loc[order].map(
-                lambda x: f"{x*100:>5.1f}" if pd.notna(x) else "  -  "
-            ).to_string())
-            print(f"\n--- {ev}: n per bucket ---")
-            n_piv = bkt_df.pivot(index="bucket", columns="yip", values="n")
-            print(n_piv.loc[order].map(
-                lambda x: f"{int(x):>5d}" if pd.notna(x) else "     "
-            ).to_string())
-            print(f"\n--- {ev}: score floor per bucket ---")
-            sl_piv = bkt_df.pivot(index="bucket", columns="yip",
-                                  values="score_lo")
-            print(sl_piv.loc[order].map(
-                lambda x: f"{x:>+6.3f}" if pd.notna(x) else "       "
-            ).to_string())
+        # B/C/D removed in v2.1 report cleanup:
+        #   B = per-yip percentile-bucket pivot (redundant with the slab
+        #       table above, just finer-grained)
+        #   C = absolute score bin × yip   (fixed bins don't fit lasso
+        #       logit scale)
+        #   D = absolute score bin × bucket (same reason)
 
-        # ---- C. Score × yip → success rate (absolute score bins)
-        sy_df = score_vs_yip(df, ev)
-        if not sy_df.empty:
-            out_sy = os.path.join(out_dir, f"{ev}_score_vs_yip.csv")
-            sy_df.to_csv(out_sy, index=False)
-            print(f"\nsaved {out_sy}")
-            print(f"\n--- {ev}: realized rate (%) by absolute score bin × yip ---")
-            r_piv = sy_df.pivot(index="score_bin", columns="snap_offset",
-                                values="rate")
-            order_b = [b[2] for b in SCORE_BINS if b[2] in r_piv.index]
-            print(r_piv.loc[order_b].map(
-                lambda x: f"{x*100:>5.1f}" if pd.notna(x) else "  -  "
-            ).to_string())
-            print(f"\n--- {ev}: n per (score bin, yip) ---")
-            n_piv = sy_df.pivot(index="score_bin", columns="snap_offset",
-                                values="n")
-            print(n_piv.loc[order_b].map(
-                lambda x: f"{int(x):>5d}" if pd.notna(x) else "     "
-            ).to_string())
+        # ---- MLB_DEBUT extras: per-yip ≥X% threshold + time-to-debut
+        if ev == "MLB_DEBUT":
+            thr_df = per_yip_threshold(df, ev,
+                                        target_precision=args.target_precision)
+            if not thr_df.empty:
+                out_thr = os.path.join(
+                    out_dir,
+                    f"{ev}_thresholds_at_p{int(args.target_precision*100)}.csv")
+                thr_df.to_csv(out_thr, index=False)
+                print(f"\nsaved {out_thr}")
+                tgt_pct = int(args.target_precision * 100)
+                print(f"\n--- {ev}: per-yip threshold for "
+                      f">={tgt_pct}% precision ---")
+                print(f"{'yip':>4} {'threshold':>10} {'n_above':>8} "
+                      f"{'tp_above':>9} {'precision':>10} "
+                      f"{'recall':>8} {'n_total':>8}")
+                for _, r in thr_df.iterrows():
+                    fmt = lambda v, w, p: (f"{v:>{w}.{p}f}" if pd.notna(v)
+                                            else f"{'nan':>{w}}")
+                    print(f"{int(r.yip):>4d} {fmt(r.threshold, 10, 3)} "
+                          f"{int(r.n_above):>8d} {int(r.tp_above):>9d} "
+                          f"{fmt(r.precision, 10, 1 if False else 3)} "
+                          f"{fmt(r.recall, 8, 3)} "
+                          f"{int(r.n_total):>8d}")
 
-        # ---- D. Score × draft bucket → success rate
-        sb_df = score_vs_draft_bucket(df, ev)
-        if not sb_df.empty:
-            out_sb = os.path.join(out_dir, f"{ev}_score_vs_bucket.csv")
-            sb_df.to_csv(out_sb, index=False)
-            print(f"\nsaved {out_sb}")
-            print(f"\n--- {ev}: realized rate (%) by absolute score bin "
-                  f"× draft bucket ---")
-            r_piv = sb_df.pivot(index="score_bin", columns="bucket",
-                                values="rate")
-            cols = [b for b in DRAFT_BUCKETS if b in r_piv.columns]
-            order_b = [b[2] for b in SCORE_BINS if b[2] in r_piv.index]
-            print(r_piv.loc[order_b, cols].map(
-                lambda x: f"{x*100:>5.1f}" if pd.notna(x) else "  -  "
-            ).to_string())
-            print(f"\n--- {ev}: n per (score bin, draft bucket) ---")
-            n_piv = sb_df.pivot(index="score_bin", columns="bucket",
-                                values="n")
-            print(n_piv.loc[order_b, cols].map(
-                lambda x: f"{int(x):>5d}" if pd.notna(x) else "     "
-            ).to_string())
+            if args.time_to_debut_model:
+                from scipy.stats import spearmanr
+                from sklearn.metrics import mean_absolute_error
+                print(f"\nscoring time-to-debut with "
+                      f"{args.time_to_debut_model}")
+                df_t = _score_time_to_debut(df.copy(),
+                                             args.time_to_debut_model)
+                # Only debutees with a known mlb_debut_year and pre-debut snap
+                deb = df_t.dropna(subset=["mlb_debut_year"]).copy()
+                deb["mlb_debut_year"] = deb["mlb_debut_year"].astype(int)
+                deb = deb[deb.snap_year < deb.mlb_debut_year]
+                deb["actual_h"] = deb["mlb_debut_year"] - deb["snap_year"]
+                if len(deb):
+                    out_t = os.path.join(out_dir,
+                                          f"{ev}_time_to_debut.csv")
+                    deb[["player_id", "snap_year", "snap_offset",
+                          "mlb_debut_year", "actual_h", "t_pred"]
+                        ].to_csv(out_t, index=False)
+                    print(f"saved {out_t}")
+                    mae = float(mean_absolute_error(
+                        deb["actual_h"], deb["t_pred"]))
+                    sp = float(spearmanr(deb["t_pred"],
+                                          deb["actual_h"]).correlation)
+                    print(f"\n--- {ev}: time-to-debut (n={len(deb)} "
+                          f"debutee-snaps, {deb.player_id.nunique()} "
+                          f"players) ---")
+                    print(f"  overall: MAE={mae:.2f}  Spearman={sp:+.3f}")
+                    print(f"\n  {'snap_off':>8} {'n':>5} {'spearman':>10} "
+                          f"{'MAE':>5} {'mean_act':>9} {'mean_pred':>10}")
+                    for so in sorted(deb.snap_offset.unique()):
+                        s = deb[deb.snap_offset == so]
+                        if len(s) < 20:
+                            continue
+                        sp_so = float(spearmanr(
+                            s["t_pred"], s["actual_h"]).correlation)
+                        mae_so = float(mean_absolute_error(
+                            s["actual_h"], s["t_pred"]))
+                        print(f"  {int(so):>8d} {len(s):>5d} "
+                              f"{sp_so:>+9.3f} {mae_so:>5.2f} "
+                              f"{s.actual_h.mean():>8.2f} "
+                              f"{s.t_pred.mean():>9.2f}")
+
+            pl_df = per_current_level(df, ev)
+            if not pl_df.empty:
+                out_pl = os.path.join(out_dir, f"{ev}_per_current_level.csv")
+                pl_df.to_csv(out_pl, index=False)
+                print(f"\nsaved {out_pl}")
+                print(f"\n--- {ev}: performance conditional on current "
+                      f"MiLB level ---")
+                print(f"{'cur_level':>10} {'n':>6} {'pos':>5} "
+                      f"{'base%':>6} {'AU-PR':>6} "
+                      f"{'lift@5':>7} {'rate@5%':>8} "
+                      f"{'lift@10':>8} {'rate@10%':>9}")
+                for _, r in pl_df.iterrows():
+                    fmt = lambda v, w, p: (f"{v:>{w}.{p}f}" if pd.notna(v)
+                                            else f"{'nan':>{w}}")
+                    print(f"{r.cur_level:>10} {int(r.n):>6d} {int(r.pos):>5d} "
+                          f"{fmt(r.base_pct, 6, 2)} {fmt(r.au_pr, 6, 3)} "
+                          f"{fmt(r['lift@5'], 7, 2)} {fmt(r['rate@5'], 8, 2)} "
+                          f"{fmt(r['lift@10'], 8, 2)} "
+                          f"{fmt(r['rate@10'], 9, 2)}")
 
         # ---- E. Walk-forward summary (per snap_offset)
         wf_df = walkforward_summary(df, ev)
@@ -569,14 +841,15 @@ def main():
             print(f"\nsaved {out_wf}")
             print(f"\n--- {ev}: walk-forward by snap_offset ---")
             print(f"{'offset':>6} {'n':>5} {'pos':>4} {'base%':>6} "
-                  f"{'pred%':>6} {'AUC':>6} {'lift@5':>7} {'ECE':>6}")
+                  f"{'pred%':>6} {'AU-PR':>6} {'AU-PR_lift':>10} "
+                  f"{'lift@2':>7} {'ECE':>6}")
             for _, r in wf_df.iterrows():
                 fmt = lambda v, w, p: (f"{v:>{w}.{p}f}" if pd.notna(v)
                                        else f"{'nan':>{w}}")
                 print(f"{r.snap_offset:>6d} {r.n:>5d} {r.pos:>4d} "
                       f"{fmt(r.base_pct, 6, 2)} {fmt(r.pred_pct, 6, 2)} "
-                      f"{fmt(r.auc, 6, 3)} {fmt(r['lift@5'], 7, 2)} "
-                      f"{fmt(r.ece, 6, 3)}")
+                      f"{fmt(r.au_pr, 6, 3)} {fmt(r.au_pr_lift, 10, 2)} "
+                      f"{fmt(r['lift@2'], 7, 2)} {fmt(r.ece, 6, 3)}")
 
         # Look-back: actual top picks
         lb = lookback_top_picks(df, ev, SLABS, top_slab_idx=4,

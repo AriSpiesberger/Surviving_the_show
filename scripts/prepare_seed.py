@@ -24,13 +24,13 @@ OUT = REPO_ROOT / "seed_v1.17.tar.gz"
 REQUIRED: list[str] = [
     "prospects.db",
     "prospects_snapshot.db",
-    "panels/panel_v1.17.npz",
+    "panel_v1.17.npz",
     "models/event_classifiers_v1.17_prod.pkl",
-    "models/debut_lasso_universe_v1.17h.pkl",
-    "models/top100_lasso_v1.17h.pkl",
-    "models/model_b_outcomes_v1.17h.pkl",
+    "models/debut_lasso_universe_v1.17_prod.pkl",
+    "models/top100_lasso_v1.17_prod.pkl",
+    "models/model_b_outcomes_v1.17_prod.pkl",
     "models/player_position_from_stats.csv",
-    "buy_list_v1.17_FINAL.csv",
+    "results/buy_lists/buy_list_v1.17_FINAL.csv",
 ]
 
 # Optional — included if present.
