@@ -158,6 +158,36 @@ def score_with_lasso(long_csv, lasso_pkl, age_center=22, yip_center=3,
     return df
 
 
+def score_with_xgb(long_csv, xgb_pkl,
+                    age_center=22, yip_center=3,
+                    db="prospects_snapshot.db"):
+    """v2.0 joint XGBoost path. Loads a multi-output XGBoost booster (saved
+    by fit_joint_xgb_v2.py), scores each row, and writes one
+    `lasso_score_<EVENT>` column per event head — same column shape as the
+    per-event bundle so every downstream analysis works unchanged.
+    """
+    import xgboost as xgb
+    with open(xgb_pkl, "rb") as fh:
+        bundle = pickle.load(fh)
+    df = _prepare_long(long_csv, age_center, yip_center, db)
+    booster = bundle["model"]
+    scaler = bundle["scaler"]
+    feat = bundle["feature_names"]
+    events = bundle["events"]
+    best_iter = bundle.get("best_iteration")
+    X = scaler.transform(df[feat].values.astype(np.float32))
+    d = xgb.DMatrix(X, feature_names=list(feat))
+    if best_iter is not None:
+        P = booster.predict(d, iteration_range=(0, best_iter + 1))
+    else:
+        P = booster.predict(d)
+    for k, ev in enumerate(events):
+        df[f"lasso_score_{ev}"] = P[:, k]
+    if "MLB_DEBUT" in events:
+        df["lasso_score"] = df["lasso_score_MLB_DEBUT"]
+    return df, list(events)
+
+
 def score_with_lasso_bundle(long_csv, bundle_pkl,
                              age_center=22, yip_center=3,
                              db="prospects_snapshot.db"):
@@ -624,6 +654,9 @@ def main():
     ap.add_argument("--lasso-bundle", default=None,
                     help="Path to v1.18+ per-event lasso bundle .pkl. When "
                          "set, each event is ranked by its own lasso logit.")
+    ap.add_argument("--xgb-model", default=None,
+                    help="Path to v2.0 joint XGBoost .pkl. Per-event scores "
+                         "come from the multi-output booster's heads.")
     ap.add_argument("--model-b", default=None)
     ap.add_argument("--out-prefix", default="val")
     ap.add_argument("--db", default="prospects_snapshot.db")
@@ -640,8 +673,10 @@ def main():
                     help="Per-yip MLB_DEBUT threshold target (default 0.60).")
     args = ap.parse_args()
 
-    if (args.lasso is None) == (args.lasso_bundle is None):
-        ap.error("Pass exactly one of --lasso or --lasso-bundle.")
+    n_models = sum(x is not None for x in
+                    (args.lasso, args.lasso_bundle, args.xgb_model))
+    if n_models != 1:
+        ap.error("Pass exactly one of --lasso / --lasso-bundle / --xgb-model.")
 
     out_dir = _make_out_dir(args.out_prefix)
     report_buf = io.StringIO()
@@ -661,9 +696,15 @@ def main():
     if args.lasso_bundle:
         df, bundle_events = score_with_lasso_bundle(
             args.long, args.lasso_bundle, db=args.db)
-        print(f"scored val (per-event bundle): {len(df):,} rows, "
+        print(f"scored val (per-event lasso bundle): {len(df):,} rows, "
               f"{df.player_id.nunique():,} players")
         print(f"  bundle events: {bundle_events}")
+    elif args.xgb_model:
+        df, bundle_events = score_with_xgb(
+            args.long, args.xgb_model, db=args.db)
+        print(f"scored val (joint XGBoost): {len(df):,} rows, "
+              f"{df.player_id.nunique():,} players")
+        print(f"  xgb events: {bundle_events}")
     else:
         df = score_with_lasso(args.long, args.lasso, db=args.db)
         print(f"scored val: {len(df):,} rows, "
