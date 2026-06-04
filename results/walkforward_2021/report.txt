@@ -1,0 +1,56 @@
+====================================================================
+2021 entry cohort — snap=2022 (year 1 post-draft) — n=2,213
+====================================================================
+
+  MLB_DEBUT
+       n   pos   base%   AU-PR  AU-PR_lift     AUC  lift@2  rate@2%  lift@5  rate@5%   Brier
+    2213   145   6.55   0.494        7.54   0.913   10.41   68.18    7.97   52.25  0.0463
+
+  TOP_100_PROSPECT
+       n   pos   base%   AU-PR  AU-PR_lift     AUC  lift@2  rate@2%  lift@5  rate@5%   Brier
+    2213    26   1.17   0.363       30.94   0.971   29.02   34.09   16.10   18.92  0.0106
+
+  --- MLB_DEBUT realized rate by percentile slab (top of list first) ---
+        slab     n   tp  rate%   lift  score_lo
+      0-0.5%    11    9  81.8 12.49x    +0.985
+      0.5-1%    11    9  81.8 12.49x    +0.958
+      1-1.5%    11    7  63.6  9.71x    +0.882
+      1.5-2%    11    5  45.5  6.94x    +0.731
+        2-3%    22    9  40.9  6.24x    +0.507
+        3-4%    23   11  47.8  7.30x    +0.393
+        4-5%    22    8  36.4  5.55x    +0.303
+       5-10%   110   32  29.1  4.44x    +0.121
+      10-20%   222   28  12.6  1.92x    +0.036
+      20-50%   663   24   3.6  0.55x    +0.001
+     50-100%  1107    3   0.3  0.04x    +0.000
+
+  saved top-2% picks (44 players) -> results/walkforward_2021/top2pct_snap2022.csv
+  among top 2%, realized_MLB_DEBUT = 30/44 (68.2%)
+====================================================================
+2021 entry cohort — snap=2023 (year 2 post-draft) — n=2,193
+====================================================================
+
+  MLB_DEBUT
+       n   pos   base%   AU-PR  AU-PR_lift     AUC  lift@2  rate@2%  lift@5  rate@5%   Brier
+    2193   125   5.70   0.618       10.84   0.946   12.76   72.73   10.69   60.91  0.0419
+
+  TOP_100_PROSPECT
+       n   pos   base%   AU-PR  AU-PR_lift     AUC  lift@2  rate@2%  lift@5  rate@5%   Brier
+    2193    13   0.59   0.186       31.34   0.979   26.84   15.91   18.40   10.91  0.0096
+
+  --- MLB_DEBUT realized rate by percentile slab (top of list first) ---
+        slab     n   tp  rate%   lift  score_lo
+      0-0.5%    11   11 100.0 17.54x    +1.000
+      0.5-1%    11    9  81.8 14.35x    +0.991
+      1-1.5%    11    8  72.7 12.76x    +0.980
+      1.5-2%    11    4  36.4  6.38x    +0.953
+        2-3%    22   14  63.6 11.16x    +0.902
+        3-4%    22   12  54.5  9.57x    +0.822
+        4-5%    22    9  40.9  7.18x    +0.729
+       5-10%   109   28  25.7  4.51x    +0.325
+      10-20%   220   17   7.7  1.36x    +0.087
+      20-50%   657   12   1.8  0.32x    +0.003
+     50-100%  1097    1   0.1  0.02x    +0.000
+
+  saved top-2% picks (44 players) -> results/walkforward_2021/top2pct_snap2023.csv
+  among top 2%, realized_MLB_DEBUT = 32/44 (72.7%)
