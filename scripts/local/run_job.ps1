@@ -60,7 +60,7 @@ if (-not (Test-Path $env:PRICES_DIR)) {
 }
 
 $Season = (Get-Date).ToUniversalTime().Year
-$BuyList = Join-Path $RepoRoot 'results\buy_lists\buy_list_v1.18_FINAL.csv'
+$BuyList = Join-Path $RepoRoot 'results\buy_lists\buy_list_v2.0b_FINAL.csv'
 
 switch ($Job) {
     'daily_data'    { $Args = @('-m', 'prospects.deploy.daily_data') }

@@ -1,13 +1,22 @@
-"""Weekly v1.17 full retrain + scoring + buy list build.
+"""Weekly v2.0b full retrain + scoring + buy list build.
+
+v2.0b = landmark hazards + joint XGBoost downstream. Replaces the prior
+v1.18 / v2.0 contemporaneous pipeline. Held-out validation showed AU-PR
+gains of +0.30 to +0.83 on rare events vs v2.0 (see
+results/v20*_landmark*/report.txt).
 
 Pipeline (default order):
-  0. RETRAIN: position lookup -> panel -> hazards -> Beta cal -> score
-     fit/val slices -> refit lasso + model_b
-  1. SCORE:   scripts_v17/score/score_panel_v17.py
-              -> snap{season}_v17_all_long.csv
-  2. BUYLIST: scripts_v17/buylist/build_v17_buylist.py
-              -> buy_list_v1.18_FINAL.csv
-  3. COMPS:   prospects.deploy.debut_comps (eBay refresh, fail-soft)
+  0a. PANEL/HAZARDS (v1.18b): rebuild panel -> train landmark HistGBT
+      hazards (k-as-feature) -> score fit/val slices -> refit
+      v1.18b L1-logistic bundle + time-to-debut (with mean_t/sd_t).
+  0b. JOINT XGB (v2.0b): retrain the multi-output XGBoost downstream
+      on landmark hazard outputs.
+  1.  SCORE:   landmark inference at snap=2026
+              -> results/scored/snap2026_v1.18b_landmark_long.csv
+  2.  BUYLIST: scripts_v17/buylist/build_v2.0_buylist.py with v2.0b
+              artifacts and v1.18b timing
+              -> results/buy_lists/buy_list_v2.0b_FINAL.csv
+  3.  COMPS:   prospects.deploy.debut_comps (eBay refresh, fail-soft)
 
 The retrain block is the slow part (~60-75 min total: panel ~25, hazards
 ~10, score+buylist the rest). It's pure-Python orchestrated so the Windows
@@ -52,18 +61,24 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-# Required artifacts for the v1.18 production pipeline. The v1.17 hazard
-# pkl is still needed (we score the panel with prod hazards); the v1.18
-# changes only the downstream lasso + timing artifacts.
+# Required artifacts for the v2.0b production pipeline (landmark hazards +
+# joint XGBoost). The retrain block produces all of these; check_artifacts
+# runs AFTER retrain so a clean run never trips it.
 REQUIRED = [
-    "models/event_classifiers_v1.17_prod.pkl",
-    "models/lasso_logits_v1.18_prod.pkl",
-    "models/time_to_debut_v1.18_prod.pkl",
+    # Landmark hazards (v1.18b) — the upstream
+    "models/event_classifiers_v1.18b_landmark_prod.pkl",
+    # v1.18b downstream — used for time-to-debut. The L1 bundle is now
+    # superseded by the v2.0b joint XGB but the bundle pkl is still needed
+    # by fit_time_to_debut_v18b for the p_debut_lasso feature.
+    "models/lasso_logits_v1.18b_prod.pkl",
+    "models/time_to_debut_v1.18b_prod.pkl",
+    # v2.0b joint XGBoost — the actual scoring head
+    "models/joint_xgb_v2.0b_prod.pkl",
+    # Shared infra
     "models/player_position_from_stats.csv",
     "panels/panel_v1.17.npz",
     "prospects_snapshot.db",
-    "scripts_v17/score/score_panel_v17.py",
-    "scripts_v17/buylist/build_v1.18_buylist.py",
+    "scripts_v17/buylist/build_v2.0_buylist.py",
 ]
 
 # Retrain pipeline knobs.
@@ -295,15 +310,47 @@ def _train_hazards_and_models() -> int:
         print(f"[retrain/score-{slice_name}] wrote {out_csv.name} "
               f"({len(df):,} rows)", flush=True)
 
-    # v1.18 retrain: train the per-event lasso bundle + time-to-debut
-    # regression on prod fit+val combined. Replaces the prior v1.17 refit
-    # which produced debut_lasso + top100_lasso + model_b.
-    rc = run_step("retrain/v1.18",
+    # v1.18b retrain: fit per-event L1-logistic bundle + time-to-debut
+    # regression with mean_t/sd_t features on landmark hazard outputs.
+    # The bundle is needed by fit_time_to_debut_v18b (which takes
+    # p_debut_lasso as a feature); the joint XGB downstream (step below)
+    # supersedes the bundle for scoring.
+    rc = run_step("retrain/v1.18b",
                   [sys.executable, "-m",
-                   "scripts_v17.train.train_v1_18_prod",
-                   "--fit", str(train_dir / "v1.17_prod_fit_long.csv"),
-                   "--val", str(train_dir / "v1.17_prod_val_long.csv"),
-                   "--db", str(REPO_ROOT / "prospects_snapshot.db")],
+                   "scripts_v17.train.fit_lasso_logits_v18",
+                   "--fit", str(train_dir / "v1.18b_landmark_fit_long.csv"),
+                   "--val", str(train_dir / "v1.18b_landmark_val_long.csv"),
+                   "--db", str(REPO_ROOT / "prospects_snapshot.db"),
+                   "--out", str(REPO_ROOT / "models" /
+                                 "lasso_logits_v1.18b_prod.pkl")],
+                  REPO_ROOT)
+    if rc != 0:
+        return rc
+    rc = run_step("retrain/v1.18b-timing",
+                  [sys.executable, "-m",
+                   "scripts_v17.train.fit_time_to_debut_v18b",
+                   "--fit", str(train_dir / "v1.18b_landmark_fit_long.csv"),
+                   "--val", str(train_dir / "v1.18b_landmark_val_long.csv"),
+                   "--db", str(REPO_ROOT / "prospects_snapshot.db"),
+                   "--bundle", str(REPO_ROOT / "models" /
+                                    "lasso_logits_v1.18b_prod.pkl"),
+                   "--include-p-debut",
+                   "--out", str(REPO_ROOT / "models" /
+                                 "time_to_debut_v1.18b_prod.pkl")],
+                  REPO_ROOT)
+    if rc != 0:
+        return rc
+
+    # v2.0b joint XGB: train the multi-output XGBoost head on the landmark
+    # hazard outputs. This is the actual scoring head used by the buy list.
+    rc = run_step("retrain/v2.0b-xgb",
+                  [sys.executable, "-m",
+                   "scripts_v17.train.fit_joint_xgb_v2",
+                   "--fit", str(train_dir / "v1.18b_landmark_fit_long.csv"),
+                   "--val", str(train_dir / "v1.18b_landmark_val_long.csv"),
+                   "--db", str(REPO_ROOT / "prospects_snapshot.db"),
+                   "--out", str(REPO_ROOT / "models" /
+                                 "joint_xgb_v2.0b_prod.pkl")],
                   REPO_ROOT)
     if rc != 0:
         return rc
@@ -348,17 +395,43 @@ def _chunk_score(pids_file: Path, chunk_dir: Path, label: str,
 
 def run_retrain(fresh: bool) -> int:
     """Full retrain orchestration. Returns 0 on success, non-zero on first
-    failed step."""
-    print(f"\n{'#'*70}\n# WEEKLY RETRAIN\n{'#'*70}", flush=True)
-    rc = _rebuild_position_lookup()
+    failed step.
+
+    Delegates the heavy lifting to two orchestrator scripts that already
+    encode the v2.0b production pipeline:
+
+      - scripts_v17.train.train_v1_18b_prod : panel rebuild + landmark
+        hazards + score fit/val + downstream lasso/timing refit.
+      - scripts_v17.train.train_v2_0b_prod : joint XGB on landmark longs
+        + snap=2026 scoring + buy list build.
+
+    The legacy inline _rebuild_position_lookup / _build_panel /
+    _train_hazards_and_models helpers are still defined above for ad-hoc
+    use (and so the panel/lookup work shares one impl with the v1.18b
+    orchestrator, which calls back into them via direct import)."""
+    print(f"\n{'#'*70}\n# WEEKLY RETRAIN (v2.0b)\n{'#'*70}", flush=True)
+    # Stage A: v1.18b — panel + landmark hazards + fit/val scoring +
+    # downstream bundle/timing. Runs end-to-end as its own subprocess so
+    # a failure isolates cleanly.
+    v18b_cmd = [sys.executable, "-m", "scripts_v17.train.train_v1_18b_prod"]
+    if not fresh:
+        # If panel exists from a recent build, skip-hazards lets us reuse it.
+        # The orchestrator's --skip-hazards reuses the .pkl. For a true clean
+        # weekly retrain we want fresh, so omit the flag.
+        pass
+    rc = run_step("retrain/v1.18b", v18b_cmd, REPO_ROOT)
     if rc != 0:
         return rc
-    rc = _build_panel(fresh=fresh)
+
+    # Stage B: v2.0b — joint XGB on the landmark longs + snap=2026 scoring
+    # + buy list. Produces results/buy_lists/buy_list_v2.0b_FINAL.csv as
+    # the prod artifact.
+    rc = run_step("retrain/v2.0b",
+                  [sys.executable, "-m", "scripts_v17.train.train_v2_0b_prod"],
+                  REPO_ROOT)
     if rc != 0:
         return rc
-    rc = _train_hazards_and_models()
-    if rc != 0:
-        return rc
+
     print(f"\n[retrain] OK\n", flush=True)
     return 0
 
@@ -423,36 +496,26 @@ def main():
 
     scored_dir = REPO_ROOT / "results" / "scored"
     scored_dir.mkdir(parents=True, exist_ok=True)
-    snap_long = scored_dir / f"snap{args.season}_v17_all_long.csv"
-    scratch_dir = REPO_ROOT / "scratch" / "v17_score_panel"
+    snap_long = scored_dir / f"snap{args.season}_v1.18b_landmark_long.csv"
 
-    # Step 1: score panel
-    if not args.buylist_only:
-        if args.fresh and scratch_dir.exists():
-            print(f"[score] wiping {scratch_dir}")
-            shutil.rmtree(scratch_dir)
-        score_cmd = [
-            sys.executable, "-m", "scripts_v17.score.score_panel_v17",
-            "--snap-year", str(args.season),
-            "--output-dir", str(scratch_dir),
-            "--out", str(snap_long),
-            "--panel", str(REPO_ROOT / RETRAIN_PANEL_NAME),
-            "--hazards",
-            str(REPO_ROOT / "models" /
-                "event_classifiers_v1.17_prod.pkl"),
-        ]
-        if args.keep_chunks:
-            score_cmd.append("--keep-chunks")
-        rc = run_step("score", score_cmd, REPO_ROOT)
+    # Step 1+2: snap=2026 landmark scoring + v2.0b buy list. When the full
+    # retrain ran, train_v2_0b_prod already did this — so on a full-retrain
+    # run these are no-ops (the orchestrator's --skip-xgb path is the
+    # ad-hoc rescoring entry point used by --skip-retrain modes).
+    if skip_retrain and not args.buylist_only:
+        # Rescore snap with EXISTING landmark hazards + rebuild buy list.
+        # --skip-xgb keeps the prod XGB pkl; --skip-buylist is set when the
+        # caller really only wants the snap_long.
+        cmd = [sys.executable, "-m",
+               "scripts_v17.train.train_v2_0b_prod",
+               "--skip-xgb"]
+        if args.score_only:
+            cmd.append("--skip-buylist")
+        rc = run_step("score+buylist", cmd, REPO_ROOT)
         if rc != 0:
             sys.exit(1)
-        if not snap_long.exists():
-            print(f"FATAL: score step exited 0 but {snap_long.name} not written")
-            sys.exit(1)
-
-    # Step 2: build buy list. Pass the snap_long path explicitly so the
-    # buylist script doesn't have to assume a season-specific filename.
-    if not args.score_only:
+    elif skip_retrain and args.buylist_only:
+        # Snap_long must already exist; just rebuild the buy list.
         if not snap_long.exists():
             print(f"FATAL: need {snap_long.name} but it doesn't exist; "
                   f"run without --buylist-only first")
@@ -460,8 +523,16 @@ def main():
         rc = run_step("buylist", [
             sys.executable,
             str(REPO_ROOT / "scripts_v17" / "buylist" /
-                "build_v1.18_buylist.py"),
-            "--snap-long", str(snap_long),
+                "build_v2.0_buylist.py"),
+            "--long", str(snap_long),
+            "--xgb", str(REPO_ROOT / "models" /
+                          "joint_xgb_v2.0b_prod.pkl"),
+            "--timing", str(REPO_ROOT / "models" /
+                             "time_to_debut_v1.18b_prod.pkl"),
+            "--out-all", str(REPO_ROOT / "results" / "buy_lists" /
+                              "buy_list_v2.0b_ALL_SCORED.csv"),
+            "--out-final", str(REPO_ROOT / "results" / "buy_lists" /
+                                "buy_list_v2.0b_FINAL.csv"),
         ], REPO_ROOT)
         if rc != 0:
             sys.exit(2)
@@ -481,8 +552,8 @@ def main():
     bl_dir = REPO_ROOT / "results" / "buy_lists"
     print(f"\n=== weekly_score season={args.season} OK ===")
     print(f"  snap long file: {snap_long}")
-    print(f"  buy list:       {bl_dir / 'buy_list_v1.18_FINAL.csv'}")
-    print(f"  all scored:     {bl_dir / 'buy_list_v1.18_ALL_SCORED.csv'}")
+    print(f"  buy list:       {bl_dir / 'buy_list_v2.0b_FINAL.csv'}")
+    print(f"  all scored:     {bl_dir / 'buy_list_v2.0b_ALL_SCORED.csv'}")
 
 
 if __name__ == "__main__":

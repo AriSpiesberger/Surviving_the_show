@@ -26,7 +26,7 @@ import xgboost as xgb
 DEFAULT_LONG = "results/scored/snap2026_v17_all_long.csv"
 DEFAULT_XGB = "models/joint_xgb_v2.0_prod.pkl"
 DEFAULT_TIMING = "models/time_to_debut_v1.18_prod.pkl"
-DEFAULT_PRICES = "results/buy_lists/buy_list_v1.17_FINAL.csv"
+DEFAULT_PRICES = "data/prices_bowman_chrome_auto_v13.csv"
 DEFAULT_DB = "prospects_snapshot.db"
 AGE_CENTER, YIP_CENTER = 22, 3
 
@@ -114,6 +114,21 @@ def _join_current_level(df, db):
 
 
 def _join_prices(df, prices_csv):
+    """Join eBay prices into df. Supports two source shapes:
+
+      A) Already-prefixed buy-list output ({ebay_price_median,
+         ebay_price_p25, ebay_n_listings, ebay_top_listing_url}) — the
+         legacy default (results/buy_lists/buy_list_v1.17_FINAL.csv).
+         Covers ~300 players (the v1.17-filtered set).
+
+      B) Raw eBay price file (data/prices_bowman_chrome_auto_v13.csv) with
+         {price_median, price_p25, n_listings, top_listing_url, denominator,
+         has_market}. Covers ~10k players (the full crawl). We filter to
+         base/raw rows (denominator == 0, has_market == 1) and apply the
+         ebay_ prefix so the downstream output schema is unchanged.
+
+    Auto-detects by column presence so both paths work without a flag.
+    """
     if not prices_csv:
         return df
     try:
@@ -121,12 +136,38 @@ def _join_prices(df, prices_csv):
     except FileNotFoundError:
         print(f"  (prices file not found: {prices_csv} — skipping)")
         return df
-    keep = [c for c in ["player_id", "ebay_price_median", "ebay_price_p25",
-                          "ebay_n_listings", "ebay_top_listing_url"]
-            if c in p.columns]
-    if "player_id" not in keep:
-        return df
-    return df.merge(p[keep], on="player_id", how="left")
+
+    # Path A: already-prefixed
+    if "ebay_price_median" in p.columns:
+        keep = [c for c in ["player_id", "ebay_price_median",
+                              "ebay_price_p25", "ebay_n_listings",
+                              "ebay_top_listing_url"]
+                if c in p.columns]
+        if "player_id" not in keep:
+            return df
+        print(f"  joined prices from {prices_csv}: "
+              f"{p['player_id'].nunique():,} players with prices")
+        return df.merge(p[keep], on="player_id", how="left")
+
+    # Path B: raw price file (broad eBay crawl)
+    if "price_median" in p.columns:
+        if "denominator" in p.columns:
+            p = p[p["denominator"].astype(str).isin(["0", "0.0"])]
+        if "has_market" in p.columns:
+            p = p[p["has_market"].astype(str) == "1"]
+        rename = {"price_median": "ebay_price_median",
+                  "price_p25":    "ebay_price_p25",
+                  "n_listings":   "ebay_n_listings",
+                  "top_listing_url": "ebay_top_listing_url"}
+        cols = ["player_id"] + [c for c in rename if c in p.columns]
+        p = p[cols].drop_duplicates("player_id").rename(columns=rename)
+        print(f"  joined prices from {prices_csv}: "
+              f"{p['player_id'].nunique():,} players with prices "
+              f"(filtered to base+raw)")
+        return df.merge(p, on="player_id", how="left")
+
+    print(f"  (prices file {prices_csv} has neither ebay_* nor price_* cols)")
+    return df
 
 
 def main():

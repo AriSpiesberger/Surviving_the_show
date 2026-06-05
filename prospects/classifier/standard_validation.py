@@ -36,12 +36,27 @@ import os
 import pickle
 
 import numpy as np
-from sklearn.metrics import brier_score_loss, roc_auc_score
+from sklearn.metrics import (
+    average_precision_score, brier_score_loss, roc_auc_score,
+)
 
 from prospects.classifier.architectures.survival import (
     ELITE_KEY, STAR_KEY, _trigger_year, load_hazards,
     predict_cumulative_batch,
 )
+from prospects.classifier.architectures.landmark_survival import (
+    predict_cumulative_batch_landmark,
+)
+
+
+def _is_landmark_hazards(hazards: dict) -> bool:
+    """Detect whether a hazards bundle was trained with k-as-feature
+    (landmark) so we dispatch to the matching inference function. The
+    landmark trainer stamps kind='landmark' on every per-event entry."""
+    for k, v in hazards.items():
+        if isinstance(v, dict) and v.get("kind") == "landmark":
+            return True
+    return False
 from prospects.schema import CareerEvent
 from prospects.storage import ProspectDB
 
@@ -207,9 +222,19 @@ def _cell_metrics(p: np.ndarray, y: np.ndarray) -> dict:
     base = float(y.mean()) if n else float("nan")
     auc, auc_lo, auc_hi = _auc_with_ci(y, p)
     br, bss = _brier_skill(y, p)
+    # Average precision (= AU-PR). For rare events (TOP_100, STAR, ELITE)
+    # AU-PR is far more informative than AUC because it weights the
+    # rank quality where positives are concentrated. Report ap_lift =
+    # AP / base_rate so a baseline (random ranking) reads as 1.0.
+    if y.size and 0 < y.sum() < y.size:
+        ap = float(average_precision_score(y, p))
+    else:
+        ap = float("nan")
     out = {
         "n": n, "pos": pos, "base_rate": base, "pred_mean": float(p.mean()) if n else float("nan"),
         "auc": auc, "auc_lo": auc_lo, "auc_hi": auc_hi,
+        "ap": ap,
+        "ap_lift": (ap / base) if base and base > 0 and ap == ap else float("nan"),
         "brier": br, "brier_skill": bss,
         "ece": _ece(y, p), "spiegelhalter_p": _spiegelhalter_p(y, p),
     }
@@ -262,7 +287,10 @@ def _score_walkforward(
                              if (s.get("season_year") or 0) <= snap]
             for r in group
         }
-        cumP = predict_cumulative_batch(
+        predict_fn = (predict_cumulative_batch_landmark
+                      if _is_landmark_hazards(hazards)
+                      else predict_cumulative_batch)
+        cumP = predict_fn(
             hazards, group, sub_stats,
             current_year=snap, horizon=horizon,
         )
@@ -385,7 +413,7 @@ def _write_text_report(bucket_rows, wf_rows, path,
     for ename in REPORT_EVENTS:
         lines.append(f"\n  Event: {ename}")
         header = (f"  {'bucket':<8} {'n':>5} {'pos':>4} {'base%':>6} "
-                  f"{'pred%':>6} {'AUC':>6} {'[CI]':>14} "
+                  f"{'pred%':>6} {'AUC':>6} {'AP':>6} {'AP_lift':>7} "
                   f"{'BSS':>6}")
         for kp in TOP_K_PCT:
             header += f" {'lift@'+str(kp):>7} {'rec@'+str(kp):>6}"
@@ -393,12 +421,13 @@ def _write_text_report(bucket_rows, wf_rows, path,
         lines.append(header)
         ev_rows = [r for r in bucket_rows if r["event"] == ename]
         for r in ev_rows:
-            ci = f"[{_fmt(r['auc_lo'],2)},{_fmt(r['auc_hi'],2)}]"
             line = (
                 f"  {r['bucket']:<8} {r['n']:>5d} {r['pos']:>4d} "
                 f"{100*r['base_rate']:>5.2f}% "
                 f"{100*r['pred_mean']:>5.2f}% "
-                f"{_fmt(r['auc'],3):>6} {ci:>14} "
+                f"{_fmt(r['auc'],3):>6} "
+                f"{_fmt(r.get('ap'),3):>6} "
+                f"{_fmt(r.get('ap_lift'),2):>7} "
                 f"{_fmt(r['brier_skill'],3):>6}"
             )
             for kp in TOP_K_PCT:
@@ -415,7 +444,8 @@ def _write_text_report(bucket_rows, wf_rows, path,
     for ename in REPORT_EVENTS:
         lines.append(f"\n  Event: {ename}")
         header = (f"  {'offset':>6} {'mean_fwd':>8} {'n':>5} {'pos':>4} "
-                  f"{'base%':>6} {'pred%':>6} {'AUC':>6} {'BSS':>6}")
+                  f"{'base%':>6} {'pred%':>6} {'AUC':>6} {'AP':>6} "
+                  f"{'AP_lift':>7} {'BSS':>6}")
         for kp in TOP_K_PCT:
             header += f" {'lift@'+str(kp):>7}"
         header += f" {'ECE':>5}"
@@ -427,7 +457,9 @@ def _write_text_report(bucket_rows, wf_rows, path,
                 f"{r['n']:>5d} {r['pos']:>4d} "
                 f"{100*r['base_rate']:>5.2f}% "
                 f"{100*r['pred_mean']:>5.2f}% "
-                f"{_fmt(r['auc'],3):>6} {_fmt(r['brier_skill'],3):>6}"
+                f"{_fmt(r['auc'],3):>6} {_fmt(r.get('ap'),3):>6} "
+                f"{_fmt(r.get('ap_lift'),2):>7} "
+                f"{_fmt(r['brier_skill'],3):>6}"
             )
             for kp in TOP_K_PCT:
                 line += f" {_fmt(r[f'lift@{kp}%'],2):>7}"
