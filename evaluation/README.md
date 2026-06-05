@@ -35,6 +35,58 @@ contemporaneous packet predates the AU-PR patch so its `bucket.csv` and
 `walkforward.csv` lack the `ap` and `ap_lift` columns — use the landmark
 packet for those.
 
+## Per-bucket validation with XGBoost outputs (landmark only)
+
+**[v2.0b_landmark/per_bucket_validation.csv](v2.0b_landmark/per_bucket_validation.csv)** is
+the table to start with if you want a single-glance answer to "how good is
+the production model per draft bucket per event?".
+
+For each `(bucket, event)` cell, scored at `snap_offset = 2` (the
+canonical two-years-post-entry view), it reports:
+
+| Column | Meaning |
+|---|---|
+| `n` | Eligible val players in the cell. |
+| `pos` | Players who actually realized the event by 2026. |
+| `base_rate` | `pos / n` — the random-guess hit rate. |
+| `auc` | Area under the ROC curve. |
+| `ap` | Average Precision = AU-PR. |
+| `ap_lift` | `ap / base_rate` — how many × better than random the precision-weighted ranking is. |
+| `threshold` | The XGBoost probability cutoff used to compute the confusion-matrix metrics below. Fixed at **0.50**. |
+| `tp`, `fp`, `tn`, `fn` | True/false positives/negatives at `xgb_p_event ≥ 0.50`. |
+| `predicted_positives` | `tp + fp` — how many players the model said "yes" to. |
+| `precision` | `tp / (tp + fp)`. Of players the model picked, fraction that hit. |
+| `recall` | `tp / (tp + fn)`. Of players who hit, fraction the model picked. |
+| `f1` | Harmonic mean of precision and recall — the standard balanced summary at this threshold. |
+| `accuracy` | `(tp + tn) / n`. Total correct rate. **Warning**: for rare events (STAR/ELITE base rate ~0.5%), accuracy is near 1.00 even for a model that predicts "no" for everyone; use F1, precision, recall instead. |
+
+Buckets: `ALL, R1, R2-R3, R4-R10, R10+, IFA`. The `ALL` row aggregates the
+full val cohort.
+
+The XGBoost output is the production scoring head's calibrated probability
+per event (joint multi-output booster trained on the combined fit+val
+landmark slice). All metrics in this file are computed on the v1.17
+seed=42 val pids — the same held-out cohort the other CSVs in this
+directory use.
+
+### Headline read
+
+At threshold 0.50, the production v2.0b model on the val cohort:
+
+| Event | ALL bucket: precision | recall | F1 | ap_lift |
+|---|---|---|---|---|
+| TOP_100_PROSPECT | 0.82 | 0.78 | 0.80 | 77× |
+| MLB_DEBUT | 0.81 | 0.56 | 0.66 | 8× |
+| ESTABLISHED_MLB | 0.77 | 0.52 | 0.62 | 33× |
+| STAR_PLUS_ELITE | 0.88 | 0.56 | 0.68 | 100× |
+
+Precision is strong across all events — when the model says ≥50%, it's right
+77-88% of the time. Recall is lower because the model is selective at the
+0.5 threshold (it doesn't "fire" on every eventual hitter — many fire below
+0.5 in this val cohort). The `lasso_thresholds.csv` and the
+`<event>_thresholds_at_p60.csv` files in this directory let you tune the
+threshold to your preferred precision/recall trade-off.
+
 ## Validate-full per-event tables (landmark only)
 
 The landmark packet additionally carries the deeper per-yip × per-percentile
