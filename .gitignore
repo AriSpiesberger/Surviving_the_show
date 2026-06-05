@@ -46,6 +46,9 @@ models/*.npz
 # Keep reference baseline tables (small, hand-curated)
 !baselines/*.csv
 !data/*.csv
+# Keep published validation packets (held-out eval summaries) — see evaluation/README.md
+!evaluation/**/*.csv
+!evaluation/**/*.txt
 
 # Backtest / buy list outputs (regenerated per cycle)
 buy_list_*.csv
