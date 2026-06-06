@@ -69,23 +69,78 @@ landmark slice). All metrics in this file are computed on the v1.17
 seed=42 val pids — the same held-out cohort the other CSVs in this
 directory use.
 
-### Headline read
+### Full per-bucket numbers (snap_offset=2, threshold=0.50)
 
-At threshold 0.50, the production v2.0b model on the val cohort:
+The CSV linked above has the exact values below in machine-readable form.
+Buckets: `ALL = aggregate`, `R1 = first round`, `R2-R3`, `R4-R10`,
+`R10+ = rounds 11+`, `IFA = international free agents`.
 
-| Event | ALL bucket: precision | recall | F1 | ap_lift |
-|---|---|---|---|---|
-| TOP_100_PROSPECT | 0.82 | 0.78 | 0.80 | 77× |
-| MLB_DEBUT | 0.81 | 0.56 | 0.66 | 8× |
-| ESTABLISHED_MLB | 0.77 | 0.52 | 0.62 | 33× |
-| STAR_PLUS_ELITE | 0.88 | 0.56 | 0.68 | 100× |
+#### TOP_100_PROSPECT
 
-Precision is strong across all events — when the model says ≥50%, it's right
-77-88% of the time. Recall is lower because the model is selective at the
-0.5 threshold (it doesn't "fire" on every eventual hitter — many fire below
-0.5 in this val cohort). The `lasso_thresholds.csv` and the
-`<event>_thresholds_at_p60.csv` files in this directory let you tune the
-threshold to your preferred precision/recall trade-off.
+| bucket | n | pos | base% | AUC | AP | AP_lift | precision | recall | F1 | accuracy | TP | FP | FN |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| ALL | 3433 | 41 | 1.19% | 0.997 | 0.924 | 77.4× | 0.821 | 0.780 | 0.800 | 0.995 | 32 | 7 | 9 |
+| R1 | 49 | 13 | 26.53% | 0.989 | 0.975 | 3.7× | 0.800 | 0.923 | 0.857 | 0.918 | 12 | 3 | 1 |
+| R2-R3 | 93 | 10 | 10.75% | 0.990 | 0.949 | 8.8× | 0.889 | 0.800 | 0.842 | 0.968 | 8 | 1 | 2 |
+| R4-R10 | 270 | 4 | 1.48% | 1.000 | 1.000 | 67.5× | 0.667 | 1.000 | 0.800 | 0.993 | 4 | 2 | 0 |
+| R10+ | 1165 | 2 | 0.17% | 0.982 | 0.522 | 304.2× | 1.000 | 0.500 | 0.667 | 0.999 | 1 | 0 | 1 |
+| IFA | 1856 | 12 | 0.65% | 0.999 | 0.901 | 139.3× | 0.875 | 0.583 | 0.700 | 0.997 | 7 | 1 | 5 |
+
+#### MLB_DEBUT
+
+| bucket | n | pos | base% | AUC | AP | AP_lift | precision | recall | F1 | accuracy | TP | FP | FN |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| ALL | 3481 | 342 | 9.82% | 0.965 | 0.808 | 8.2× | 0.813 | 0.558 | 0.662 | 0.944 | 191 | 44 | 151 |
+| R1 | 73 | 49 | 67.12% | 0.918 | 0.963 | 1.4× | 0.880 | 0.898 | 0.889 | 0.849 | 44 | 6 | 5 |
+| R2-R3 | 103 | 54 | 52.43% | 0.918 | 0.937 | 1.8× | 0.846 | 0.815 | 0.830 | 0.825 | 44 | 8 | 10 |
+| R4-R10 | 271 | 57 | 21.03% | 0.922 | 0.774 | 3.7× | 0.688 | 0.579 | 0.629 | 0.856 | 33 | 15 | 24 |
+| R10+ | 1165 | 71 | 6.09% | 0.958 | 0.670 | 11.0× | 0.800 | 0.282 | 0.417 | 0.952 | 20 | 5 | 51 |
+| IFA | 1869 | 111 | 5.94% | 0.966 | 0.747 | 12.6× | 0.833 | 0.450 | 0.585 | 0.962 | 50 | 10 | 61 |
+
+#### ESTABLISHED_MLB
+
+| bucket | n | pos | base% | AUC | AP | AP_lift | precision | recall | F1 | accuracy | TP | FP | FN |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| ALL | 3481 | 83 | 2.38% | 0.990 | 0.788 | 33.0× | 0.768 | 0.518 | 0.619 | 0.985 | 43 | 13 | 40 |
+| R1 | 73 | 19 | 26.03% | 0.960 | 0.917 | 3.5× | 0.875 | 0.737 | 0.800 | 0.904 | 14 | 2 | 5 |
+| R2-R3 | 103 | 15 | 14.56% | 0.958 | 0.822 | 5.6× | 0.727 | 0.533 | 0.615 | 0.903 | 8 | 3 | 7 |
+| R4-R10 | 271 | 18 | 6.64% | 0.964 | 0.707 | 10.6× | 0.714 | 0.278 | 0.400 | 0.945 | 5 | 2 | 13 |
+| R10+ | 1165 | 9 | 0.77% | 0.991 | 0.805 | 104.2× | 1.000 | 0.444 | 0.615 | 0.996 | 4 | 0 | 5 |
+| IFA | 1869 | 22 | 1.18% | 0.992 | 0.728 | 61.8× | 0.667 | 0.545 | 0.600 | 0.991 | 12 | 6 | 10 |
+
+#### STAR_PLUS_ELITE
+
+| bucket | n | pos | base% | AUC | AP | AP_lift | precision | recall | F1 | accuracy | TP | FP | FN |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| ALL | 3481 | 27 | 0.78% | 0.993 | 0.776 | 100.0× | 0.882 | 0.556 | 0.682 | 0.996 | 15 | 2 | 12 |
+| R1 | 73 | 8 | 10.96% | 0.967 | 0.798 | 7.3× | 0.750 | 0.750 | 0.750 | 0.945 | 6 | 2 | 2 |
+| R2-R3 | 103 | 3 | 2.91% | 0.980 | 0.778 | 26.7× | 1.000 | 0.333 | 0.500 | 0.981 | 1 | 0 | 2 |
+| R4-R10 | 271 | 6 | 2.21% | 0.999 | 0.976 | 44.1× | 1.000 | 0.500 | 0.667 | 0.989 | 3 | 0 | 3 |
+| R10+ | 1165 | 3 | 0.26% | 0.977 | 0.679 | 263.6× | 1.000 | 0.667 | 0.800 | 0.999 | 2 | 0 | 1 |
+| IFA | 1869 | 7 | 0.37% | 0.998 | 0.692 | 184.8× | 1.000 | 0.429 | 0.600 | 0.998 | 3 | 0 | 4 |
+
+### How to read these tables
+
+- **`base%` is the random-guess hit rate** for that bucket × event. Compare
+  `precision` and `AP_lift` against it. A precision of 0.82 on TOP_100
+  (1.2% base) is 69× better than guessing; on R1 MLB_DEBUT (67% base) a
+  precision of 0.88 is only marginally better than picking everyone.
+- **Precision is strong (≥67%) across every cell** with enough positives
+  to evaluate. Even at the rarest cells (STAR/ELITE at R10+ with 3
+  positives in 1,165 players), the model's top picks hit at 100%.
+- **Recall drops in larger buckets** (R10+, IFA) at the 0.50 threshold
+  because the model is selective — many eventual hitters score below 0.5
+  and miss the cutoff. Lower the threshold to trade precision for recall;
+  the `lasso_thresholds.csv` and `<event>_thresholds_at_p60.csv` files in
+  this directory show that explicit trade-off.
+- **Accuracy can be deceptive** for rare events. `STAR_PLUS_ELITE / IFA`
+  accuracy is 0.998 — sounds great, but a model predicting "no" for
+  everyone would also score 0.996. Always read accuracy together with
+  precision and recall on imbalanced cells.
+- **R1 cells stay small** (n = 49-73) because R1 picks are filtered out
+  of the buy universe in production. The R1 numbers are included for
+  completeness; production output is dominated by R2-R3, R4-R10, R10+,
+  IFA cells.
 
 ## Validate-full per-event tables (landmark only)
 
