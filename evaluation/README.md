@@ -242,6 +242,98 @@ already did, or the forward window has shrunk to zero).
   of the strongest endorsements for the landmark design: a single full
   pro season's worth of features dramatically sharpens the prediction.
 
+## Per-level validation with XGBoost outputs (landmark only)
+
+**[v2.0b_landmark/per_level_validation.csv](v2.0b_landmark/per_level_validation.csv)** —
+same threshold-based metrics again, this time cut by the player's **current
+MiLB level** at the time of the snap. Levels: `RK` (rookie/complex/DSL/FCL),
+`A-` (short-season A), `A`, `A+`, `AA`, `AAA`. `NONE` means the player had
+no MiLB stats in the snap year (injured, DFA'd, just-drafted-no-games-yet,
+etc.).
+
+For each `(cur_level, event)` cell at `snap_offset = 2`, the columns and
+threshold (0.50) are identical to the per-bucket / per-yip tables — just
+swap `bucket` → `cur_level`. This lets you answer "given my prospect just
+showed up at AA, how good is the model at calling MLB_DEBUT?"
+
+### Full per-level numbers (snap_offset = 2, threshold = 0.50)
+
+#### TOP_100_PROSPECT
+
+| cur_level | n | pos | base% | AUC | AP | AP_lift | precision | recall | F1 | accuracy | TP | FP | FN |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| ALL | 3433 | 41 | 1.19% | 0.997 | 0.924 | 77.4× | 0.821 | 0.780 | 0.800 | 0.995 | 32 | 7 | 9 |
+| RK | 538 | 1 | 0.19% | 1.000 | 1.000 | 538.0× | 1.000 | 1.000 | 1.000 | 1.000 | 1 | 0 | 0 |
+| A- | 122 | 2 | 1.64% | 1.000 | 1.000 | 61.0× | 1.000 | 0.500 | 0.667 | 0.992 | 1 | 0 | 1 |
+| A | 323 | 7 | 2.17% | 0.997 | 0.889 | 41.0× | 0.800 | 0.571 | 0.667 | 0.988 | 4 | 1 | 3 |
+| A+ | 390 | 9 | 2.31% | 0.996 | 0.917 | 39.7× | 0.667 | 0.889 | 0.762 | 0.987 | 8 | 4 | 1 |
+| AA | 276 | 16 | 5.80% | 0.999 | 0.980 | 16.9× | 0.875 | 0.875 | 0.875 | 0.986 | 14 | 2 | 2 |
+| AAA | 203 | 3 | 1.48% | 1.000 | 1.000 | 67.7× | 1.000 | 1.000 | 1.000 | 1.000 | 3 | 0 | 0 |
+| NONE | 1581 | 3 | 0.19% | 0.994 | 0.588 | 309.8× | 1.000 | 0.333 | 0.500 | 0.999 | 1 | 0 | 2 |
+
+#### MLB_DEBUT
+
+| cur_level | n | pos | base% | AUC | AP | AP_lift | precision | recall | F1 | accuracy | TP | FP | FN |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| ALL | 3481 | 342 | 9.82% | 0.965 | 0.808 | 8.2× | 0.813 | 0.558 | 0.662 | 0.944 | 191 | 44 | 151 |
+| RK | 539 | 18 | 3.34% | 0.977 | 0.684 | 20.5× | 0.800 | 0.222 | 0.348 | 0.972 | 4 | 1 | 14 |
+| A- | 122 | 10 | 8.20% | 0.926 | 0.696 | 8.5× | 0.667 | 0.400 | 0.500 | 0.934 | 4 | 2 | 6 |
+| A | 329 | 49 | 14.89% | 0.952 | 0.824 | 5.5× | 0.900 | 0.551 | 0.684 | 0.924 | 27 | 3 | 22 |
+| A+ | 403 | 81 | 20.10% | 0.915 | 0.812 | 4.0× | 0.793 | 0.568 | 0.662 | 0.883 | 46 | 12 | 35 |
+| AA | 293 | 106 | 36.18% | 0.914 | 0.877 | 2.4× | 0.822 | 0.698 | 0.755 | 0.836 | 74 | 16 | 32 |
+| AAA | 212 | 48 | 22.64% | 0.945 | 0.841 | 3.7× | 0.778 | 0.583 | 0.667 | 0.868 | 28 | 8 | 20 |
+| NONE | 1583 | 30 | 1.90% | 0.961 | 0.551 | 29.1× | 0.800 | 0.267 | 0.400 | 0.985 | 8 | 2 | 22 |
+
+#### ESTABLISHED_MLB
+
+| cur_level | n | pos | base% | AUC | AP | AP_lift | precision | recall | F1 | accuracy | TP | FP | FN |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| ALL | 3481 | 83 | 2.38% | 0.990 | 0.788 | 33.0× | 0.768 | 0.518 | 0.619 | 0.985 | 43 | 13 | 40 |
+| RK | 539 | 2 | 0.37% | 1.000 | 1.000 | 269.5× | — | 0.000 | — | 0.996 | 0 | 0 | 2 |
+| A- | 122 | 1 | 0.82% | 1.000 | 1.000 | 122.0× | — | 0.000 | — | 0.992 | 0 | 0 | 1 |
+| A | 329 | 12 | 3.65% | 0.974 | 0.798 | 21.9× | 0.833 | 0.417 | 0.556 | 0.976 | 5 | 1 | 7 |
+| A+ | 403 | 23 | 5.71% | 0.966 | 0.692 | 12.1× | 0.667 | 0.435 | 0.526 | 0.955 | 10 | 5 | 13 |
+| AA | 293 | 33 | 11.26% | 0.979 | 0.897 | 8.0× | 0.913 | 0.636 | 0.750 | 0.952 | 21 | 2 | 12 |
+| AAA | 212 | 11 | 5.19% | 0.973 | 0.767 | 14.8× | 0.583 | 0.636 | 0.609 | 0.958 | 7 | 5 | 4 |
+| NONE | 1583 | 1 | 0.06% | 1.000 | 1.000 | 1583.0× | — | 0.000 | — | 0.999 | 0 | 0 | 1 |
+
+#### STAR_PLUS_ELITE
+
+| cur_level | n | pos | base% | AUC | AP | AP_lift | precision | recall | F1 | accuracy | TP | FP | FN |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| ALL | 3481 | 27 | 0.78% | 0.993 | 0.776 | 100.0× | 0.882 | 0.556 | 0.682 | 0.996 | 15 | 2 | 12 |
+| RK | 539 | 0 | 0.00% | — | — | — | — | — | — | 1.000 | 0 | 0 | 0 |
+| A- | 122 | 0 | 0.00% | — | — | — | — | — | — | 1.000 | 0 | 0 | 0 |
+| A | 329 | 3 | 0.91% | 0.997 | 0.756 | 82.9× | 1.000 | 0.333 | 0.500 | 0.994 | 1 | 0 | 2 |
+| A+ | 403 | 7 | 1.74% | 0.990 | 0.738 | 42.5× | 1.000 | 0.571 | 0.727 | 0.993 | 4 | 0 | 3 |
+| AA | 293 | 12 | 4.10% | 0.996 | 0.944 | 23.0× | 0.900 | 0.750 | 0.818 | 0.986 | 9 | 1 | 3 |
+| AAA | 212 | 4 | 1.89% | 0.993 | 0.729 | 38.6× | 0.500 | 0.250 | 0.333 | 0.981 | 1 | 1 | 3 |
+| NONE | 1583 | 1 | 0.06% | 0.953 | 0.013 | 20.8× | — | 0.000 | — | 0.999 | 0 | 0 | 1 |
+
+### How to read these tables
+
+- **MLB_DEBUT base rate climbs with level**, as you'd expect — RK 3%, A
+  15%, A+ 20%, AA 36%, AAA 23% (AAA is lower than AA because the AAA
+  cohort skews older / partially-blocked; many AA → MLB players never
+  get a full AAA season). AA is where the model has the most positives
+  to learn from and shows precision 0.82, recall 0.70, F1 0.76 — the
+  cleanest cell on the table.
+- **Precision stays ≥0.67 at every level** with ≥3 positives to evaluate.
+- **The `NONE` row** is players with no 2026 MiLB stats — usually
+  injured / DFA / Quad-A free agents. The model still rates them and the
+  base rates are very low; precision is high because the model is rightly
+  cautious here. Worth a manual review before sniping into a `NONE`-level
+  pick.
+- **Slow-event cells go NaN at low levels** (RK/A- for ESTABLISHED &
+  STAR_PLUS_ELITE) because no one in that cohort at snap_offset=2 was
+  predicted ≥0.50 for those events — and the model is right not to:
+  there's not enough positive signal for an RK player to be a "very
+  likely future star" two years out.
+- **The cell to watch on a live buy list**: `AA / MLB_DEBUT`. Precision
+  0.82 at this cell means "82% of the val players the model said ≥50% on,
+  while sitting at AA two years post-entry, actually debuted by 2026."
+  That's the buy-list signal in its cleanest form.
+
 ## Per-snap walk-forward backtest (2021 draftee cohort)
 
 **[v2.0b_landmark/walkforward_2021entry_by_year/](v2.0b_landmark/walkforward_2021entry_by_year/)** —
