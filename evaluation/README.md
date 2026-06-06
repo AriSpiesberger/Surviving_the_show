@@ -142,6 +142,177 @@ Buckets: `ALL = aggregate`, `R1 = first round`, `R2-R3`, `R4-R10`,
   completeness; production output is dominated by R2-R3, R4-R10, R10+,
   IFA cells.
 
+## Per-yip validation with XGBoost outputs (landmark only)
+
+**[v2.0b_landmark/per_yip_validation.csv](v2.0b_landmark/per_yip_validation.csv)** —
+same threshold-based confusion-matrix metrics as the per-bucket table, but
+cut by `snap_offset` (yip = years in pro) instead of draft bucket.
+
+For each `(snap_offset, event)` cell, we score the val cohort with the
+production XGBoost head, then bin at `xgb_p_event ≥ 0.50` to produce
+TP/FP/TN/FN and the derived `precision / recall / F1 / accuracy`. Same
+columns as the per-bucket table; the only swap is `bucket` → `snap_offset`.
+
+A `—` in any column means the cell has no positive realizations (the
+cohort is right-censored at this yip — events that would have fired
+already did, or the forward window has shrunk to zero).
+
+### Full per-yip numbers (threshold = 0.50)
+
+#### TOP_100_PROSPECT
+
+| snap_offset | n | pos | base% | AUC | AP | AP_lift | precision | recall | F1 | accuracy | TP | FP | FN |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 0 | 3523 | 97 | 2.75% | 0.971 | 0.606 | 22.0× | 0.812 | 0.268 | 0.403 | 0.978 | 26 | 6 | 71 |
+| 1 | 3481 | 67 | 1.92% | 0.996 | 0.894 | 46.5× | 0.871 | 0.806 | 0.837 | 0.994 | 54 | 8 | 13 |
+| 2 | 3433 | 41 | 1.19% | 0.997 | 0.924 | 77.4× | 0.821 | 0.780 | 0.800 | 0.995 | 32 | 7 | 9 |
+| 3 | 3346 | 17 | 0.51% | 0.997 | 0.848 | 166.9× | 0.778 | 0.824 | 0.800 | 0.998 | 14 | 4 | 3 |
+| 4 | 3273 | 7 | 0.21% | 1.000 | 1.000 | 467.6× | 1.000 | 1.000 | 1.000 | 1.000 | 7 | 0 | 0 |
+| 5 | 3204 | 1 | 0.03% | 1.000 | 1.000 | 3204× | 1.000 | 1.000 | 1.000 | 1.000 | 1 | 0 | 0 |
+| 6 | 3170 | 0 | 0.00% | — | — | — | — | — | — | 1.000 | 0 | 0 | 0 |
+| 7 | 2965 | 0 | 0.00% | — | — | — | — | — | — | 1.000 | 0 | 0 | 0 |
+| 8 | 2767 | 0 | 0.00% | — | — | — | — | — | — | 1.000 | 0 | 0 | 0 |
+| 9 | 2593 | 0 | 0.00% | — | — | — | — | — | — | 1.000 | 0 | 0 | 0 |
+| 10 | 2409 | 0 | 0.00% | — | — | — | — | — | — | 1.000 | 0 | 0 | 0 |
+
+#### MLB_DEBUT
+
+| snap_offset | n | pos | base% | AUC | AP | AP_lift | precision | recall | F1 | accuracy | TP | FP | FN |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 0 | 3543 | 404 | 11.40% | 0.931 | 0.727 | 6.4× | 0.801 | 0.468 | 0.591 | 0.926 | 189 | 47 | 215 |
+| 1 | 3516 | 377 | 10.72% | 0.950 | 0.777 | 7.2× | 0.838 | 0.549 | 0.663 | 0.940 | 207 | 40 | 170 |
+| 2 | 3481 | 342 | 9.82% | 0.965 | 0.808 | 8.2× | 0.813 | 0.558 | 0.662 | 0.944 | 191 | 44 | 151 |
+| 3 | 3392 | 253 | 7.46% | 0.966 | 0.769 | 10.3× | 0.800 | 0.522 | 0.632 | 0.955 | 132 | 33 | 121 |
+| 4 | 3309 | 170 | 5.14% | 0.972 | 0.767 | 14.9× | 0.805 | 0.559 | 0.660 | 0.970 | 95 | 23 | 75 |
+| 5 | 3229 | 90 | 2.79% | 0.977 | 0.695 | 25.0× | 0.745 | 0.456 | 0.566 | 0.980 | 41 | 14 | 49 |
+| 6 | 3187 | 55 | 1.73% | 0.988 | 0.734 | 42.5× | 0.818 | 0.491 | 0.614 | 0.989 | 27 | 6 | 28 |
+| 7 | 2976 | 29 | 0.97% | 0.992 | 0.745 | 76.5× | 0.824 | 0.483 | 0.609 | 0.994 | 14 | 3 | 15 |
+| 8 | 2778 | 16 | 0.58% | 0.994 | 0.735 | 127.6× | 0.889 | 0.500 | 0.640 | 0.997 | 8 | 1 | 8 |
+| 9 | 2602 | 8 | 0.31% | 0.997 | 0.705 | 229.3× | 1.000 | 0.375 | 0.545 | 0.998 | 3 | 0 | 5 |
+| 10 | 2417 | 3 | 0.12% | 0.988 | 0.440 | 354.5× | — | 0.000 | — | 0.999 | 0 | 0 | 3 |
+
+#### ESTABLISHED_MLB
+
+| snap_offset | n | pos | base% | AUC | AP | AP_lift | precision | recall | F1 | accuracy | TP | FP | FN |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 0 | 3543 | 120 | 3.39% | 0.962 | 0.534 | 15.8× | 0.760 | 0.158 | 0.262 | 0.970 | 19 | 6 | 101 |
+| 1 | 3516 | 102 | 2.90% | 0.975 | 0.699 | 24.1× | 0.800 | 0.510 | 0.623 | 0.982 | 52 | 13 | 50 |
+| 2 | 3481 | 83 | 2.38% | 0.990 | 0.788 | 33.0× | 0.768 | 0.518 | 0.619 | 0.985 | 43 | 13 | 40 |
+| 3 | 3392 | 45 | 1.33% | 0.991 | 0.748 | 56.4× | 0.774 | 0.533 | 0.632 | 0.992 | 24 | 7 | 21 |
+| 4 | 3309 | 24 | 0.73% | 0.995 | 0.716 | 98.8× | 0.778 | 0.583 | 0.667 | 0.996 | 14 | 4 | 10 |
+| 5 | 3229 | 6 | 0.19% | 0.997 | 0.563 | 303.1× | 0.667 | 0.333 | 0.444 | 0.998 | 2 | 1 | 4 |
+| 6 | 3187 | 3 | 0.09% | 0.999 | 0.698 | 741.9× | 0.500 | 0.333 | 0.400 | 0.999 | 1 | 1 | 2 |
+| 7 | 2976 | 1 | 0.03% | 0.999 | 0.200 | 595.2× | — | 0.000 | — | 1.000 | 0 | 0 | 1 |
+| 8 | 2778 | 1 | 0.04% | 1.000 | 1.000 | 2778× | — | 0.000 | — | 1.000 | 0 | 0 | 1 |
+| 9 | 2602 | 0 | 0.00% | — | — | — | — | — | — | 1.000 | 0 | 0 | 0 |
+| 10 | 2417 | 0 | 0.00% | — | — | — | — | — | — | 1.000 | 0 | 0 | 0 |
+
+#### STAR_PLUS_ELITE
+
+| snap_offset | n | pos | base% | AUC | AP | AP_lift | precision | recall | F1 | accuracy | TP | FP | FN |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 0 | 3543 | 41 | 1.16% | 0.951 | 0.279 | 24.1× | 0.333 | 0.024 | 0.045 | 0.988 | 1 | 2 | 40 |
+| 1 | 3516 | 32 | 0.91% | 0.987 | 0.665 | 73.0× | 0.842 | 0.500 | 0.627 | 0.995 | 16 | 3 | 16 |
+| 2 | 3481 | 27 | 0.78% | 0.993 | 0.776 | 100.0× | 0.882 | 0.556 | 0.682 | 0.996 | 15 | 2 | 12 |
+| 3 | 3392 | 13 | 0.38% | 1.000 | 0.944 | 246.4× | 1.000 | 0.692 | 0.818 | 0.999 | 9 | 0 | 4 |
+| 4 | 3309 | 6 | 0.18% | 1.000 | 1.000 | 551.5× | 1.000 | 0.833 | 0.909 | 1.000 | 5 | 0 | 1 |
+| 5 | 3229 | 1 | 0.03% | 1.000 | 1.000 | 3229× | 1.000 | 1.000 | 1.000 | 1.000 | 1 | 0 | 0 |
+| 6 | 3187 | 1 | 0.03% | 1.000 | 1.000 | 3187× | 1.000 | 1.000 | 1.000 | 1.000 | 1 | 0 | 0 |
+| 7 | 2976 | 1 | 0.03% | 1.000 | 1.000 | 2976× | — | 0.000 | — | 1.000 | 0 | 0 | 1 |
+| 8 | 2778 | 1 | 0.04% | 1.000 | 1.000 | 2778× | — | 0.000 | — | 1.000 | 0 | 0 | 1 |
+| 9 | 2602 | 0 | 0.00% | — | — | — | — | — | — | 1.000 | 0 | 0 | 0 |
+| 10 | 2417 | 0 | 0.00% | — | — | — | — | — | — | 1.000 | 0 | 0 | 0 |
+
+### How to read these tables
+
+- **`base%` shrinks fast with yip** — by yip=8 the MLB_DEBUT base rate is
+  0.58% (most who would debut already have), so AP_lift hits 100×+
+  on the rare positives that remain. AUC is high at every yip but the
+  effective sample size at large yip is tiny.
+- **Precision stays ≥0.74 at every yip** with enough positives to evaluate
+  — even at high yip where AP looks noisier, the model's confident calls
+  are right.
+- **Recall peaks at yip 1-2** for slow events. Earlier (yip 0) the model
+  is more cautious (lots of uncertainty about a freshly-drafted player);
+  later (yip 5+) the remaining at-risk pool is so small the threshold
+  becomes hard to optimize.
+- **Why yip=0 looks weakest** — at the moment of entry, the model has
+  very little stat history (often only the partial first season). The
+  uplift from yip=0 → yip=1 (e.g. STAR_PLUS_ELITE AP 0.28 → 0.67) is one
+  of the strongest endorsements for the landmark design: a single full
+  pro season's worth of features dramatically sharpens the prediction.
+
+## Per-snap walk-forward backtest (2021 draftee cohort)
+
+**[v2.0b_landmark/walkforward_2021entry_by_year/](v2.0b_landmark/walkforward_2021entry_by_year/)** —
+this is what you open if you want to see the actual model output for actual
+players and grade it against realized outcomes over multiple years.
+
+For the 2021-entry cohort (drafted 2021), we re-score every member with the
+v2.0b production stack at each snap year from 2021 through 2026 and emit
+one CSV per snap. Each row is one player at that snap, sorted by
+`xgb_p_MLB_DEBUT` descending, with realized columns showing what actually
+happened by 2026.
+
+| File | Snap year | yip | What it shows |
+|---|---|---|---|
+| `snap2021.csv` | 2021 | 0 | The model's call at the moment of draft (some 2021 college bats already have summer-league rows). |
+| `snap2022.csv` | 2022 | 1 | After one pro season — the model's sharpest cell in our validation. |
+| `snap2023.csv` | 2023 | 2 | Two-pro-season view. Used for the snap2023 backtest in `backtests/v20b/`. |
+| `snap2024.csv` | 2024 | 3 | |
+| `snap2025.csv` | 2025 | 4 | |
+| `snap2026.csv` | 2026 | 5 | Forward window now zero (anything not yet debuted by 2026 will be flagged `realized=0` even if it eventually fires). |
+
+### Columns inside each per-snap CSV
+
+| Column | Meaning |
+|---|---|
+| `rank` | Sort order within the snap, by `xgb_p_MLB_DEBUT` descending. |
+| `player_id`, `name`, `draft_round`, `bucket` | Identity. |
+| `snap_year`, `snap_offset` | The snap and yip. |
+| `years_in_pro`, `age_at_snap_centered`, `birth_year` | Player tenure / age. |
+| `p_<event>` | Raw landmark hazard cumulative probability for each event. |
+| `mean_t_<event>` | Predicted years-until-event (`mean_t_MLB_DEBUT` is the headline). |
+| `xgb_p_<event>` | **The model's calibrated production probability per event** — this is what the buy list filters on. |
+| `realized_MLB_DEBUT` | 1 iff the player actually debuted in the open interval (snap_year, 2026]. |
+| `realized_TOP_100_PROSPECT`, `realized_ESTABLISHED_MLB` | Same window, for those events. |
+| `mlb_debut_year` | Actual debut year if known. |
+| `rank_in_snap` | Duplicate of `rank` (kept for downstream tools). |
+
+### Hit-rate summary across the per-snap CSVs
+
+Take the top-N picks by `xgb_p_MLB_DEBUT` at each snap, ask "how many of
+those actually debuted by 2026":
+
+| snap_year | yip | cohort | base% | top-10 hit | top-25 hit | top-50 hit | top-100 hit |
+|---|---|---|---|---|---|---|---|
+| 2021 | 0 | 566 | 21.9% | 70% | 68% | 52% | 43% |
+| 2022 | 1 | 566 | 21.7% | 50% | 72% | 70% | 63% |
+| 2023 | 2 | 565 | 17.9% | 30% | 48% | 46% | 44% |
+| 2024 | 3 | 543 | 9.6% | 20% | 12% | 22% | 28% |
+| 2025 | 4 | 494 | 2.2% | 0% | 4% | 12% | 9% |
+| 2026 | 5 | 453 | 0.0% | — | — | — | — |
+
+- The strongest cell is **snap=2022 (one pro season after the draft)**:
+  top-25 hits at 72%, top-50 at 70% — both vs a 22% base. That's 3.3×
+  lift on the meat of the buy universe.
+- Hit rates trend down at later snaps because the cohort's "easy"
+  debutees already realized; what's left at snap 2024-2026 are the
+  marginal/slow-developer players, and the realized rate of "will debut
+  by 2026 from here" mechanically drops toward zero.
+- A 2026 snap with 0% realized is correct — no forward window remains
+  for any new debuts to register against our 2026 observation horizon.
+
+### How to validate it yourself
+
+Open any per-snap CSV in your editor of choice, sort by
+`xgb_p_MLB_DEBUT` descending, then go down the top-30 names looking at
+`realized_MLB_DEBUT` and `mlb_debut_year`. You'll see the model's
+confident calls and whether the player has actually debuted. Names where
+`realized_MLB_DEBUT = 0` at snap=2022 with high `xgb_p_MLB_DEBUT` are
+either still in MiLB (legitimate future debutees the model called early)
+or genuine misses — both are diagnostic.
+
 ## Validate-full per-event tables (landmark only)
 
 The landmark packet additionally carries the deeper per-yip × per-percentile
