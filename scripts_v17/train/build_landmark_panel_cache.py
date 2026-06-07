@@ -29,6 +29,13 @@ crashes at higher memory pressure, this should fit comfortably.
 """
 from __future__ import annotations
 
+import os
+for _k in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
+           "NUMEXPR_NUM_THREADS", "BLIS_NUM_THREADS", "VECLIB_MAXIMUM_THREADS",
+           "LOKY_MAX_CPU_COUNT"):
+    os.environ[_k] = "1"
+os.environ["JOBLIB_MULTIPROCESSING"] = "0"
+
 import argparse
 import gc
 import pickle
@@ -159,14 +166,22 @@ def step2_chunks(n_rows: int, chunk_rows: int, start_chunk: int):
 
     done = 0
     skipped = 0
+    rebuilt = 0
     pbar = tqdm(range(start_chunk, n_chunks), desc="chunks",
                 unit="chunk", mininterval=0.5)
     for c in pbar:
         out = CHUNKS_DIR / f"panel_chunk_{c:0{width}d}.npz"
         if out.exists():
-            skipped += 1
-            pbar.set_postfix(done=done, skipped=skipped)
-            continue
+            try:
+                with np.load(out) as z:
+                    _ = z["X_chunk"].shape  # force read
+                skipped += 1
+                pbar.set_postfix(done=done, skipped=skipped,
+                                 rebuilt=rebuilt)
+                continue
+            except Exception:
+                out.unlink(missing_ok=True)
+                rebuilt += 1
 
         lo = c * chunk_rows
         hi = min(lo + chunk_rows, n_rows)
@@ -185,7 +200,7 @@ def step2_chunks(n_rows: int, chunk_rows: int, start_chunk: int):
         del X_chunk
         gc.collect()
         done += 1
-        pbar.set_postfix(done=done, skipped=skipped)
+        pbar.set_postfix(done=done, skipped=skipped, rebuilt=rebuilt)
 
     print(f"[Step 2] done — {done} chunks written, {skipped} skipped")
     return n_chunks, width

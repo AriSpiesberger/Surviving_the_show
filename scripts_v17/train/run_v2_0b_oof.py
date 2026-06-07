@@ -31,6 +31,14 @@ Pipeline:
 """
 from __future__ import annotations
 
+# ---- Force single-threaded BEFORE numpy/sklearn/joblib import ----
+import os
+for _k in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
+           "NUMEXPR_NUM_THREADS", "BLIS_NUM_THREADS", "VECLIB_MAXIMUM_THREADS",
+           "LOKY_MAX_CPU_COUNT"):
+    os.environ[_k] = "1"
+os.environ["JOBLIB_MULTIPROCESSING"] = "0"
+
 import argparse
 import gc
 import pickle
@@ -51,10 +59,14 @@ from prospects.classifier.architectures.landmark_survival import (
     N_FEATURES, _start_year,
 )
 from prospects.classifier.architectures.survival import (
-    MAX_OBS_YEAR, build_windowed_features,
+    ELITE_KEY, MAX_OBS_YEAR, STAR_KEY, _trigger_year,
+    build_windowed_features,
 )
 from prospects.storage import ProspectDB
-from scripts_v17.train.train_v1_18b_prod import score_pids_with_landmark
+from scripts_v17.train.train_v1_18b_prod import (
+    _bucket_of, _entry_year as _entry_year_v18, _ev_name,
+    score_pids_with_landmark,
+)
 
 # ---- paths ----
 SCRATCH = REPO_ROOT / "scratch" / "v20b_oof"
@@ -236,10 +248,134 @@ def stage_partition(prospects: list[dict], stats_by_pid: dict,
     return fold_sets
 
 
-# ---- Stage 3 helper: one fold ----
+# ---- Stage 3 helper: one fold with per-snap checkpointing ----
+def _score_checkpointed(hazards, prospects_all, stats_by_pid,
+                         pid_set, out_csv: Path, partial_dir: Path,
+                         max_entry_year: int, observe_through: int,
+                         max_offset: int, horizon: int):
+    """Per-snap checkpointed scorer. Writes one CSV per snap to
+    partial_dir/snap_NNNN.csv, then concats into out_csv. If process
+    dies, re-running picks up from the first missing snap."""
+    partial_dir.mkdir(parents=True, exist_ok=True)
+    cohort = [p for p in prospects_all if p["player_id"] in pid_set]
+    enriched: list[dict] = []
+    for r in cohort:
+        ent = _entry_year_v18(r, stats_by_pid)
+        if ent is None or ent > max_entry_year:
+            continue
+        rc = dict(r)
+        rc["_entry_year"] = ent
+        rc["_bucket"] = _bucket_of(r)
+        enriched.append(rc)
+    print(f"           cohort {len(enriched):,} / {len(cohort):,} "
+          f"after entry<={max_entry_year}")
+
+    snap_groups: dict[int, list[dict]] = {}
+    for r in enriched:
+        ent = r["_entry_year"]
+        debut = r.get("mlb_debut_year")
+        for off in range(0, max_offset + 1):
+            snap = ent + off
+            if snap > observe_through:
+                break
+            if debut is not None and debut <= snap:
+                continue
+            rc = dict(r)
+            rc["_snap"] = snap
+            rc["_offset"] = off
+            snap_groups.setdefault(snap, []).append(rc)
+
+    event_keys = [k for k in hazards if not isinstance(k, str)
+                  or k in (ELITE_KEY, STAR_KEY)]
+    snap_keys = sorted(snap_groups.keys())
+    for si, snap in enumerate(snap_keys):
+        partial_csv = partial_dir / f"snap_{snap}.csv"
+        if partial_csv.exists():
+            print(f"  [score] snap={snap} reusing partial "
+                  f"({si+1}/{len(snap_keys)})", flush=True)
+            continue
+        group = snap_groups[snap]
+        sub_stats = {
+            r["player_id"]: [s for s in stats_by_pid.get(r["player_id"], [])
+                             if (s.get("season_year") or 0) <= snap]
+            for r in group
+        }
+        out = lm.predict_cumulative_batch_landmark(
+            hazards, group, sub_stats,
+            current_year=snap, horizon=horizon,
+        )
+        rows = []
+        for i, r in enumerate(group):
+            row = {
+                "player_id": r["player_id"],
+                "name": r.get("name"),
+                "draft_year": r.get("draft_year"),
+                "draft_round": r.get("draft_round"),
+                "is_international": int(r.get("is_international") or 0),
+                "bucket": r["_bucket"],
+                "entry_year": r["_entry_year"],
+                "snap_year": snap,
+                "snap_offset": r["_offset"],
+                "years_fwd": observe_through - snap,
+                "mlb_debut_year": r.get("mlb_debut_year"),
+            }
+            per_ev = {}
+            for e in event_keys:
+                ename = _ev_name(e)
+                p_cal = float(out[e][i])
+                trig = _trigger_year(r, e)
+                eligible = int(trig is None or trig > snap)
+                realized = int(trig is not None and trig > snap
+                               and trig <= observe_through)
+                per_ev[ename] = (p_cal, trig, eligible, realized)
+                row[f"p_{ename}"] = p_cal
+                row[f"eligible_{ename}"] = eligible
+                row[f"realized_{ename}"] = realized
+                row[f"trigger_{ename}"] = trig
+                mt = out.get(("mean_t", e))
+                st = out.get(("sd_t", e))
+                if mt is not None:
+                    row[f"mean_t_{ename}"] = float(mt[i])
+                if st is not None:
+                    row[f"sd_t_{ename}"] = float(st[i])
+            if "STAR" in per_ev and "ELITE" in per_ev:
+                ps, ts, _, _ = per_ev["STAR"]
+                pe, te, _, _ = per_ev["ELITE"]
+                p_u = 1.0 - (1.0 - ps) * (1.0 - pe)
+                trigs = [t for t in (ts, te) if t is not None]
+                trig_u = min(trigs) if trigs else None
+                elig_u = int(trig_u is None or trig_u > snap)
+                real_u = int(trig_u is not None and trig_u > snap
+                             and trig_u <= observe_through)
+                row["p_STAR_PLUS_ELITE"] = p_u
+                row["eligible_STAR_PLUS_ELITE"] = elig_u
+                row["realized_STAR_PLUS_ELITE"] = real_u
+                row["trigger_STAR_PLUS_ELITE"] = trig_u
+            rows.append(row)
+        pd.DataFrame(rows).to_csv(partial_csv, index=False)
+        print(f"  [score] snap={snap} group={len(group)} wrote "
+              f"({si+1}/{len(snap_keys)})", flush=True)
+
+    # Concat all partials
+    partials = sorted(partial_dir.glob("snap_*.csv"))
+    if not partials:
+        out_csv.write_text("")
+        return 0
+    df = pd.concat([pd.read_csv(f) for f in partials], ignore_index=True)
+    for c in df.columns:
+        if c.startswith("mean_t_"):
+            df[c] = df[c].fillna(15.0)
+        elif c.startswith("sd_t_"):
+            df[c] = df[c].fillna(0.0)
+    out_csv.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(out_csv, index=False)
+    return len(df)
+
+
 def run_one_fold(X_lm, pids, S_yrs, joined, stats_by_pid,
                   prospects_all, train_set: set[str], score_set: set[str],
-                  out_csv: Path, max_entry_year: int, seed: int):
+                  out_csv: Path, max_entry_year: int, seed: int,
+                  partial_dir: Path):
     t = time.time()
     train_mask = np.array([p in train_set for p in pids], dtype=bool)
     print(f"           train_mask: {int(train_mask.sum()):,} / "
@@ -249,19 +385,12 @@ def run_one_fold(X_lm, pids, S_yrs, joined, stats_by_pid,
         train_mask=train_mask, seed=seed, verbose=True,
     )
     print(f"           hazards fit in {time.time()-t:.0f}s, scoring...")
-    n = score_pids_with_landmark(
+    n = _score_checkpointed(
         hazards, prospects_all, stats_by_pid, score_set, out_csv,
+        partial_dir,
         max_entry_year=max_entry_year,
         observe_through=MAX_OBS_YEAR, max_offset=10, horizon=15,
-        verbose=True,
     )
-    df = pd.read_csv(out_csv)
-    for c in df.columns:
-        if c.startswith("mean_t_"):
-            df[c] = df[c].fillna(15.0)
-        elif c.startswith("sd_t_"):
-            df[c] = df[c].fillna(0.0)
-    df.to_csv(out_csv, index=False)
     return n, hazards
 
 
@@ -318,10 +447,12 @@ def main():
             last_hazards = None  # need to retrain for val score below
             continue
         print(f"\n[Stage 3] fold {j+1}/{args.k} -> {out.name}")
+        partial_dir = SCRATCH / f"fold{j}_partial"
         n, hazards = run_one_fold(
             X_lm, pids, S_yrs, joined, stats_by_pid, prospects_all,
             train_set=train_set, score_set=fold_sets[j], out_csv=out,
             max_entry_year=args.max_entry_year, seed=args.seed,
+            partial_dir=partial_dir,
         )
         print(f"           wrote {n:,} rows")
         last_hazards = hazards
@@ -352,19 +483,13 @@ def main():
                 X_lm, joined, S_yrs, stats_by_pid,
                 train_mask=train_mask, seed=args.seed, verbose=True,
             )
-        n = score_pids_with_landmark(
-            last_hazards, prospects_all, stats_by_pid, val_pid_set, OOF_VAL,
+        val_partial_dir = SCRATCH / "val_partial"
+        n = _score_checkpointed(
+            last_hazards, prospects_all, stats_by_pid, val_pid_set,
+            OOF_VAL, val_partial_dir,
             max_entry_year=args.max_entry_year,
             observe_through=MAX_OBS_YEAR, max_offset=10, horizon=15,
-            verbose=True,
         )
-        dfv = pd.read_csv(OOF_VAL)
-        for c in dfv.columns:
-            if c.startswith("mean_t_"):
-                dfv[c] = dfv[c].fillna(15.0)
-            elif c.startswith("sd_t_"):
-                dfv[c] = dfv[c].fillna(0.0)
-        dfv.to_csv(OOF_VAL, index=False)
         print(f"           wrote {n:,} rows")
 
     # Stage 6 — fit joint XGB
