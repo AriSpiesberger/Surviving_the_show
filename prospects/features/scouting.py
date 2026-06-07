@@ -595,7 +595,7 @@ def _year_aggregate(
         age_vs_level = MISSING
 
     highest_level_in_year = max(
-        (LEVEL_RANK.get(lvl, 0) for lvl in levels_seen), default=0
+        [LEVEL_RANK.get(lvl, 0) for lvl in levels_seen] or [0]
     )
 
     shared = {
