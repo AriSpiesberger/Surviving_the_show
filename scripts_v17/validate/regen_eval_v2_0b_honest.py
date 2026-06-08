@@ -48,8 +48,9 @@ EVENTS = ["TOP_100_PROSPECT", "MLB_DEBUT",
 EVENT_WEIGHTS = {"TOP_100_PROSPECT": 1.0, "MLB_DEBUT": 2.0,
                  "ESTABLISHED_MLB": 1.0, "STAR_PLUS_ELITE": 1.0}
 
-VAL_LONG = REPO_ROOT / "results" / "training" / "v2.0b_oof_val_long.csv"
-XGB_PKL = REPO_ROOT / "models" / "joint_xgb_v2.0b_oof_tuned.pkl"
+VAL_LONG = (REPO_ROOT / "scratch" / "v20b_oof"
+              / "val_long_tuned_hazards.csv")
+XGB_PKL = REPO_ROOT / "models" / "joint_xgb_v2.0b_prod.pkl"
 DB = REPO_ROOT / "prospects_snapshot.db"
 OUT_DIR = REPO_ROOT / "evaluation" / "v2.0b_landmark"
 
@@ -86,6 +87,7 @@ def _score_xgb(df: pd.DataFrame, xgb_pkl: Path) -> pd.DataFrame:
     scaler = bundle["scaler"]
     booster = bundle["model"]
     best_iter = bundle.get("best_iteration")
+    calibrators = bundle.get("calibrators")  # optional per-event isotonic
     needed = list(feat)
     sub = df.dropna(subset=needed).copy()
     X = scaler.transform(sub[feat].values.astype(np.float32))
@@ -95,7 +97,13 @@ def _score_xgb(df: pd.DataFrame, xgb_pkl: Path) -> pd.DataFrame:
     else:
         P = booster.predict(d)
     for k, ev in enumerate(bundle["events"]):
-        sub[f"xp_{ev}"] = P[:, k]
+        raw = P[:, k]
+        if calibrators is not None and ev in calibrators:
+            cal = np.clip(calibrators[ev].predict(raw), 0.0, 1.0)
+            sub[f"xp_{ev}"] = cal
+            sub[f"xp_raw_{ev}"] = raw
+        else:
+            sub[f"xp_{ev}"] = raw
     return sub
 
 
