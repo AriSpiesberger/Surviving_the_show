@@ -258,46 +258,103 @@ def _build_cum_above_threshold(df: pd.DataFrame, event: str) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def _build_thresholds_at_p60(df: pd.DataFrame) -> pd.DataFrame:
-    """For each yip, find the min threshold yielding precision ≥ 0.60."""
+def _threshold_at_p60_for_slice(sub: pd.DataFrame, event: str) -> dict | None:
+    """For a single slice, find the MAX-recall threshold whose
+    precision ≥ 0.60. Returns dict or None if no such threshold exists."""
+    p_col = f"xp_{event}"
+    y_col = f"realized_{event}"
+    elig_col = f"eligible_{event}"
+    if p_col not in sub.columns or y_col not in sub.columns:
+        return None
+    if elig_col in sub.columns:
+        sub = sub[sub[elig_col] == 1]
+    n_total = len(sub)
+    if n_total == 0:
+        return None
+    p = sub[p_col].astype(float).values
+    y = sub[y_col].astype(int).values
+    n_pos = int(y.sum())
+    base = float(y.mean())
+    if n_pos == 0:
+        return {
+            "n_total": n_total, "n_pos_total": n_pos, "base_rate": base,
+            "threshold": float("nan"), "n_above": 0, "tp_above": 0,
+            "precision": float("nan"), "recall": float("nan"),
+            "lift_vs_base": float("nan"),
+        }
+    order = np.argsort(-p)
+    cum_tp = 0
+    chosen = None
+    for i, idx in enumerate(order, start=1):
+        cum_tp += int(y[idx])
+        prec = cum_tp / i
+        if prec >= 0.60:
+            chosen = {"thr": float(p[idx]),
+                       "n": i, "tp": cum_tp, "precision": prec}
+        elif chosen is not None and i > chosen["n"] + 20:
+            # Walked past the chosen point — stop walking
+            break
+    if chosen is None:
+        return {
+            "n_total": n_total, "n_pos_total": n_pos, "base_rate": base,
+            "threshold": float("nan"), "n_above": 0, "tp_above": 0,
+            "precision": float("nan"), "recall": float("nan"),
+            "lift_vs_base": float("nan"),
+        }
+    recall = chosen["tp"] / n_pos
+    return {
+        "n_total": n_total, "n_pos_total": n_pos, "base_rate": base,
+        "threshold": chosen["thr"],
+        "n_above": int(chosen["n"]),
+        "tp_above": int(chosen["tp"]),
+        "precision": float(chosen["precision"]),
+        "recall": float(recall),
+        "lift_vs_base": (chosen["precision"] / base
+                          if base > 0 else float("nan")),
+    }
+
+
+def _build_thresholds_at_p60_by_yip(df: pd.DataFrame) -> pd.DataFrame:
+    """Per (event × yip): min-threshold-for-precision-≥-0.60."""
     rows = []
-    p_col = "xp_MLB_DEBUT"
-    y_col = "realized_MLB_DEBUT"
-    elig_col = "eligible_MLB_DEBUT"
-    for yip in sorted(df["snap_offset"].unique()):
-        sub = df[df["snap_offset"] == int(yip)]
-        if elig_col in sub.columns:
-            sub = sub[sub[elig_col] == 1]
-        if len(sub) == 0:
-            continue
-        p = sub[p_col].astype(float).values
-        y = sub[y_col].astype(int).values
-        n_total = len(y)
-        n_pos_total = int(y.sum())
-        # Walk down thresholds, find min thr where precision >= 0.6
-        order = np.argsort(-p)
-        cumulative_tp = 0
-        chosen_thr = None; chosen_n = 0; chosen_tp = 0
-        for i, idx in enumerate(order, start=1):
-            cumulative_tp += int(y[idx])
-            precision = cumulative_tp / i
-            if precision >= 0.60:
-                chosen_thr = float(p[idx])
-                chosen_n = i
-                chosen_tp = cumulative_tp
-            elif chosen_thr is not None:
-                break
-        if chosen_thr is None:
-            continue
-        recall = chosen_tp / n_pos_total if n_pos_total else float("nan")
-        precision = chosen_tp / chosen_n if chosen_n else float("nan")
-        rows.append({
-            "yip": int(yip), "threshold": chosen_thr,
-            "n_above": int(chosen_n), "tp_above": int(chosen_tp),
-            "precision": precision, "recall": recall,
-            "n_total": int(n_total), "n_pos_total": int(n_pos_total),
-        })
+    for ev in EVENTS:
+        for yip in sorted(df["snap_offset"].unique()):
+            sub = df[df["snap_offset"] == int(yip)]
+            r = _threshold_at_p60_for_slice(sub, ev)
+            if r is None:
+                continue
+            rows.append({"event": ev, "yip": int(yip), **r})
     return pd.DataFrame(rows)
+
+
+def _build_thresholds_at_p60_by_bucket(df: pd.DataFrame) -> pd.DataFrame:
+    rows = []
+    for ev in EVENTS:
+        for b in ["ALL", "R1", "R2-R3", "R4-R10", "R10+", "IFA"]:
+            sub = df if b == "ALL" else df[df["bucket"] == b]
+            r = _threshold_at_p60_for_slice(sub, ev)
+            if r is None:
+                continue
+            rows.append({"event": ev, "bucket": b, **r})
+    return pd.DataFrame(rows)
+
+
+def _build_thresholds_at_p60_by_level(df: pd.DataFrame) -> pd.DataFrame:
+    rows = []
+    for ev in EVENTS:
+        for lvl in ["ALL", "RK", "A-", "A", "A+", "AA", "AAA", "NONE"]:
+            sub = df if lvl == "ALL" else df[df["cur_level"] == lvl]
+            r = _threshold_at_p60_for_slice(sub, ev)
+            if r is None:
+                continue
+            rows.append({"event": ev, "cur_level": lvl, **r})
+    return pd.DataFrame(rows)
+
+
+# Legacy single-event wrapper for backwards compatibility
+def _build_thresholds_at_p60(df: pd.DataFrame) -> pd.DataFrame:
+    sub = _build_thresholds_at_p60_by_yip(df)
+    return sub[sub["event"] == "MLB_DEBUT"].drop(columns=["event"])
 
 
 def _build_time_to_debut(df: pd.DataFrame) -> pd.DataFrame:
@@ -408,11 +465,22 @@ def main():
     print("\n=== MLB_DEBUT specific ===")
     _write(_build_per_current_level(df, "MLB_DEBUT"),
            OUT_DIR / "MLB_DEBUT_per_current_level.csv")
-    _write(_build_thresholds_at_p60(df),
-           OUT_DIR / "MLB_DEBUT_thresholds_at_p60.csv")
     ttd = _build_time_to_debut(df)
     if len(ttd):
         _write(ttd, OUT_DIR / "MLB_DEBUT_time_to_debut.csv")
+
+    # --- threshold-at-p60 tables across all events × all dimensions ---
+    print("\n=== thresholds at precision >= 0.60 (per event x slice) ===")
+    yip_p60 = _build_thresholds_at_p60_by_yip(df)
+    _write(yip_p60, OUT_DIR / "thresholds_at_p60_per_yip.csv")
+    bucket_p60 = _build_thresholds_at_p60_by_bucket(df)
+    _write(bucket_p60, OUT_DIR / "thresholds_at_p60_per_bucket.csv")
+    level_p60 = _build_thresholds_at_p60_by_level(df)
+    _write(level_p60, OUT_DIR / "thresholds_at_p60_per_level.csv")
+    # Back-compat: keep the MLB_DEBUT-only file
+    _write(yip_p60[yip_p60["event"] == "MLB_DEBUT"]
+                .drop(columns=["event"]),
+           OUT_DIR / "MLB_DEBUT_thresholds_at_p60.csv")
 
     # --- walkforward_2021entry_by_year/ ---
     print("\n=== walkforward_2021entry_by_year/ ===")
