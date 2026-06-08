@@ -419,13 +419,23 @@ def _assemble_event_X(X_lm: np.ndarray, landmark_idx: np.ndarray,
     return X_event
 
 
-def _train_event(X_tr: np.ndarray, y_tr: np.ndarray, seed: int = 42
+_HAZARD_HP_DEFAULTS = dict(
+    max_iter=200, max_depth=6, learning_rate=0.05,
+    min_samples_leaf=30, early_stopping=True,
+    n_iter_no_change=10, validation_fraction=0.1,
+)
+
+
+def _train_event(X_tr: np.ndarray, y_tr: np.ndarray, seed: int = 42,
+                 hp: dict | None = None,
                  ) -> HistGradientBoostingClassifier:
+    """Fit one event's HistGBT. `hp` overrides any defaults — used by
+    the Optuna hazards tuner."""
+    params = dict(_HAZARD_HP_DEFAULTS)
+    if hp:
+        params.update(hp)
     return HistGradientBoostingClassifier(
-        max_iter=200, max_depth=6, learning_rate=0.05,
-        min_samples_leaf=30, random_state=seed,
-        early_stopping=True, n_iter_no_change=10,
-        validation_fraction=0.1,
+        **params, random_state=seed,
     ).fit(X_tr, y_tr)
 
 
@@ -439,6 +449,7 @@ def fit_landmark_hazards(
     k_per_event: dict | None = None,
     max_obs_year: int = MAX_OBS_YEAR,
     verbose: bool = True,
+    hazard_hp: dict | None = None,
 ) -> dict:
     """Per-event HistGBT fit. Output dict matches survival.fit_hazards
     so load_hazards / save_hazards / downstream Beta calibration code
@@ -492,7 +503,7 @@ def fit_landmark_hazards(
                       f"{K:>3} {n:>10,d} {n_pos:>7d}    skip")
             continue
         X_tr = _assemble_event_X(X_lm, landmark_idx, k_arr)
-        clf = _train_event(X_tr, y_all, seed=seed)
+        clf = _train_event(X_tr, y_all, seed=seed, hp=hazard_hp)
         if verbose:
             print(f"{ename:<24} {f'rc={rc},min={min_yrs}':<20} "
                   f"{K:>3} {n:>10,d} {n_pos:>7d} "

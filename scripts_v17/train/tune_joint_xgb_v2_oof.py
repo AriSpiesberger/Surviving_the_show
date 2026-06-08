@@ -23,8 +23,12 @@ Outputs:
   results/training/oof_tuning_trials.csv — per-trial metrics for inspection
   results/training/oof_tuning_best.json  — best params + scores
 
+Sampler: multivariate + group TPE with a 25-trial random startup (models the
+joint depth/lr/reg structure and explores broadly before exploiting). No
+pruner — the objective reports a single final value, so pruning never fired.
+
 Usage:
-    python -m scripts_v17.train.tune_joint_xgb_v2_oof              # 100 trials
+    python -m scripts_v17.train.tune_joint_xgb_v2_oof              # 200 trials
     python -m scripts_v17.train.tune_joint_xgb_v2_oof --trials 50  # quicker
 """
 from __future__ import annotations
@@ -184,42 +188,70 @@ def make_objective(fit_df, val_df, db_path, scaler):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--db", default=str(REPO_ROOT / "prospects_snapshot.db"))
-    ap.add_argument("--trials", type=int, default=100)
+    ap.add_argument("--trials", type=int, default=200)
     ap.add_argument("--max-entry", type=int, default=2020)
     ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument("--n-startup", type=int, default=25,
+                    help="Random-sampled trials before TPE starts exploiting. "
+                         "Higher = more exploration of the 6-D HP space.")
     ap.add_argument("--storage", default=None,
                     help="Optional sqlite URI for Optuna persistence "
                          "(e.g. sqlite:///oof_study.db). Lets you resume "
                          "by re-running.")
+    ap.add_argument("--fit", default=str(OOF_STACKED),
+                    help="OOF stacked long CSV (hazard outputs to train on). "
+                         "Point at the tuned-hazard regen to tune XGB over it.")
+    ap.add_argument("--val", default=str(OOF_VAL),
+                    help="OOF val long CSV.")
+    ap.add_argument("--out-tag", default=None,
+                    help="Suffix for output files so a tuned-hazard run does "
+                         "not overwrite the default outputs, e.g. tuned_hz149 "
+                         "-> oof_tuning_trials_tuned_hz149.csv etc.")
     args = ap.parse_args()
 
-    if not OOF_STACKED.exists() or not OOF_VAL.exists():
-        sys.exit(f"FATAL: missing OOF inputs. Run train_v2_0b_oof first.\n"
-                 f"  expected: {OOF_STACKED}\n"
-                 f"            {OOF_VAL}")
+    oof_stacked = Path(args.fit)
+    oof_val = Path(args.val)
+    tag = f"_{args.out_tag}" if args.out_tag else ""
+    trials_csv = TRIALS_CSV.with_name(f"oof_tuning_trials{tag}.csv")
+    best_json = BEST_JSON.with_name(f"oof_tuning_best{tag}.json")
+    tuned_out = TUNED_OUT.with_name(f"joint_xgb_v2.0b_oof_tuned{tag}.pkl")
+
+    if not oof_stacked.exists() or not oof_val.exists():
+        sys.exit(f"FATAL: missing OOF inputs.\n"
+                 f"  expected: {oof_stacked}\n"
+                 f"            {oof_val}")
 
     print("=" * 78)
     print(f"v2.0b OOF XGB Bayesian opt — {args.trials} trials")
     print("=" * 78)
-    print(f"Loading OOF stacked: {OOF_STACKED.name}", flush=True)
-    fit_df = _prep(pd.read_csv(OOF_STACKED), args.db, args.max_entry)
+    print(f"Loading OOF stacked: {oof_stacked.name}", flush=True)
+    fit_df = _prep(pd.read_csv(oof_stacked), args.db, args.max_entry)
     print(f"  fit: {len(fit_df):,} rows, "
           f"{fit_df.player_id.nunique():,} unique players", flush=True)
-    print(f"Loading OOF val: {OOF_VAL.name}", flush=True)
-    val_df = _prep(pd.read_csv(OOF_VAL), args.db, args.max_entry)
+    print(f"Loading OOF val: {oof_val.name}", flush=True)
+    val_df = _prep(pd.read_csv(oof_val), args.db, args.max_entry)
     print(f"  val: {len(val_df):,} rows, "
           f"{val_df.player_id.nunique():,} unique players", flush=True)
 
     # Single scaler fit on fit slice (no leakage)
     scaler = StandardScaler().fit(fit_df[FEAT].values.astype(np.float32))
 
-    # Set up Optuna
-    sampler = optuna.samplers.TPESampler(seed=args.seed)
-    pruner = optuna.pruners.MedianPruner(n_warmup_steps=5)
+    # Set up Optuna. Multivariate + group TPE models the joint HP structure
+    # (depth/lr/reg interact) instead of each param independently, and a
+    # larger startup phase gives the surrogate a broader base to explore from.
+    # No pruner: the objective reports only a single final value (no
+    # intermediate trial.report), so a MedianPruner would never fire — it was
+    # dead config. Each trial is cheap (~10s), so we just run them all.
+    sampler = optuna.samplers.TPESampler(
+        seed=args.seed,
+        n_startup_trials=args.n_startup,
+        multivariate=True,
+        group=True,
+    )
     storage = args.storage  # None means in-memory study
     study = optuna.create_study(
         direction="maximize",
-        sampler=sampler, pruner=pruner,
+        sampler=sampler,
         study_name="v20b_oof_xgb",
         storage=storage, load_if_exists=bool(storage),
     )
@@ -236,20 +268,20 @@ def main():
 
     # Persist trial results
     trials_df = study.trials_dataframe()
-    TRIALS_CSV.parent.mkdir(parents=True, exist_ok=True)
-    trials_df.to_csv(TRIALS_CSV, index=False)
-    print(f"Wrote {TRIALS_CSV}", flush=True)
+    trials_csv.parent.mkdir(parents=True, exist_ok=True)
+    trials_df.to_csv(trials_csv, index=False)
+    print(f"Wrote {trials_csv}", flush=True)
 
     best_params = dict(study.best_params)
     best_attrs = dict(study.best_trial.user_attrs)
-    BEST_JSON.write_text(json.dumps({
+    best_json.write_text(json.dumps({
         "best_objective": float(study.best_value),
         "best_params": best_params,
         "best_event_metrics": best_attrs,
         "n_trials": args.trials,
         "wall_min": elapsed_min,
     }, indent=2))
-    print(f"Wrote {BEST_JSON}", flush=True)
+    print(f"Wrote {best_json}", flush=True)
 
     # Retrain final model with best params on the fit slice, save
     print("\nRetraining final model with best params...", flush=True)
@@ -280,8 +312,8 @@ def main():
               f"{r['ap_lift']:>7.2f} {r['auc']:>6.3f} "
               f"{r['brier']:>7.4f}")
 
-    TUNED_OUT.parent.mkdir(parents=True, exist_ok=True)
-    with TUNED_OUT.open("wb") as fh:
+    tuned_out.parent.mkdir(parents=True, exist_ok=True)
+    with tuned_out.open("wb") as fh:
         pickle.dump({
             "model": booster, "scaler": scaler,
             "feature_names": list(FEAT),
@@ -297,7 +329,7 @@ def main():
                 "best_params_from_study": best_params,
             },
         }, fh, protocol=pickle.HIGHEST_PROTOCOL)
-    print(f"\nWrote {TUNED_OUT}")
+    print(f"\nWrote {tuned_out}")
 
 
 if __name__ == "__main__":
