@@ -60,7 +60,8 @@ filter, it reports:
 | `auc` | Area under the ROC curve. |
 | `ap` | Average Precision = AU-PR. |
 | `ap_lift` | `ap / base_rate` — how many × better than random the precision-weighted ranking is. |
-| `threshold` | The XGBoost probability cutoff used for the confusion-matrix metrics. Fixed at **0.50**. |
+| `spearman_rho` | Spearman rank correlation between the model's score and the realized 0/1 outcome on the cell. Threshold-free — captures "are higher-scored players actually more likely to fire?". Range −1..+1. Significance in `spearman_p`. |
+| `threshold` | The XGBoost probability cutoff used for the confusion-matrix metrics. Fixed at **0.60** (production buy cutoff). |
 | `tp`, `fp`, `tn`, `fn` | True/false positives/negatives at `xgb_p_event ≥ 0.50`. |
 | `predicted_positives` | `tp + fp` — how many players the model said "yes" to. |
 | `precision` | `tp / (tp + fp)`. Of players the model picked, fraction that hit. |
@@ -71,58 +72,62 @@ filter, it reports:
 Buckets: `ALL, R1, R2-R3, R4-R10, R10+, IFA`. The `ALL` row aggregates the
 full val cohort.
 
-### Full per-bucket numbers (per-event eligibility, threshold=0.50)
+### Full per-bucket numbers (per-event eligibility, threshold = 0.60 — the production buy cutoff)
 
 The CSV linked above has the exact values below in machine-readable form.
+`spearman` is Spearman's rank correlation ρ between the model's score
+and the realized outcome on the cell (higher = better rank ordering;
+significance test in the CSV's `spearman_p` column).
 
 #### TOP_100_PROSPECT
 
-| bucket | n | pos | base% | AUC | AP | AP_lift | precision | recall | F1 | accuracy | TP | FP | FN |
+| bucket | n | pos | base% | AUC | AP | AP_lift | spearman | precision | recall | F1 | TP | FP | FN |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| ALL | 34164 | 230 | 0.67% | 0.985 | 0.483 | 71.8× | 0.738 | 0.196 | 0.309 | 0.994 | 45 | 16 | 185 |
-| R1 | 388 | 80 | 20.62% | 0.931 | 0.757 | 3.7× | 0.833 | 0.375 | 0.517 | 0.856 | 30 | 6 | 50 |
-| R2-R3 | 707 | 62 | 8.77% | 0.892 | 0.430 | 4.9× | 0.417 | 0.081 | 0.135 | 0.909 | 5 | 7 | 57 |
-| R4-R10 | 2484 | 20 | 0.81% | 0.937 | 0.231 | 28.7× | 1.000 | 0.050 | 0.095 | 0.992 | 1 | 0 | 19 |
-| R10+ | 11788 | 9 | 0.08% | 0.949 | 0.354 | 463.1× | 1.000 | 0.111 | 0.200 | 0.999 | 1 | 0 | 8 |
-| IFA | 18797 | 59 | 0.31% | 0.986 | 0.349 | 111.3× | 0.727 | 0.136 | 0.229 | 0.997 | 8 | 3 | 51 |
+| ALL | 34164 | 230 | 0.67% | 0.985 | 0.483 | 71.8× | 0.137 | 0.882 | 0.130 | 0.227 | 30 | 4 | 200 |
+| R1 | 388 | 80 | 20.62% | 0.931 | 0.757 | 3.7× | 0.604 | 0.957 | 0.275 | 0.427 | 22 | 1 | 58 |
+| R2-R3 | 707 | 62 | 8.77% | 0.892 | 0.430 | 4.9× | 0.384 | 0.600 | 0.048 | 0.090 | 3 | 2 | 59 |
+| R4-R10 | 2484 | 20 | 0.81% | 0.937 | 0.231 | 28.7× | 0.135 | 1.000 | 0.050 | 0.095 | 1 | 0 | 19 |
+| R10+ | 11788 | 9 | 0.08% | 0.949 | 0.354 | 463.1× | 0.043 | — | 0.000 | — | 0 | 0 | 9 |
+| IFA | 18797 | 59 | 0.31% | 0.986 | 0.349 | 111.3× | 0.094 | 0.800 | 0.068 | 0.125 | 4 | 1 | 55 |
 
 #### MLB_DEBUT
 
-| bucket | n | pos | base% | AUC | AP | AP_lift | precision | recall | F1 | accuracy | TP | FP | FN |
+| bucket | n | pos | base% | AUC | AP | AP_lift | spearman | precision | recall | F1 | TP | FP | FN |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| ALL | 34430 | 1747 | 5.07% | 0.937 | 0.564 | 11.1× | 0.643 | 0.388 | 0.484 | 0.958 | 678 | 376 | 1069 |
-| R1 | 491 | 240 | 48.88% | 0.895 | 0.898 | 1.8× | 0.814 | 0.800 | 0.807 | 0.813 | 192 | 44 | 48 |
-| R2-R3 | 755 | 256 | 33.91% | 0.826 | 0.711 | 2.1× | 0.651 | 0.582 | 0.614 | 0.752 | 149 | 80 | 107 |
-| R4-R10 | 2487 | 279 | 11.22% | 0.855 | 0.434 | 3.9× | 0.474 | 0.330 | 0.389 | 0.884 | 92 | 102 | 187 |
-| R10+ | 11790 | 383 | 3.25% | 0.899 | 0.282 | 8.7× | 0.451 | 0.107 | 0.173 | 0.967 | 41 | 50 | 342 |
-| IFA | 18907 | 589 | 3.12% | 0.943 | 0.524 | 16.8× | 0.671 | 0.346 | 0.457 | 0.974 | 204 | 100 | 385 |
+| ALL | 34430 | 1747 | 5.07% | 0.937 | 0.564 | 11.1× | 0.332 | 0.710 | 0.284 | 0.406 | 496 | 203 | 1251 |
+| R1 | 491 | 240 | 48.88% | 0.895 | 0.898 | 1.8× | 0.684 | 0.843 | 0.671 | 0.747 | 161 | 30 | 79 |
+| R2-R3 | 755 | 256 | 33.91% | 0.826 | 0.711 | 2.1× | 0.534 | 0.722 | 0.445 | 0.551 | 114 | 44 | 142 |
+| R4-R10 | 2487 | 279 | 11.22% | 0.855 | 0.434 | 3.9× | 0.388 | 0.500 | 0.186 | 0.272 | 52 | 52 | 227 |
+| R10+ | 11790 | 383 | 3.25% | 0.899 | 0.282 | 8.7× | 0.245 | 0.511 | 0.063 | 0.112 | 24 | 23 | 359 |
+| IFA | 18907 | 589 | 3.12% | 0.943 | 0.524 | 16.8× | 0.266 | 0.729 | 0.246 | 0.368 | 145 | 54 | 444 |
 
 #### ESTABLISHED_MLB
 
-| bucket | n | pos | base% | AUC | AP | AP_lift | precision | recall | F1 | accuracy | TP | FP | FN |
+| bucket | n | pos | base% | AUC | AP | AP_lift | spearman | precision | recall | F1 | TP | FP | FN |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| ALL | 34430 | 385 | 1.12% | 0.976 | 0.362 | 32.4× | 0.592 | 0.117 | 0.195 | 0.989 | 45 | 31 | 340 |
-| R1 | 491 | 85 | 17.31% | 0.878 | 0.530 | 3.1× | 0.606 | 0.235 | 0.339 | 0.841 | 20 | 13 | 65 |
-| R2-R3 | 755 | 61 | 8.08% | 0.842 | 0.295 | 3.7× | 0.429 | 0.098 | 0.160 | 0.917 | 6 | 8 | 55 |
-| R4-R10 | 2487 | 76 | 3.06% | 0.928 | 0.306 | 10.0× | 1.000 | 0.053 | 0.100 | 0.971 | 4 | 0 | 72 |
-| R10+ | 11790 | 41 | 0.35% | 0.971 | 0.192 | 55.1× | 1.000 | 0.024 | 0.048 | 0.997 | 1 | 0 | 40 |
-| IFA | 18907 | 122 | 0.65% | 0.981 | 0.367 | 56.8× | 0.583 | 0.115 | 0.192 | 0.994 | 14 | 10 | 108 |
+| ALL | 34430 | 385 | 1.12% | 0.976 | 0.362 | 32.4× | 0.173 | 0.783 | 0.047 | 0.088 | 18 | 5 | 367 |
+| R1 | 491 | 85 | 17.31% | 0.878 | 0.530 | 3.1× | 0.496 | 0.636 | 0.082 | 0.146 | 7 | 4 | 78 |
+| R2-R3 | 755 | 61 | 8.08% | 0.842 | 0.295 | 3.7× | 0.322 | 0.750 | 0.049 | 0.092 | 3 | 1 | 58 |
+| R4-R10 | 2487 | 76 | 3.06% | 0.928 | 0.306 | 10.0× | 0.255 | 1.000 | 0.013 | 0.026 | 1 | 0 | 75 |
+| R10+ | 11790 | 41 | 0.35% | 0.971 | 0.192 | 55.1× | 0.096 | 1.000 | 0.024 | 0.048 | 1 | 0 | 40 |
+| IFA | 18907 | 122 | 0.65% | 0.981 | 0.367 | 56.8× | 0.133 | 1.000 | 0.049 | 0.094 | 6 | 0 | 116 |
 
 #### STAR_PLUS_ELITE
 
-| bucket | n | pos | base% | AUC | AP | AP_lift | precision | recall | F1 | accuracy | TP | FP | FN |
+| bucket | n | pos | base% | AUC | AP | AP_lift | spearman | precision | recall | F1 | TP | FP | FN |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| ALL | 34430 | 123 | 0.36% | 0.974 | 0.184 | 51.5× | — | 0.000 | — | 0.996 | 0 | 0 | 123 |
-| R1 | 491 | 35 | 7.13% | 0.844 | 0.225 | 3.2× | — | 0.000 | — | 0.929 | 0 | 0 | 35 |
-| R2-R3 | 755 | 11 | 1.46% | 0.914 | 0.267 | 18.3× | — | 0.000 | — | 0.985 | 0 | 0 | 11 |
-| R4-R10 | 2487 | 21 | 0.84% | 0.952 | 0.248 | 29.4× | — | 0.000 | — | 0.992 | 0 | 0 | 21 |
-| R10+ | 11790 | 18 | 0.15% | 0.936 | 0.178 | 116.5× | — | 0.000 | — | 0.998 | 0 | 0 | 18 |
-| IFA | 18907 | 38 | 0.20% | 0.989 | 0.198 | 98.6× | — | 0.000 | — | 0.998 | 0 | 0 | 38 |
+| ALL | 34430 | 123 | 0.36% | 0.974 | 0.184 | 51.5× | 0.098 | — | 0.000 | — | 0 | 0 | 123 |
+| R1 | 491 | 35 | 7.13% | 0.844 | 0.225 | 3.2× | 0.307 | — | 0.000 | — | 0 | 0 | 35 |
+| R2-R3 | 755 | 11 | 1.46% | 0.914 | 0.267 | 18.3× | 0.172 | — | 0.000 | — | 0 | 0 | 11 |
+| R4-R10 | 2487 | 21 | 0.84% | 0.952 | 0.248 | 29.4× | 0.143 | — | 0.000 | — | 0 | 0 | 21 |
+| R10+ | 11790 | 18 | 0.15% | 0.936 | 0.178 | 116.5× | 0.059 | — | 0.000 | — | 0 | 0 | 18 |
+| IFA | 18907 | 38 | 0.20% | 0.989 | 0.198 | 98.6× | 0.076 | — | 0.000 | — | 0 | 0 | 38 |
 
-STAR_PLUS_ELITE never crosses the 0.50 cutoff in production — the AP=0.184
-ranking is strong but the rare positives sit at p ≈ 0.15-0.45. The
-**threshold-at-precision-≥-0.60** tables below tune the threshold per
-slice so every cell with positives gets a meaningful precision/recall pair.
+STAR_PLUS_ELITE never crosses the 0.60 cutoff — the AP=0.184 ranking is
+strong but the rare positives sit at p ≈ 0.15-0.45. See the
+**threshold-at-precision-≥-0.60** tables below for the tuned-per-cell
+operating points that recover meaningful precision/recall numbers on
+these rare events.
 
 ## Per-yip validation (threshold = 0.50)
 
@@ -451,6 +456,7 @@ Plus three MLB_DEBUT-specific tables:
 | `auc_lo`, `auc_hi` | 95% bootstrap confidence interval on AUC (200 resamples). If the interval includes 0.5, the model isn't doing better than random on this cell. |
 | **`ap`** | **Average Precision = Area Under the Precision-Recall Curve (AU-PR).** Far more informative than AUC for rare events. Tells you how good the ranking is *at the positives*. For a 1% base-rate event, AP=0.5 means top-X% selections are about 50× the random precision. |
 | **`ap_lift`** | `ap / base_rate`. The "you got X× better than random precision-weighted ranking" multiplier. AP_lift = 1.0 means random; AP_lift = 100 means the model's positives-weighted ranking is 100× sharper than random. |
+| **`spearman_rho`** | Spearman rank correlation between the model's score and the realized 0/1 outcome on the cell. Captures monotonic agreement between predicted rank and outcome. 0 = no relationship, +1 = perfectly increasing, −1 = perfectly inverted. Threshold-free, so a useful sanity sibling to AP. `spearman_p` is its two-sided p-value (small = reject "no correlation"). |
 
 ### Calibration metrics — "when the model says 30%, do 30% actually happen?"
 
