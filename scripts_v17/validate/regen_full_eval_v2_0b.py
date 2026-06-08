@@ -49,7 +49,7 @@ from scripts_v17.validate.regen_eval_v2_0b_honest import (
 )
 
 VAL_LONG = REPO_ROOT / "results" / "training" / "v2.0b_oof_val_long.csv"
-XGB_PKL = REPO_ROOT / "models" / "joint_xgb_v2.0b_oof_tuned.pkl"
+XGB_PKL = REPO_ROOT / "models" / "joint_xgb_v2.0b_oof.pkl"
 TIMING_PKL = REPO_ROOT / "models" / "time_to_debut_v1.18_prod.pkl"
 DB = REPO_ROOT / "prospects_snapshot.db"
 OUT_DIR = REPO_ROOT / "evaluation" / "v2.0b_landmark"

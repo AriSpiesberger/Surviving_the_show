@@ -48,9 +48,8 @@ EVENTS = ["TOP_100_PROSPECT", "MLB_DEBUT",
 EVENT_WEIGHTS = {"TOP_100_PROSPECT": 1.0, "MLB_DEBUT": 2.0,
                  "ESTABLISHED_MLB": 1.0, "STAR_PLUS_ELITE": 1.0}
 
-VAL_LONG = (REPO_ROOT / "scratch" / "v20b_oof"
-              / "val_long_tuned_hazards.csv")
-XGB_PKL = REPO_ROOT / "models" / "joint_xgb_v2.0b_prod.pkl"
+VAL_LONG = REPO_ROOT / "results" / "training" / "v2.0b_oof_val_long.csv"
+XGB_PKL = REPO_ROOT / "models" / "joint_xgb_v2.0b_oof.pkl"
 DB = REPO_ROOT / "prospects_snapshot.db"
 OUT_DIR = REPO_ROOT / "evaluation" / "v2.0b_landmark"
 
