@@ -35,6 +35,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import xgboost as xgb
+from scipy.stats import spearmanr
 from sklearn.metrics import (
     average_precision_score, roc_auc_score,
 )
@@ -50,7 +51,7 @@ EVENT_WEIGHTS = {"TOP_100_PROSPECT": 1.0, "MLB_DEBUT": 2.0,
 VAL_LONG = REPO_ROOT / "results" / "training" / "v2.0b_oof_val_long.csv"
 XGB_PKL = REPO_ROOT / "models" / "joint_xgb_v2.0b_oof_tuned.pkl"
 DB = REPO_ROOT / "prospects_snapshot.db"
-OUT_DIR = REPO_ROOT / "evaluation" / "v2.0b_honest"
+OUT_DIR = REPO_ROOT / "evaluation" / "v2.0b_landmark"
 
 AGE_CENTER, YIP_CENTER = 22, 3
 HAZARD_PROBS = [
@@ -120,7 +121,7 @@ def _join_current_level(df: pd.DataFrame, db: str) -> pd.DataFrame:
 
 
 def _metric_row(sub: pd.DataFrame, event: str, group_name: str,
-                 group_val) -> dict:
+                 group_val, threshold: float = 0.5) -> dict:
     p_col = f"xp_{event}"
     y_col = f"realized_{event}"
     elig_col = f"eligible_{event}"
@@ -140,8 +141,15 @@ def _metric_row(sub: pd.DataFrame, event: str, group_name: str,
     ap = float(average_precision_score(y, p)) if pos > 0 else float("nan")
     ap_lift = (ap / base if base > 0 else float("nan")) if ap == ap \
                else float("nan")
-    # Threshold-0.5 metrics
-    thr = 0.5
+    # Spearman rank correlation between scores and outcomes
+    if 0 < pos < n and p.std() > 0:
+        rho, rho_p = spearmanr(p, y)
+        spearman_rho = float(rho)
+        spearman_p = float(rho_p)
+    else:
+        spearman_rho = float("nan"); spearman_p = float("nan")
+    # Threshold metrics at user-specified cutoff
+    thr = float(threshold)
     pred = (p >= thr).astype(int)
     tp = int(((pred == 1) & (y == 1)).sum())
     fp = int(((pred == 1) & (y == 0)).sum())
@@ -158,6 +166,7 @@ def _metric_row(sub: pd.DataFrame, event: str, group_name: str,
         group_name: group_val,
         "n": n, "pos": pos, "base_rate": base,
         "auc": auc, "ap": ap, "ap_lift": ap_lift,
+        "spearman_rho": spearman_rho, "spearman_p": spearman_p,
         "threshold": thr,
         "tp": tp, "fp": fp, "tn": tn, "fn": fn,
         "precision": precision, "recall": recall,
@@ -193,6 +202,9 @@ def _write_table(rows: list[dict], path: Path):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--max-entry", type=int, default=2020)
+    ap.add_argument("--threshold", type=float, default=0.50,
+                    help="Score cutoff for the confusion-matrix view. "
+                         "0.60 is the production buy-list cutoff.")
     args = ap.parse_args()
 
     print(f"Loading {VAL_LONG.name}...")
@@ -217,7 +229,7 @@ def main():
     for ev in EVENTS:
         for b in ["ALL", "R1", "R2-R3", "R4-R10", "R10+", "IFA"]:
             sub = df if b == "ALL" else df[df["bucket"] == b]
-            row = _metric_row(sub, ev, "bucket", b)
+            row = _metric_row(sub, ev, "bucket", b, args.threshold)
             if row:
                 bucket_rows.append(row)
     _write_table(bucket_rows, OUT_DIR / "per_bucket_validation.csv")
@@ -228,7 +240,8 @@ def main():
     for ev in EVENTS:
         for off in sorted(df["snap_offset"].unique()):
             sub = df[df["snap_offset"] == int(off)]
-            row = _metric_row(sub, ev, "snap_offset", int(off))
+            row = _metric_row(sub, ev, "snap_offset", int(off),
+                              args.threshold)
             if row:
                 yip_rows.append(row)
     _write_table(yip_rows, OUT_DIR / "per_yip_validation.csv")
@@ -239,7 +252,7 @@ def main():
     for ev in EVENTS:
         for lvl in ["ALL", "RK", "A-", "A", "A+", "AA", "AAA", "NONE"]:
             sub = df if lvl == "ALL" else df[df["cur_level"] == lvl]
-            row = _metric_row(sub, ev, "cur_level", lvl)
+            row = _metric_row(sub, ev, "cur_level", lvl, args.threshold)
             if row:
                 level_rows.append(row)
     _write_table(level_rows, OUT_DIR / "per_level_validation.csv")
