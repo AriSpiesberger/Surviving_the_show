@@ -1,0 +1,10 @@
+{
+  "csv": "v2.0b_honest_val_long.csv",
+  "hazards_pkl": "C:\\Users\\arisp\\Documents\\Research\\Surviving_the_show\\scratch\\v20b_honest\\hazards.pkl",
+  "hazards_sha16": "8f96e082c49a8bdd",
+  "train_mask_pid_list": "C:\\Users\\arisp\\Documents\\Research\\Surviving_the_show\\scratch\\v20b_honest\\haz_pids.txt",
+  "train_mask_sha16": "724502eda3ef5ed4",
+  "slice": "VAL",
+  "produced_at": "2026-06-07 21:29:28",
+  "produced_by": "train_v2_0b_honest.py"
+}

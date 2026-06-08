@@ -215,17 +215,20 @@ EVENT_TRIGGER_COL = {
     CareerEvent.ALL_STAR_ONCE: "year_all_star_once",
     CareerEvent.ALL_STAR_THREE_PLUS: "year_all_star_three",
     CareerEvent.MAJOR_AWARD: "year_major_award",
-    CareerEvent.HOF_TRAJECTORY: "year_hof_trajectory",
+    # HOF_TRAJECTORY intentionally dropped — not a target we model. Removing
+    # it here makes fit_landmark_hazards skip the head (it only fits events
+    # present in this map) and excludes HOF from the STAR/ELITE pools below.
 }
 
 # Key under which the exit/dropout hazard is stored in the hazards dict.
 EXIT_KEY = "_EXIT_BASEBALL"
 
-# Pooled "elite tier" event: any of AS3+, MAJOR_AWARD, or HOF.
-# Trigger year = min of whichever components fired.
+# Pooled "elite tier" event: any of AS3+ or MAJOR_AWARD.
+# Trigger year = min of whichever components fired. (HOF dropped — not a
+# target we care about; it only ever overlapped already-elite players.)
 ELITE_KEY = "_ELITE"
 ELITE_COMPONENT_COLS = (
-    "year_all_star_three", "year_major_award", "year_hof_trajectory",
+    "year_all_star_three", "year_major_award",
 )
 
 # Pooled "star tier" event: ANY major-league recognition. Union of
@@ -240,7 +243,6 @@ STAR_COMPONENT_COLS = (
     "year_all_star_once",
     "year_all_star_three",
     "year_major_award",
-    "year_hof_trajectory",
 )
 
 # Last year for which we have outcomes resolved.
@@ -267,7 +269,7 @@ def _last_active_year(player: dict, stats_by_pid: dict) -> int | None:
 
 def _trigger_year(player_row: dict, event) -> int | None:
     """Earliest trigger year for the event. `event` is a CareerEvent or the
-    ELITE_KEY string (pooled across AS3+/MAJOR_AWARD/HOF)."""
+    ELITE_KEY string (pooled across AS3+/MAJOR_AWARD)."""
     if event == ELITE_KEY or event == STAR_KEY:
         cols = (STAR_COMPONENT_COLS if event == STAR_KEY
                 else ELITE_COMPONENT_COLS)

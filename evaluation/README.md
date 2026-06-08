@@ -5,15 +5,22 @@ player slice** of the v1.17 seed=42 split — 3,523 players the production
 **joint XGBoost head was never trained on**. Validation universe: drafted
 players with `draft_year ≤ 2020` (plus IFAs), realized window through 2026.
 
-**Important caveat on honesty**: the XGB used for the per-bucket / per-yip
-/ per-level / walkforward tables here (`models/joint_xgb_v2.0b.pkl`) was
-trained with the val slice held out — honest at the XGB layer. But the
-upstream landmark hazards (`event_classifiers_v1.18b_landmark_prod.pkl`)
-were trained on 100% of players, so the hazard outputs the XGB consumes
-*did* include val pids during hazard training. That makes the published
-numbers an honest read of the XGB head specifically; the hazard layer is
-still leaky for these pids. v1.17 has a true honest-twin hazard pkl
-(`event_classifiers_v1.17.pkl`); v1.18b does not.
+**⚠ RETRACTION: the v2.0b_landmark tables here are LEAKY at the hazard
+layer.** The upstream landmark hazards
+(`event_classifiers_v1.18b_landmark_prod.pkl`) were trained on 100% of
+players, so the hazard features fed to the XGB at val time came from a
+model that had already seen the val pids during its own training. The
+XGB-layer split was honest but the hazard-layer leak inflated weighted-AP
+by ~32% relative to the truly honest setup.
+
+**Use [v2.0b_honest/](v2.0b_honest/) for the real v2.0b held-out numbers.**
+Both hazards and XGB are honest there. Two setups compared:
+
+| Setup | weighted-AP | TOP_100 AP | MLB_DEBUT AP | ESTABLISHED AP | STAR_PLUS_ELITE AP |
+|---|---:|---:|---:|---:|---:|
+| Honest non-OOF | 0.366 | 0.393 | 0.472 | 0.343 | 0.148 |
+| **OOF v2 (prod)** | **0.401** | **0.489** | **0.500** | 0.328 | **0.191** |
+| Old (leaky) | ~~0.531~~ | ~~0.553~~ | ~~0.589~~ | ~~0.482~~ | ~~0.444~~ |
 
 Two model versions are scored against the same val cohort for direct
 comparison:
