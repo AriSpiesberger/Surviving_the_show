@@ -219,7 +219,7 @@ def stage_panel(db_path: str, max_draft_year: int) -> tuple:
         joined_idx[r] = pid_to_idx[p["player_id"]]
 
     SCRATCH.mkdir(parents=True, exist_ok=True)
-    tmp = PANEL_NPZ.with_suffix(".npz.tmp")
+    tmp = PANEL_NPZ.with_suffix(".tmp.npz")  # must end .npz; savez appends it otherwise
     np.savez_compressed(tmp, X_lm=X_lm,
                         pids=np.array(pids, dtype=object),
                         S_yrs=np.array(S_list, dtype=np.int32),

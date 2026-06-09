@@ -44,6 +44,9 @@ from typing import Optional
 
 import numpy as np
 
+from prospects.features.scouting_grades import (
+    SCOUTING_GRADE_NAMES, scouting_grade_dict,
+)
 from prospects.storage import ProspectDB
 
 
@@ -290,6 +293,7 @@ def _build_feature_names() -> list[str]:
     names += DELTA_HIT_FEATS + DELTA_PIT_FEATS + DELTA_SHARED_FEATS
     names += ACCEL_HIT_FEATS + ACCEL_PIT_FEATS + ACCEL_SHARED_FEATS
     names += WINDOW_SUMMARY
+    names += SCOUTING_GRADE_NAMES  # FG-board + TWTC point-in-time grades
     return names
 
 
@@ -1360,6 +1364,8 @@ def build_scouting_features(
     vec_dict.update(deltas)
     vec_dict.update(accel)
     vec_dict.update(window_summary)
+    # point-in-time scouting grades (season <= as_of_year), NaN where absent
+    vec_dict.update(scouting_grade_dict(prospect.get("player_id"), as_of_year))
 
     vec = np.array([vec_dict[name] for name in FEATURE_NAMES], dtype=np.float64)
     assert vec.shape == (N_FEATURES,), (vec.shape, N_FEATURES)

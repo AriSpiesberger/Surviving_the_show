@@ -33,6 +33,10 @@ from sklearn.metrics import (
 )
 from sklearn.preprocessing import StandardScaler
 
+from prospects.features.scouting_grades import (
+    SCOUTING_SUMMARY_COLS, attach_scouting_summary,
+)
+
 EVENTS = ["TOP_100_PROSPECT", "MLB_DEBUT", "ESTABLISHED_MLB",
           "STAR_PLUS_ELITE"]
 HAZARD_PROBS = [
@@ -43,6 +47,7 @@ FEAT = (
     HAZARD_PROBS
     + ["age_at_snap_centered", "years_in_pro"]
     + [f"{p}_x_yip_centered" for p in HAZARD_PROBS]
+    + SCOUTING_SUMMARY_COLS  # current point-in-time scouting summary
 )
 AGE_CENTER, YIP_CENTER = 22, 3
 
@@ -62,6 +67,7 @@ def _prep(df: pd.DataFrame, db: str, max_entry: int) -> pd.DataFrame:
     df["yip_centered"] = df["snap_offset"] - YIP_CENTER
     for p in HAZARD_PROBS:
         df[f"{p}_x_yip_centered"] = df[p] * df["yip_centered"]
+    df = attach_scouting_summary(df)  # point-in-time scouting summary cols
     df = df[df.entry_year <= max_entry].copy()
     for ev in ("TOP_100_PROSPECT", "MLB_DEBUT"):
         df = df[df[f"eligible_{ev}"] == 1]
