@@ -43,11 +43,19 @@ HAZARD_PROBS = [
     "p_TOP_100_PROSPECT", "p_MLB_DEBUT", "p_ESTABLISHED_MLB",
     "p_ELITE", "p_STAR", "p_STAR_PLUS_ELITE",
 ]
+# Raw per-year hazard curve h_k (k=1..10) for the main heads — lets the XGB
+# integrate the curve itself rather than consume only the cumulative scalar.
+HAZARD_CURVE_EVENTS = ["TOP_100_PROSPECT", "MLB_DEBUT", "ESTABLISHED_MLB",
+                       "ELITE", "STAR"]
+HAZARD_CURVE = [f"hk{j}_{ev}" for ev in HAZARD_CURVE_EVENTS
+                for j in range(1, 11)]
 FEAT = (
     HAZARD_PROBS
     + ["age_at_snap_centered", "years_in_pro"]
     + [f"{p}_x_yip_centered" for p in HAZARD_PROBS]
     + SCOUTING_SUMMARY_COLS  # current point-in-time scouting summary
+    # NOTE: HAZARD_CURVE (per-year hazards) reverted — OOF-honest gain was only
+    # +0.007 debut AP and it collapsed the star ceiling on the 2026 cohort.
 )
 AGE_CENTER, YIP_CENTER = 22, 3
 
@@ -89,12 +97,23 @@ def main():
     ap.add_argument("--min-child-weight", type=int, default=30)
     ap.add_argument("--l2", type=float, default=1.0)
     ap.add_argument("--seed", type=int, default=42)
+    # Censoring correction: drop TRAINING negatives with < W forward years of
+    # observation (their 0 label is unreliable — the event may still occur).
+    # Positives are always kept. Applies to the fit set ONLY, never val.
+    ap.add_argument("--censor-window", type=int, default=0)
     ap.add_argument("--out", default="models/joint_xgb_v2.0h.pkl")
     args = ap.parse_args()
 
     print(f"Loading {args.fit}")
     fit = _prep(pd.read_csv(args.fit), args.db, args.max_entry)
     val = _prep(pd.read_csv(args.val), args.db, args.max_entry)
+    if args.censor_window > 0:
+        pos = fit[[f"realized_{e}" for e in EVENTS]].sum(axis=1) > 0
+        keep = (fit["years_fwd"] >= args.censor_window) | pos
+        print(f"  censor-window={args.censor_window}: keeping "
+              f"{int(keep.sum()):,}/{len(fit):,} fit rows "
+              f"(all {int(pos.sum()):,} positives + resolved negatives)")
+        fit = fit[keep].reset_index(drop=True)
     print(f"  fit: {len(fit):,} rows, {fit.player_id.nunique():,} players")
     print(f"  val: {len(val):,} rows, {val.player_id.nunique():,} players")
 

@@ -581,6 +581,7 @@ def predict_cumulative_batch_landmark(
     sum_p = {e: np.zeros(n, dtype=np.float64) for e in event_keys}
     sum_tp = {e: np.zeros(n, dtype=np.float64) for e in event_keys}
     sum_t2p = {e: np.zeros(n, dtype=np.float64) for e in event_keys}
+    step_haz = {e: np.zeros((n, horizon), dtype=np.float64) for e in event_keys}
     for i, p in enumerate(prospects):
         for e in event_keys:
             trig = _trigger_year(p, e)
@@ -632,6 +633,7 @@ def predict_cumulative_batch_landmark(
             k_eff = min(t_step, hazards[e].get("k_max", t_step))
             X[:, K_FEATURE_INDEX] = float(k_eff)
             h = hazards[e]["hazard"].predict_proba(X)[:, 1]
+            step_haz[e][mask, step] = h   # raw per-year hazard curve
             step_p = surv[e][mask] * in_baseball[mask] * h
             step_p_t = step_p * prereq_cumP_now[e][mask]
             sum_p[e][mask] += step_p_t
@@ -669,4 +671,5 @@ def predict_cumulative_batch_landmark(
         sd_t = np.where(triggered[e], 0.0, sd_t)
         out[("mean_t", e)] = mean_t
         out[("sd_t", e)] = sd_t
+        out[("haz_k", e)] = step_haz[e]   # (n, horizon) raw per-year hazards
     return out

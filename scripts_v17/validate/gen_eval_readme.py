@@ -84,29 +84,42 @@ def main():
                         f"{int(r['tp_above'])} | {pr} | {rc} | "
                         f"{int(r['n_total'])} | {int(r['n_pos_total'])} |")
 
-    md = f"""# Held-out validation — v2.0b landmark (+ scouting grades)
+    md = f"""# Held-out validation — v2.0b landmark (censoring-corrected)
 
 Reproducible evaluation of the v2.0b landmark stack against the **10% val
 player slice** of the v1.17 seed=42 split — players neither the landmark
 hazards nor the joint XGBoost head trained on. Validation universe: drafted
-players with `draft_year ≤ 2020` (plus IFAs), realized window through 2026.
+players with `draft_year ≤ 2020` (plus IFAs).
 
-**This revision** adds point-in-time scouting features from the FanGraphs
-Board (2017–2026) + Trouble-With-The-Curve (2013–2019): 76 grade/physical/
-velo/spin/rank/ETA/risk columns in the hazard panel (no-lookahead, season ≤
-snapshot), plus a compact 5-column current-snapshot summary
-(`scout_fv, scout_ovr_rank, scout_eta_gap, scout_risk, scout_is_scouted`) fed
-directly into the joint XGB. HOF_TRAJECTORY was dropped from the event set.
+**Yardstick: RESOLVED outcomes only.** Raw labels are right-censored (an event
+is recorded only if it occurred by the data cutoff), so a model that predicts
+*eventual* outcome is unfairly penalized for events that will happen after the
+cutoff. The joint XGB therefore trains on — and is evaluated on — **resolved
+rows**: the event was observed, OR the player had ≥6 forward years without it.
+This fixed a severe debut undercount (AAA arms read ~2% debut before; realistic
+now). Knobs: `--censor-window 6` (`fit_joint_xgb_v2.py`), `--resolved-window 6`
+(regen scripts). The **hazards** are survival models — censoring-aware by
+construction — and need no filter.
+
+**Data integrity (this revision):** birthdates backfilled for 2024–25 draft
+classes, FG/TWTC crosswalk 89%→96%, trade-aware `current_org` (latest-season
+affiliate → parent org via MLB Stats API), IFA entry-year anchors, signing-bonus
+backfill. Point-in-time scouting (FanGraphs Board 2017–26 + Trouble-With-The-
+Curve 2013–19): 76 grade/physical/velo/rank/ETA columns in the hazard panel
+(no-lookahead, season ≤ snapshot) + a 5-col current-snapshot summary
+(`scout_fv, scout_ovr_rank, scout_eta_gap, scout_risk, scout_is_scouted`) fed to
+the XGB. HOF_TRAJECTORY dropped from the event set.
 
 ## Stack
 
 | Layer | Model | Trained on |
 |---|---|---|
-| Hazards (per-fold OOF) | `scratch/v20b_oof/fold[0-5]_hazards.pkl` | Each fold trained on the OTHER 5 folds (val pids excluded). HistGBT, **default HP**, 314 features (incl. 76 scouting). |
-| XGB head | `models/joint_xgb_v2.0b_oof.pkl` | OOF stacked CSV. Default HP via `fit_joint_xgb_v2.py` — `max_depth=6, lr=0.05, early_stop=25, best_iter=196`. FEAT = hazard probs + age/yip + scouting summary. Honest at XGB layer. |
+| Hazards (per-fold OOF, eval) | `scratch/v20b_oof/fold[0-5]_hazards.pkl` | Each fold trained on the OTHER 5 (val pids excluded). HistGBT, default HP, 314 features (incl. 76 scouting). Survival → censoring-aware. |
+| Hazards (production) | `models/event_classifiers_v2.0b_prod.pkl` | 100% of ≤2020 data. Scores the 2026 cohort (entry 2024–26 — not in training, so no leakage). |
+| XGB head | `models/joint_xgb_v2.0b_{{oof,prod}}.pkl` | OOF stacked CSV, **censoring-corrected (`--censor-window 6`)**. Default HP (`max_depth=6, lr=0.05`). FEAT = hazard probs + age/yip + 5-col scouting summary (19). Honest at XGB layer. |
 
 Scouting features are point-in-time (latest grade with `season ≤ snapshot`),
-so val features never see the future. ~4% of val rows are scouted (only ranked
+so features never see the future. ~4% of rows are scouted (only ranked
 prospects get grades); the rest are NaN/sentinel, which HistGBT handles.
 
 ## Headline (ALL bucket, threshold = 0.60)
@@ -144,24 +157,26 @@ prospects get grades); the rest are NaN/sentinel, which HistGBT handles.
 ## Reproducing
 
 ```bash
-# data: scouting grades (FG board scrape + TWTC) -> point-in-time table
+# data integrity backfills (MLB Stats API) + scouting grades
+python -m prospects.ingestion.backfills.birthdate_backfill      # 2024-25 DOB
+python -m prospects.ingestion.backfills.org_backfill            # trade-aware current_org
 python -m scripts.scrape_fangraphs_board --start 2017 --end 2026   # needs curl_cffi
-python -m scripts.build_fg_crosswalk
+python -m scripts.build_fg_crosswalk      # 96% match (needs DOB backfill first)
 python -m scripts.build_scouting_grades
 
-# model: OOF folds + hazards + joint XGB (grades flow through both layers)
+# model: OOF folds + hazards + censoring-corrected joint XGB (--censor-window 6
+# is wired into run_v2_0b_oof stage 6 and train_v2_0b_prod stage 1)
 python -m scripts_v17.train.run_v2_0b_oof
-python -m scripts_v17.train.fit_joint_xgb_v2 \\
-    --fit results/training/v2.0b_oof_stacked_long.csv \\
-    --val results/training/v2.0b_oof_val_long.csv \\
-    --out models/joint_xgb_v2.0b_oof.pkl
+python -m scripts_v17.train.train_v2_0b_prod    # 100% prod hazards + W=6 XGB + score 2026
 
-# validation tables -> evaluation/v2.0b_landmark/, then this README
-python -m scripts_v17.validate.validate_full --long results/training/v2.0b_oof_val_long.csv \\
-    --xgb-model models/joint_xgb_v2.0b_oof.pkl \\
-    --time-to-debut-model models/time_to_debut_v1.18_prod.pkl --target-precision 0.60 --out-prefix v20b_clean
-python -m scripts_v17.validate.regen_eval_v2_0b_honest --threshold 0.60
-python -m scripts_v17.validate.regen_full_eval_v2_0b
+# validation on the RESOLVED yardstick (positives + >=6 fwd-yr negatives)
+python -c "import pandas as pd; v=pd.read_csv('results/training/v2.0b_oof_val_long.csv'); \\
+  r=[c for c in v if c.startswith('realized_')]; \\
+  v[(v.years_fwd>=6)|(v[r].sum(1)>0)].to_csv('results/training/v2.0b_oof_val_long_resolved.csv',index=False)"
+python -m scripts_v17.validate.regen_eval_v2_0b_honest \\
+    --val-long results/training/v2.0b_oof_val_long_resolved.csv --threshold 0.60
+python -m scripts_v17.validate.regen_full_eval_v2_0b \\
+    --val-long results/training/v2.0b_oof_val_long_resolved.csv
 python -m scripts_v17.validate.gen_eval_readme
 ```
 """

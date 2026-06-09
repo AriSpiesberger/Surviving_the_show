@@ -411,11 +411,20 @@ def _write(df: pd.DataFrame, path: Path):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--max-entry", type=int, default=2020)
+    ap.add_argument("--val-long", default=str(VAL_LONG))
+    ap.add_argument("--resolved-window", type=int, default=0,
+                    help="If >0, evaluate only on RESOLVED rows (observed "
+                         "outcome or >=W forward years).")
     args = ap.parse_args()
 
-    print(f"Loading {VAL_LONG.name}...")
-    df = pd.read_csv(VAL_LONG)
+    print(f"Loading {Path(args.val_long).name}...")
+    df = pd.read_csv(args.val_long)
     print(f"  {len(df):,} rows, {df.player_id.nunique():,} pids")
+    if args.resolved_window > 0:
+        rcols = [c for c in df.columns if c.startswith("realized_")]
+        keep = (df["years_fwd"] >= args.resolved_window) | (df[rcols].sum(axis=1) > 0)
+        df = df[keep].reset_index(drop=True)
+        print(f"  resolved-window={args.resolved_window}: {len(df):,} rows")
     df = _prep_for_xgb(df, str(DB), args.max_entry)
     print(f"Scoring with {XGB_PKL.name}...")
     df = _score_xgb(df, XGB_PKL)

@@ -108,6 +108,11 @@ OOF_STACKED = TRAIN_DIR / "v2.0b_oof_stacked_long.csv"
 OOF_VAL = TRAIN_DIR / "v2.0b_oof_val_long.csv"
 XGB_OUT = REPO_ROOT / "models" / "joint_xgb_v2.0b_oof.pkl"
 
+# Per-year hazard curve emission: hand the raw h_k (k=1..N) to the joint XGB so
+# it can integrate the curve itself instead of consuming only the cumulative.
+_HK_STEPS = 10
+_HK_EVENTS = {"TOP_100_PROSPECT", "MLB_DEBUT", "ESTABLISHED_MLB", "ELITE", "STAR"}
+
 
 def _entry_year(player: dict, stats_by_pid: dict) -> int | None:
     dy = player.get("draft_year")
@@ -380,6 +385,10 @@ def _score_checkpointed(hazards, prospects_all, stats_by_pid,
                         row[f"mean_t_{ename}"] = float(mt[i])
                     if st is not None:
                         row[f"sd_t_{ename}"] = float(st[i])
+                    hk = out.get(("haz_k", e))
+                    if hk is not None and ename in _HK_EVENTS:
+                        for j in range(_HK_STEPS):
+                            row[f"hk{j+1}_{ename}"] = float(hk[i, j])
                 if "STAR" in per_ev and "ELITE" in per_ev:
                     ps, ts, _, _ = per_ev["STAR"]
                     pe, te, _, _ = per_ev["ELITE"]
@@ -576,6 +585,7 @@ def main():
             "--fit", str(OOF_STACKED),
             "--val", str(OOF_VAL),
             "--db", args.db,
+            "--censor-window", "6",   # drop censored training negatives (<6 fwd yrs)
             "--out", tmp,
         ], cwd=REPO_ROOT).returncode
         if rc != 0:
