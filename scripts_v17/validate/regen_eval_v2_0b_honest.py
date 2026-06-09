@@ -214,11 +214,23 @@ def main():
     ap.add_argument("--threshold", type=float, default=0.50,
                     help="Score cutoff for the confusion-matrix view. "
                          "0.60 is the production buy-list cutoff.")
+    ap.add_argument("--val-long", default=str(VAL_LONG))
+    ap.add_argument("--resolved-window", type=int, default=0,
+                    help="If >0, evaluate only on RESOLVED rows (event "
+                         "observed, or >=W forward years) — the honest "
+                         "yardstick for a censoring-corrected model.")
     args = ap.parse_args()
 
-    print(f"Loading {VAL_LONG.name}...")
-    df = pd.read_csv(VAL_LONG)
+    print(f"Loading {Path(args.val_long).name}...")
+    df = pd.read_csv(args.val_long)
     print(f"  {len(df):,} rows, {df.player_id.nunique():,} pids")
+    if args.resolved_window > 0:
+        rcols = [c for c in df.columns if c.startswith("realized_")]
+        pos = df[rcols].sum(axis=1) > 0
+        keep = (df["years_fwd"] >= args.resolved_window) | pos
+        df = df[keep].reset_index(drop=True)
+        print(f"  resolved-window={args.resolved_window}: {len(df):,} rows "
+              f"(observed outcomes or >={args.resolved_window} fwd yrs)")
 
     df = _prep_for_xgb(df, str(DB), args.max_entry)
     print(f"  after entry<={args.max_entry}: {len(df):,} rows")

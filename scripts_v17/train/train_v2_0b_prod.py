@@ -64,6 +64,10 @@ BUYLIST_ALL = REPO_ROOT / "results" / "buy_lists" / "buy_list_v2.0b_ALL_SCORED.c
 BUYLIST_FINAL = REPO_ROOT / "results" / "buy_lists" / "buy_list_v2.0b_FINAL.csv"
 PRICES_FROM = REPO_ROOT / "data" / "prices_bowman_chrome_auto_v13.csv"
 
+# Per-year hazard curve emission (must match run_v2_0b_oof + fit_joint_xgb_v2).
+_HK_STEPS = 10
+_HK_EVENTS = {"TOP_100_PROSPECT", "MLB_DEBUT", "ESTABLISHED_MLB", "ELITE", "STAR"}
+
 
 def _ev_name(e) -> str:
     return e.name if hasattr(e, "name") else str(e).lstrip("_")
@@ -165,7 +169,8 @@ def score_snap_with_landmark(
         )
         for key, arr in chunk_out.items():
             if key not in out:
-                out[key] = np.empty(n_total, dtype=arr.dtype)
+                # preserve trailing dims so (n, horizon) haz_k curves survive
+                out[key] = np.empty((n_total,) + arr.shape[1:], dtype=arr.dtype)
             out[key][chunk_start:chunk_end] = arr
         gc.collect()
         if verbose:
@@ -216,6 +221,10 @@ def score_snap_with_landmark(
             if st is not None:
                 v = float(st[i])
                 row[f"sd_t_{ename}"] = 0.0 if np.isnan(v) else v
+            hk = out.get(("haz_k", e))
+            if hk is not None and ename in _HK_EVENTS:
+                for j in range(_HK_STEPS):
+                    row[f"hk{j+1}_{ename}"] = float(hk[i, j])
         if "STAR" in per_ev and "ELITE" in per_ev:
             ps, ts, _, _ = per_ev["STAR"]
             pe, te, _, _ = per_ev["ELITE"]
@@ -254,38 +263,31 @@ def main():
     print("v2.0b PROD TRAIN — landmark hazards + joint XGBoost")
     print("=" * 78)
 
-    # --- Stage 1: joint XGBoost on landmark fit/val long ---
+    # --- Stage 1: joint XGBoost on OOF stacked (HONEST) ---
     if args.skip_xgb and XGB_OUT.exists():
         print(f"[1/3] skip-xgb: using existing {XGB_OUT.name}", flush=True)
     else:
-        if not LM_FIT_LONG.exists() or not LM_VAL_LONG.exists():
-            sys.exit(f"FATAL: missing landmark long CSVs. Run "
-                     f"train_v1_18b_prod first.")
-        # PROD: train joint XGB on the full fit+val combined slice (matches
-        # v1.18b's downstream convention). The val-only setup (separate
-        # --fit/--val) is the HONEST validation split; for production we
-        # want maximum training data and accept that early-stopping uses
-        # the same rows it trains on.
-        combined_long = REPO_ROOT / "results" / "training" / \
-            "v1.18b_landmark_all_long.csv"
-        if not combined_long.exists():
-            print(f"[1/3] combining fit + val long -> {combined_long.name}",
-                  flush=True)
-            import pandas as pd
-            df_fit = pd.read_csv(LM_FIT_LONG)
-            df_val = pd.read_csv(LM_VAL_LONG)
-            combined = pd.concat([df_fit, df_val], ignore_index=True)
-            combined_long.parent.mkdir(parents=True, exist_ok=True)
-            combined.to_csv(combined_long, index=False)
-            print(f"  combined: {len(combined):,} rows", flush=True)
+        # HONEST: train the XGB on OUT-OF-FOLD hazard features. The old path
+        # trained on v1.18b_landmark_all_long, whose hazard probs come from
+        # hazards fit on 100% of players then scoring those same players —
+        # i.e. the features had already seen each player's label. That leaks
+        # into the XGB and inflates the rare-event (est/star) heads. The OOF
+        # stacked CSV scores every row with a hazard model that never trained
+        # on it, so the XGB learns the real "hazard prob -> outcome" mapping.
+        oof_fit = REPO_ROOT / "results" / "training" / "v2.0b_oof_stacked_long.csv"
+        oof_val = REPO_ROOT / "results" / "training" / "v2.0b_oof_val_long.csv"
+        if not oof_fit.exists() or not oof_val.exists():
+            sys.exit("FATAL: missing OOF stacked/val long CSVs. Run "
+                     "run_v2_0b_oof first (produces honest out-of-fold longs).")
         tmp = str(XGB_OUT) + ".tmp"
-        print(f"\n[1/3] Training joint XGBoost on COMBINED fit+val "
-              f"(prod, full data) -> {XGB_OUT.name}", flush=True)
+        print(f"\n[1/3] Training joint XGBoost on OOF stacked (HONEST, no "
+              f"in-sample hazard leakage) -> {XGB_OUT.name}", flush=True)
         rc = subprocess.run(
             [sys.executable, "-m", "scripts_v17.train.fit_joint_xgb_v2",
-             "--fit", str(combined_long),
-             "--val", str(combined_long),
+             "--fit", str(oof_fit),
+             "--val", str(oof_val),
              "--db",  args.db,
+             "--censor-window", "6",   # censoring correction (XGB layer only)
              "--out", tmp],
             cwd=REPO_ROOT,
         ).returncode
