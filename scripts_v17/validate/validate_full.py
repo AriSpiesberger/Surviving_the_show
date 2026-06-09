@@ -143,6 +143,8 @@ def _prepare_long(long_csv, age_center=22, yip_center=3,
     # and v1.19 (which carries p_Minors/p_MLB_service/p_All_Star).
     for col in [c for c in df.columns if c.startswith("p_")]:
         df[f"{col}_x_yip_centered"] = df[col] * df["yip_centered"]
+    from prospects.features.scouting_grades import attach_scouting_summary
+    df = attach_scouting_summary(df)  # point-in-time scouting summary cols
     return df
 
 

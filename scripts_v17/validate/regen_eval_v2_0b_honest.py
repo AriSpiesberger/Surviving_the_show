@@ -75,6 +75,8 @@ def _prep_for_xgb(df: pd.DataFrame, db: str, max_entry: int):
     df["yip_centered"] = df["snap_offset"] - YIP_CENTER
     for p in HAZARD_PROBS:
         df[f"{p}_x_yip_centered"] = df[p] * df["yip_centered"]
+    from prospects.features.scouting_grades import attach_scouting_summary
+    df = attach_scouting_summary(df)  # point-in-time scouting summary cols
     df = df[df.entry_year <= max_entry].copy()
     return df
 

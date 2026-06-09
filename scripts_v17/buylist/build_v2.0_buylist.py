@@ -46,6 +46,8 @@ def _add_feats(df, db):
     for col in [c for c in df.columns if c.startswith("p_")]:
         if f"{col}_x_yip_centered" not in df.columns:
             df[f"{col}_x_yip_centered"] = df[col] * df["yip_centered"]
+    from prospects.features.scouting_grades import attach_scouting_summary
+    df = attach_scouting_summary(df)  # point-in-time scouting summary cols
     return df
 
 

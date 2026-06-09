@@ -1,42 +1,41 @@
-"""Scrape FanGraphs Prospect Board year-end snapshots.
+"""Scrape FanGraphs Prospect Board season snapshots (20/80 scouting grades).
 
-The Board is FG's living prospect ranking with 20/80 scouting grades.
-We pull each year's end-of-season snapshot, cache the raw JSON to disk,
-and report what we got so we can validate the schema before any DB
-ingestion.
+The Board is a Next.js app; each season's edition lives at
+    https://www.fangraphs.com/prospects/the-board/{year}-prospect-list
+and the full row set (FV, hit/raw/power/speed/field, pitch grades, present-vs-
+future splits, ~94 cols) is embedded in the page's __NEXT_DATA__ blob under
+props.pageProps.dehydratedState (React-Query cache). One page = the whole
+board for that season, point-in-time (rows carry Season={year}).
 
-The endpoint is undocumented but matches what the public Board page
-calls. Format may change without notice — that's why we cache raw JSON
-per year, so re-parsing doesn't re-hit the network.
+Cloudflare is bypassed via curl_cffi's Chrome TLS impersonation — no cookie
+needed in practice. If FG ever hardens it, drop a cf_clearance cookie in via
+the FG_CF_CLEARANCE / FG_USER_AGENT env vars (see _build_cookies).
 
 Cache layout:
   scratch/fangraphs_board/
-    raw/{year}/scouting_summary.json    # one shot, all positions
-    raw/{year}/scouting_summary.meta.json
-    parsed/{year}.csv                   # flattened per year (later step)
+    raw/{year}/board.html            # raw page (so re-parse never re-hits net)
+    raw/{year}/board.meta.json       # status, row count, season check
+    parsed/{year}.csv                # flattened rows, one per prospect
 
 Usage:
-    # Sanity test on one year (saves to cache, prints summary):
-    python -m scripts.scrape_fangraphs_board --year 2023
+    python -m scripts.scrape_fangraphs_board --year 2023        # one season
+    python -m scripts.scrape_fangraphs_board --start 2014 --end 2026
+    python -m scripts.scrape_fangraphs_board --parse-only       # re-parse cache
 
-    # Full backfill 2009-current:
-    python -m scripts.scrape_fangraphs_board --start 2009 --end 2026
-
-    # Re-parse cache without re-fetching:
-    python -m scripts.scrape_fangraphs_board --parse-only
-
-Rate-limited to one request per 3s by default to be polite.
+Rate-limited to one request / 3s by default.
 """
 from __future__ import annotations
 
 import argparse
 import json
+import os
+import re
 import sys
 import time
 from pathlib import Path
 from typing import Any
 
-import os
+import pandas as pd
 import requests
 try:
     from curl_cffi import requests as crequests
@@ -48,52 +47,29 @@ CACHE_DIR = REPO_ROOT / "scratch" / "fangraphs_board"
 RAW_DIR = CACHE_DIR / "raw"
 PARSED_DIR = CACHE_DIR / "parsed"
 
-# These are the endpoints the Board page calls under the hood.
-# We're targeting "scouting summary" (the all-grades view).
-BOARD_ENDPOINTS = [
-    # Newer endpoint shape (live page calls these as of 2025)
-    ("scouting-grades",
-     "https://www.fangraphs.com/api/prospects/board/data"
-     "?statgroup={statgroup}&stattype=grades&type=0&pos=all&team=0"
-     "&pageitems=100000&season={season}&seasonend={season}"
-     "&hand=all&rookieyearstart=&rookieyearend="
-     "&signed=all&active=&minip=&minpa="),
-    # Stats-style endpoint (fallback)
-    ("scouting-stats",
-     "https://www.fangraphs.com/api/prospects/board/data"
-     "?statgroup={statgroup}&stattype=stat&type=0&pos=all&team=0"
-     "&pageitems=100000&season={season}&seasonend={season}"),
-    # Older endpoint pattern (some legacy years)
-    ("scouting-summary-legacy",
-     "https://www.fangraphs.com/prospects/the-board/json"
-     "?year={season}&group={statgroup}"),
-]
+BOARD_URL = "https://www.fangraphs.com/prospects/the-board/{year}-prospect-list"
 
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-       "AppleWebKit/537.36 (KHTML, like Gecko) "
-       "Chrome/120.0.0.0 Safari/537.36")
+      "AppleWebKit/537.36 (KHTML, like Gecko) "
+      "Chrome/120.0.0.0 Safari/537.36")
 HEADERS = {
     "User-Agent": UA,
-    "Accept": "application/json, text/plain, */*",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.5",
-    "Referer": "https://www.fangraphs.com/prospects/the-board/scouting-summary",
+    "Referer": "https://www.fangraphs.com/prospects/the-board/",
 }
+
+_NEXT_DATA_RE = re.compile(
+    r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', re.S)
 
 
 def _build_cookies() -> dict:
-    """Read CF clearance + any FG session cookies from env vars.
-
-    Open FG in your browser → DevTools → Application → Cookies →
-    fangraphs.com → copy the values, then:
-
-        $env:FG_CF_CLEARANCE = "long-encoded-string..."
-        $env:FG_USER_AGENT   = "<the same UA shown in DevTools>"
-    """
+    """Optional cf_clearance / FG session cookies from env (rarely needed)."""
     cookies = {}
     for env_name, cookie_name in (
         ("FG_CF_CLEARANCE", "cf_clearance"),
+        ("FG_CF_BM", "__cf_bm"),
         ("FG_WORDPRESS_COOKIE", "wordpress_logged_in"),
-        ("FG_PHP_SESSION", "PHPSESSID"),
     ):
         v = os.environ.get(env_name)
         if v:
@@ -102,158 +78,174 @@ def _build_cookies() -> dict:
 
 
 def _http_get(url: str, cookies: dict, ua: str | None = None):
-    """Fetch with curl_cffi (chrome TLS fingerprint) + injected cookies.
-    Falls back to plain requests if curl_cffi is unavailable."""
     headers = dict(HEADERS)
     if ua:
         headers["User-Agent"] = ua
     if crequests is not None:
         return crequests.get(url, headers=headers, cookies=cookies,
-                              impersonate="chrome120", timeout=60)
+                             impersonate="chrome120", timeout=60)
     return requests.get(url, headers=headers, cookies=cookies, timeout=60)
 
 
-def _fetch_year(year: int, sleep_s: float, cookies: dict,
-                 ua_override: str | None = None) -> dict[str, Any]:
-    """Try each endpoint until one returns a usable JSON payload. Returns
-    a dict with both hitters + pitchers + metadata."""
-    out = {"year": year, "tried": [], "ok": [], "data": {}}
-    for statgroup in ("fielders", "pitchers"):
-        success = None
-        for name, tmpl in BOARD_ENDPOINTS:
-            url = tmpl.format(statgroup=statgroup, season=year)
-            try:
-                time.sleep(sleep_s)
-                r = _http_get(url, cookies, ua=ua_override)
-                out["tried"].append({"statgroup": statgroup, "name": name,
-                                      "url": url, "status": r.status_code,
-                                      "length": len(r.content)})
-                if r.status_code != 200:
-                    continue
-                ct = r.headers.get("content-type", "")
-                # FG sometimes returns HTML when the endpoint is wrong
-                if "json" not in ct.lower() and not r.text.strip().startswith("{"):
-                    continue
-                try:
-                    payload = r.json()
-                except Exception:
-                    continue
-                # Heuristic: payload should be a list or wrap one
-                rows = payload if isinstance(payload, list) else (
-                    payload.get("data")
-                    or payload.get("rows")
-                    or payload.get("results")
-                    or []
-                )
-                if not isinstance(rows, list) or len(rows) == 0:
-                    continue
-                out["data"][statgroup] = {
-                    "endpoint": name, "url": url, "row_count": len(rows),
-                    "rows": rows,
-                }
-                out["ok"].append(
-                    {"statgroup": statgroup, "name": name,
-                     "row_count": len(rows)})
-                success = name
-                break
-            except Exception as e:
-                out["tried"].append({"statgroup": statgroup, "name": name,
-                                      "url": url, "error": str(e)})
-        if success is None:
-            print(f"  [WARN] {year} {statgroup}: no endpoint returned data")
-    return out
+def _extract_board_rows(html: str, expect_year: int | None = None
+                        ) -> tuple[list[dict] | None, str | None]:
+    """Pull the prospect-list rows out of the page's __NEXT_DATA__ blob.
+
+    Returns (rows, error). rows is the largest list-of-dicts found in the
+    React-Query dehydratedState (the board itself; the other query is a tiny
+    team-info lookup).
+
+    If expect_year is given, the rows' dominant Season MUST equal it — FG
+    serves HTTP 200 + the CURRENT board for nonexistent years (e.g. pre-2017),
+    so without this check we'd silently save duplicate current-board copies."""
+    m = _NEXT_DATA_RE.search(html)
+    if not m:
+        return None, "no __NEXT_DATA__ script (Cloudflare page or layout change?)"
+    try:
+        nd = json.loads(m.group(1))
+    except Exception as e:
+        return None, f"__NEXT_DATA__ not valid JSON: {e}"
+    queries = (nd.get("props", {}).get("pageProps", {})
+               .get("dehydratedState", {}).get("queries", []))
+    best: list[dict] | None = None
+    for q in queries:
+        data = q.get("state", {}).get("data")
+        if (isinstance(data, list) and data and isinstance(data[0], dict)
+                and (best is None or len(data) > len(best))):
+            best = data
+    if not best:
+        return None, "no row list in dehydratedState (board empty for this year?)"
+    if expect_year is not None:
+        seasons = [str(r.get("Season")) for r in best
+                   if r.get("Season") is not None]
+        if seasons:
+            from collections import Counter
+            top = Counter(seasons).most_common(1)[0][0]
+            if top != str(expect_year):
+                return None, (f"FG served Season={top}, not {expect_year} — "
+                              f"no board exists for this year (got current "
+                              f"board fallback); discarded")
+    return best, None
 
 
-def _save_raw(year: int, payload: dict[str, Any]) -> Path:
+def _fetch_year(year: int, cookies: dict, ua: str | None,
+                sleep_s: float) -> dict[str, Any]:
+    url = BOARD_URL.format(year=year)
+    time.sleep(sleep_s)
+    try:
+        r = _http_get(url, cookies, ua)
+    except Exception as e:
+        return {"year": year, "url": url, "status": "ERR", "error": str(e),
+                "html": "", "rows": None}
+    html = r.content.decode("utf-8", "replace")
+    rows, err = (None, f"HTTP {r.status_code}")
+    if r.status_code == 200:
+        rows, err = _extract_board_rows(html, expect_year=year)
+    return {"year": year, "url": url, "status": r.status_code,
+            "html": html, "rows": rows, "error": err}
+
+
+def _save(year: int, res: dict[str, Any]) -> int:
     ydir = RAW_DIR / str(year)
     ydir.mkdir(parents=True, exist_ok=True)
-    raw_path = ydir / "scouting_summary.json"
-    meta_path = ydir / "scouting_summary.meta.json"
-    raw_path.write_text(json.dumps(payload["data"], indent=2,
-                                    default=str))
-    meta = {
-        "year": year,
-        "tried": payload["tried"],
-        "ok": payload["ok"],
-        "row_counts": {sg: payload["data"][sg]["row_count"]
-                        for sg in payload["data"]},
+    if res.get("html"):
+        (ydir / "board.html").write_text(res["html"], encoding="utf-8")
+    rows = res.get("rows")
+    n = len(rows) if rows else 0
+    seasons = {}
+    if rows:
+        df = pd.DataFrame(rows)
+        PARSED_DIR.mkdir(parents=True, exist_ok=True)
+        df.to_csv(PARSED_DIR / f"{year}.csv", index=False, encoding="utf-8")
+        if "Season" in df.columns:
+            seasons = df["Season"].astype(str).value_counts().to_dict()
+    (ydir / "board.meta.json").write_text(json.dumps({
+        "year": year, "url": res["url"], "status": res["status"],
+        "n_rows": n, "season_values": seasons, "error": res.get("error"),
         "fetched_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-    }
-    meta_path.write_text(json.dumps(meta, indent=2))
-    return raw_path
+    }, indent=2))
+    return n
 
 
-def _summary(year: int, payload: dict[str, Any]):
-    n_hit = payload["data"].get("fielders", {}).get("row_count", 0)
-    n_pit = payload["data"].get("pitchers", {}).get("row_count", 0)
-    print(f"  {year}: hitters={n_hit:,}  pitchers={n_pit:,}")
-    # Sample the first row from each so we can see field names
-    for sg in ("fielders", "pitchers"):
-        d = payload["data"].get(sg)
-        if not d or not d["rows"]:
-            continue
-        sample = d["rows"][0]
-        print(f"    [{sg}] {len(sample)} cols, sample keys: "
-              f"{sorted(sample.keys())[:14]}...")
+def _summary(year: int, res: dict[str, Any], n: int):
+    if not n:
+        print(f"  {year}: status={res['status']}  rows=0  "
+              f"-> {res.get('error')}")
+        return
+    rows = res["rows"]
+    df = pd.DataFrame(rows)
+    season = (df["Season"].astype(str).value_counts().to_dict()
+              if "Season" in df.columns else "?")
+    print(f"  {year}: status=200  rows={n:,}  Season={season}")
+    grade_cols = [c for c in ("FV_Current", "cFV", "Hit", "Raw", "Game",
+                              "FB", "SL", "CMD") if c in df.columns]
+    print(f"     {len(df.columns)} cols; grade cols present: {grade_cols}")
+    s = rows[0]
+    print(f"     sample: {s.get('playerName')} "
+          f"FV={s.get('FV_Current') or s.get('cFV')} "
+          f"PlayerId={s.get('PlayerId')} Pos={s.get('Position')}")
+
+
+def _parse_only():
+    htmls = sorted(RAW_DIR.glob("*/board.html"))
+    if not htmls:
+        print(f"No cached board.html under {RAW_DIR}")
+        return
+    for h in htmls:
+        year = int(h.parent.name)
+        html = h.read_text(encoding="utf-8")
+        rows, err = _extract_board_rows(html, expect_year=year)
+        res = {"year": year, "url": BOARD_URL.format(year=year),
+               "status": 200 if rows else "parse", "html": "", "rows": rows,
+               "error": err}
+        n = _save(year, res)
+        _summary(year, {**res, "rows": rows}, n)
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--year", type=int, default=None,
-                    help="Single year for sanity testing")
-    ap.add_argument("--start", type=int, default=2009)
+    ap.add_argument("--year", type=int, default=None)
+    ap.add_argument("--start", type=int, default=2014)
     ap.add_argument("--end", type=int, default=2026)
-    ap.add_argument("--sleep", type=float, default=3.0,
-                    help="Seconds between requests (be polite)")
+    ap.add_argument("--sleep", type=float, default=3.0)
     ap.add_argument("--force", action="store_true",
-                    help="Re-fetch even if cache exists")
+                    help="Re-fetch even if board.html cache exists")
+    ap.add_argument("--parse-only", action="store_true",
+                    help="Re-parse cached board.html without hitting network")
     args = ap.parse_args()
 
     RAW_DIR.mkdir(parents=True, exist_ok=True)
     PARSED_DIR.mkdir(parents=True, exist_ok=True)
 
+    if args.parse_only:
+        _parse_only()
+        return
+
+    if crequests is None:
+        print("WARNING: curl_cffi not installed — plain requests will likely "
+              "be Cloudflare-blocked. Run: pip install curl_cffi")
     cookies = _build_cookies()
     ua_override = os.environ.get("FG_USER_AGENT")
-    if not cookies:
-        print("WARNING: no FG_CF_CLEARANCE env var set. Cloudflare will "
-              "almost certainly block this. Open FG in your browser, "
-              "DevTools -> Application -> Cookies -> fangraphs.com, copy "
-              "the cf_clearance value, then in PowerShell:")
-        print('  $env:FG_CF_CLEARANCE = "long-encoded-string..."')
-        print('  $env:FG_USER_AGENT   = "<your browser UA from DevTools>"')
-        print("Then re-run.")
-        print()
-    else:
-        masked = {k: f"{v[:8]}...{v[-4:]}" for k, v in cookies.items()}
-        print(f"Using cookies: {masked}")
-        print(f"UA override: {ua_override or '(default chrome)'}")
+    if cookies:
+        print(f"Using cookies: {list(cookies)}  UA={ua_override or '(default)'}")
 
     years = ([args.year] if args.year is not None
-              else list(range(args.start, args.end + 1)))
-    print(f"Years to fetch: {years}")
-    print(f"Cache: {RAW_DIR}")
-    print()
+             else list(range(args.start, args.end + 1)))
+    print(f"Years: {years}\nCache: {RAW_DIR}\n")
 
     for y in years:
-        cache = RAW_DIR / str(y) / "scouting_summary.json"
+        cache = RAW_DIR / str(y) / "board.html"
         if cache.exists() and not args.force:
-            print(f"  {y}: cache hit ({cache.stat().st_size/1024:.0f} KB) — "
-                  f"skipping fetch")
+            print(f"  {y}: cache hit — re-parsing (use --force to refetch)")
+            html = cache.read_text(encoding="utf-8")
+            rows, err = _extract_board_rows(html, expect_year=y)
+            res = {"year": y, "url": BOARD_URL.format(year=y),
+                   "status": 200, "html": "", "rows": rows, "error": err}
+            _summary(y, res, _save(y, res))
             continue
-        print(f"  {y}: fetching...")
-        payload = _fetch_year(y, sleep_s=args.sleep, cookies=cookies,
-                                ua_override=ua_override)
-        if not payload["data"]:
-            print(f"    [FAIL] {y}: nothing returned. See tried endpoints "
-                  f"in cache meta.")
-            # Still save the meta so we can inspect what we tried
-            ydir = RAW_DIR / str(y); ydir.mkdir(parents=True, exist_ok=True)
-            (ydir / "scouting_summary.meta.json").write_text(
-                json.dumps({"year": y, "tried": payload["tried"]},
-                            indent=2))
-            continue
-        _save_raw(y, payload)
-        _summary(y, payload)
+        print(f"  {y}: fetching {BOARD_URL.format(year=y)}")
+        res = _fetch_year(y, cookies, ua_override, args.sleep)
+        _summary(y, res, _save(y, res))
 
 
 if __name__ == "__main__":
