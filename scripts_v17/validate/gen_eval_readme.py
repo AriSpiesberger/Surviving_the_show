@@ -55,12 +55,34 @@ def _section(df, group_col, order, label):
     return "\n".join(out)
 
 
+def _per_horizon(df):
+    """Trajectory-quality table: AP/AUC/Brier/calibration by event x horizon h,
+    each row evaluated on the slice resolved at that h (years_fwd >= h)."""
+    hdr = ("| h | n | pos | base% | AUC | AP | AP_lift | Brier | calib |\n"
+           "|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
+    out = []
+    for ev in EVENTS:
+        sub = df[df.event == ev].sort_values("horizon")
+        if sub.empty:
+            continue
+        rows = [hdr]
+        for _, r in sub.iterrows():
+            calib = "—" if pd.isna(r["calib_ratio"]) else f"{r['calib_ratio']:.2f}"
+            rows.append(
+                f"| {int(r['horizon'])} | {int(r['n'])} | {int(r['pos'])} | "
+                f"{r['base_rate']*100:.2f}% | {r['auc']:.3f} | {r['ap']:.3f} | "
+                f"{r['ap_lift']:.1f}× | {r['brier']:.4f} | {calib} |")
+        out.append(f"\n#### {ev}\n\n" + "\n".join(rows))
+    return "\n".join(out)
+
+
 def main():
     bucket = pd.read_csv(EV / "per_bucket_validation.csv")
     yip = pd.read_csv(EV / "per_yip_validation.csv")
     level = pd.read_csv(EV / "per_level_validation.csv")
+    horizon = pd.read_csv(EV / "per_horizon.csv")
     head = json.loads((EV / "headline.json").read_text())
-    thr = pd.read_csv(EV / "MLB_DEBUT_thresholds_at_p60.csv")
+    H = int(head.get("eval_horizon", 6))
 
     # headline (ALL bucket per event) + weighted
     hl = ["| Event | n | base% | AP | lift | AUC | spearman | precision | recall | F1 |",
@@ -74,41 +96,41 @@ def main():
                   f"{r['spearman_rho']:.3f} | {prec} | {r['recall']:.3f} | {f1} |")
     hl.append(f"| **weighted-AP** | | | **{head['weighted_ap']:.3f}** | | | | | | |")
 
-    thr_rows = ["| yip | threshold | n_above | TP | precision | recall | n_total | n_pos_total |",
-                "|---:|---:|---:|---:|---:|---:|---:|---:|"]
-    for _, r in thr.iterrows():
-        t = "—" if pd.isna(r["threshold"]) else f"{r['threshold']:.3f}"
-        pr = "—" if pd.isna(r["precision"]) else f"{r['precision']:.3f}"
-        rc = "—" if pd.isna(r["recall"]) else f"{r['recall']:.3f}"
-        thr_rows.append(f"| {int(r['yip'])} | {t} | {int(r['n_above'])} | "
-                        f"{int(r['tp_above'])} | {pr} | {rc} | "
-                        f"{int(r['n_total'])} | {int(r['n_pos_total'])} |")
+    md = f"""# Held-out validation — v2.1c conditional refinement
 
-    md = f"""# Held-out validation — v2.0b landmark (censoring-corrected)
-
-Reproducible evaluation of the v2.0b landmark stack against the **10% val
+Reproducible evaluation of the v2.1c landmark stack against the **10% val
 player slice** of the v1.17 seed=42 split — players neither the landmark
 hazards nor the joint XGBoost head trained on. Validation universe: drafted
 players with `draft_year ≤ 2020` (plus IFAs).
 
-**Yardstick: RESOLVED outcomes only.** Raw labels are right-censored (an event
-is recorded only if it occurred by the data cutoff), so a model that predicts
-*eventual* outcome is unfairly penalized for events that will happen after the
-cutoff. The joint XGB therefore trains on — and is evaluated on — **resolved
-rows**: the event was observed, OR the player had ≥6 forward years without it.
-This fixed a severe debut undercount (AAA arms read ~2% debut before; realistic
-now). Knobs: `--censor-window 6` (`fit_joint_xgb_v2.py`), `--resolved-window 6`
-(regen scripts). The **hazards** are survival models — censoring-aware by
-construction — and need no filter.
+**Conditional refinement.** The joint XGB is no longer a terminal scalar head.
+It is a *conditional refinement* of the hazard trajectory: given a player's full
+per-year hazard curves (`hk1..hk10`) + baseline + a **target horizon h**, it
+outputs the refined cumulative `P(event by snap+h)`. Sweeping h=1..10 yields a
+per-year trajectory per event instead of one collapsed scalar. Horizon `h` is an
+input feature (the same trick the landmark hazards use to kill train/inference
+mismatch), and the hazard model's own cumulative answer at h
+(`haz_cum_h_<event>`) is fed in as the quantity to refine — `FEAT_COND` = 74
+features (6 cumulative probs + age/yip + 6 yip-interactions + 5 scouting + 50
+hazard-curve steps + 4 per-event anchors + h).
 
-**Data integrity (this revision):** birthdates backfilled for 2024–25 draft
-classes, FG/TWTC crosswalk 89%→96%, trade-aware `current_org` (latest-season
-affiliate → parent org via MLB Stats API), IFA entry-year anchors, signing-bonus
-backfill. Point-in-time scouting (FanGraphs Board 2017–26 + Trouble-With-The-
-Curve 2013–19): 76 grade/physical/velo/rank/ETA columns in the hazard panel
-(no-lookahead, season ≤ snapshot) + a 5-col current-snapshot summary
-(`scout_fv, scout_ovr_rank, scout_eta_gap, scout_risk, scout_is_scouted`) fed to
-the XGB. HOF_TRAJECTORY dropped from the event set.
+**Yardstick: per-horizon, resolved slice.** Labels are right-censored, so each
+`(player-snap, h)` cell is used only where it is *resolved* — `years_fwd >= h`,
+which (since `years_fwd` is row-level) makes every event head's label
+trustworthy with no per-cell masking. Training keeps resolved `(row, h)` pairs;
+evaluation scores `xp_<event>_h{{h}}` vs `realized_by_h` on the rows resolved at
+that h. The headline below is at **h={H}** (the publish horizon); the per-horizon
+section reports the full h=1..10 trajectory. The **hazards** are survival models
+— censoring-aware by construction. Anything at h>10 is the hazard layer's
+opinion, not the XGB's (no extrapolation).
+
+**Data integrity:** birthdates backfilled for 2024–25 draft classes, FG/TWTC
+crosswalk 89%→96%, trade-aware `current_org`, IFA entry-year anchors,
+signing-bonus backfill. Point-in-time scouting (FanGraphs Board 2017–26 +
+Trouble-With-The-Curve 2013–19): 76 grade/physical/velo/rank/ETA columns in the
+hazard panel (no-lookahead, season ≤ snapshot) + a 5-col current-snapshot
+summary (`scout_fv, scout_ovr_rank, scout_eta_gap, scout_risk,
+scout_is_scouted`) fed to the XGB. HOF_TRAJECTORY dropped from the event set.
 
 ## Stack
 
@@ -116,30 +138,39 @@ the XGB. HOF_TRAJECTORY dropped from the event set.
 |---|---|---|
 | Hazards (per-fold OOF, eval) | `scratch/v20b_oof/fold[0-5]_hazards.pkl` | Each fold trained on the OTHER 5 (val pids excluded). HistGBT, default HP, 314 features (incl. 76 scouting). Survival → censoring-aware. |
 | Hazards (production) | `models/event_classifiers_v2.0b_prod.pkl` | 100% of ≤2020 data. Scores the 2026 cohort (entry 2024–26 — not in training, so no leakage). |
-| XGB head | `models/joint_xgb_v2.0b_{{oof,prod}}.pkl` | OOF stacked CSV, **censoring-corrected (`--censor-window 6`)**. Default HP (`max_depth=6, lr=0.05`). FEAT = hazard probs + age/yip + 5-col scouting summary (19). Honest at XGB layer. |
+| Conditional joint XGB | `models/joint_xgb_v2.0b_{{oof,prod}}.pkl` (`fit_joint_xgb_cond.py`) | OOF stacked, expanded to resolved `(row, h)` pairs for h=1..10. `multi_output_tree` over the 4 heads; per-horizon censoring built in (no `--censor-window`). Outputs `P(event by snap+h)`; monotone in h via cummax at inference. |
+| Timing | `models/time_to_debut_v2.0b_prod.pkl` | LassoCV on v2.0b hazard probs + `mean_t`/`sd_t`. MAE 1.14 yr, Spearman 0.66. |
 
-Scouting features are point-in-time (latest grade with `season ≤ snapshot`),
-so features never see the future. ~4% of rows are scouted (only ranked
-prospects get grades); the rest are NaN/sentinel, which HistGBT handles.
+**Buy-list (`build_v2.0_buylist.py`):** thesis = **`P(MLB_DEBUT ≤ 3y)`**
+(`xp_MLB_DEBUT_h3`) — filter, sort, and the output `p_MLB_DEBUT` column all use
+the 3-year debut slice; ceiling events (top100/established/star) reported at
+h={H} for context (`p_MLB_DEBUT_6y` carried alongside). Universe filters: EXIT
+washouts, point-in-time top-100 drop, currently-MLB drop, R1 kept.
 
-## Headline (ALL bucket, threshold = 0.60)
+**Calibration finding.** Ranking (AUC) is 0.95–0.99 across all events and all h.
+MLB_DEBUT is near-perfectly calibrated (`calib` ≈ 1.0 from h≥3). **STAR_PLUS_ELITE
+is well-ranked but under-calibrated at long horizons** (`calib` ≈ 0.7 by h≥4) —
+the magnitude of stardom is under-predicted; a per-horizon isotonic recal on that
+head is the fix (ranking needs none).
+
+## Headline (ALL bucket, h={H}, threshold = 0.60)
 
 {chr(10).join(hl)}
 
-(MLB_DEBUT 2× weight, others 1×, per-event eligibility filters.)
+(MLB_DEBUT 2× weight, others 1×, per-event eligibility filters. Scores =
+`xp_<event>_h{H}` vs realized-within-{H}y, on rows resolved at h={H}.)
 
-## Per-bucket (threshold = 0.60)
+## Per-horizon trajectory (h=1..10, resolved at each h)
+{_per_horizon(horizon)}
+
+## Per-bucket (h={H}, threshold = 0.60)
 {_section(bucket, "bucket", BUCKET_ORDER, "bucket")}
 
-## Per-yip (threshold = 0.60)
+## Per-yip (h={H}, threshold = 0.60)
 {_section(yip, "snap_offset", list(range(11)), "yip")}
 
-## Per-level (threshold = 0.60)
+## Per-level (h={H}, threshold = 0.60)
 {_section(level, "cur_level", LEVEL_ORDER, "level")}
-
-## Threshold @ precision ≥ 0.60 (MLB_DEBUT per yip)
-
-{chr(10).join(thr_rows)}
 
 ## Statistics glossary
 
@@ -148,6 +179,8 @@ prospects get grades); the rest are NaN/sentinel, which HistGBT handles.
 | `ap` | Average Precision = AU-PR. Headline rare-event metric. |
 | `ap_lift` | `ap / base_rate` — how many × random the ranking is. |
 | `auc` | Area under ROC. Insensitive to class imbalance. |
+| `brier` | Mean squared error of the probability. Lower = better calibrated. |
+| `calib` | Mean-predicted ÷ observed rate. 1.0 = calibrated; <1 under-predicts. |
 | `spearman_rho` | Rank correlation between score and realized 0/1. |
 | `precision/recall/f1` | At threshold 0.60. `—` = undefined (no predicted positives / no positives). |
 | `bucket` | Draft pedigree: R1, R2-R3, R4-R10, R10+ (rounds 11+), IFA. |
@@ -157,27 +190,19 @@ prospects get grades); the rest are NaN/sentinel, which HistGBT handles.
 ## Reproducing
 
 ```bash
-# data integrity backfills (MLB Stats API) + scouting grades
-python -m prospects.ingestion.backfills.birthdate_backfill      # 2024-25 DOB
-python -m prospects.ingestion.backfills.org_backfill            # trade-aware current_org
-python -m scripts.scrape_fangraphs_board --start 2017 --end 2026   # needs curl_cffi
-python -m scripts.build_fg_crosswalk      # 96% match (needs DOB backfill first)
-python -m scripts.build_scouting_grades
-
-# model: OOF folds + hazards + censoring-corrected joint XGB (--censor-window 6
-# is wired into run_v2_0b_oof stage 6 and train_v2_0b_prod stage 1)
+# OOF folds + hazards, then the conditional joint XGB (per-horizon censoring is
+# built in; wired into run_v2_0b_oof stage 6 and train_v2_0b_prod stage 1)
 python -m scripts_v17.train.run_v2_0b_oof
-python -m scripts_v17.train.train_v2_0b_prod    # 100% prod hazards + W=6 XGB + score 2026
+python -m scripts_v17.train.train_v2_0b_prod    # 100% prod hazards + cond XGB + score 2026
 
-# validation on the RESOLVED yardstick (positives + >=6 fwd-yr negatives)
-python -c "import pandas as pd; v=pd.read_csv('results/training/v2.0b_oof_val_long.csv'); \\
-  r=[c for c in v if c.startswith('realized_')]; \\
-  v[(v.years_fwd>=6)|(v[r].sum(1)>0)].to_csv('results/training/v2.0b_oof_val_long_resolved.csv',index=False)"
-python -m scripts_v17.validate.regen_eval_v2_0b_honest \\
-    --val-long results/training/v2.0b_oof_val_long_resolved.csv --threshold 0.60
-python -m scripts_v17.validate.regen_full_eval_v2_0b \\
-    --val-long results/training/v2.0b_oof_val_long_resolved.csv
+# validation — per-horizon, headline at the publish horizon (h={H})
+python -m scripts_v17.validate.regen_eval_v2_0b_honest --eval-horizon {H}
 python -m scripts_v17.validate.gen_eval_readme
+
+# buy list — P(debut <= 3y) thesis
+python scripts_v17/buylist/build_v2.0_buylist.py \\
+    --long results/scored/snap2026_v1.18b_landmark_long.csv \\
+    --xgb models/joint_xgb_v2.0b_prod.pkl --debut-horizon 3 --threshold 0.60
 ```
 """
     OUT.write_text(md, encoding="utf-8")
