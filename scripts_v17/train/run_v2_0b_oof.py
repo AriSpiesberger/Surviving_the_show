@@ -187,11 +187,19 @@ def stage_panel(db_path: str, max_draft_year: int) -> tuple:
     S_list: list[int] = []
     joined: list[dict] = []
     n_skipped = 0
+    n_ifa_capped = 0
     for p in prospects:
         stats = stats_by_pid.get(p["player_id"], [])
         sy = _start_year(p, stats_by_pid)
         if sy is None:
             n_skipped += 1
+            continue
+        # C3 (v2.1): cap IFA entry year the same way draft_year is SQL-capped.
+        # IFAs have no draft_year, so they were never filtered -> post-cutoff
+        # IFAs leaked into this panel, which the PROD hazards (train_mask=None)
+        # reuse 100%, contaminating the "held-out" walk-forward.
+        if p.get("draft_year") is None and sy > max_draft_year:
+            n_ifa_capped += 1
             continue
         lo = max(sy + 1, 2007)
         hi = MAX_OBS_YEAR - 1
@@ -203,7 +211,8 @@ def stage_panel(db_path: str, max_draft_year: int) -> tuple:
             S_list.append(S)
             joined.append(p)
     n_rows = len(plan)
-    print(f"           {n_rows:,} landmark rows  ({n_skipped} skipped)")
+    print(f"           {n_rows:,} landmark rows  ({n_skipped} skipped, "
+          f"{n_ifa_capped:,} IFAs capped at entry<={max_draft_year})")
 
     X_lm = np.empty((n_rows, N_FEATURES), dtype=np.float32)
     for i in tqdm(range(n_rows), desc="panel", unit="row",
@@ -581,11 +590,14 @@ def main():
               f"{XGB_OUT.name}")
         tmp = str(XGB_OUT) + ".tmp"
         rc = subprocess.run([
-            sys.executable, "-m", "scripts_v17.train.fit_joint_xgb_v2",
+            sys.executable, "-m", "scripts_v17.train.fit_joint_xgb_cond",
             "--fit", str(OOF_STACKED),
             "--val", str(OOF_VAL),
             "--db", args.db,
-            "--censor-window", "6",   # drop censored training negatives (<6 fwd yrs)
+            # v2.1c: per-horizon censoring is built in (keep (row,h) iff
+            # years_fwd>=h) — no --censor-window. h-max 10, publish at h=6.
+            "--h-max", "10",
+            "--publish-h", "6",
             "--out", tmp,
         ], cwd=REPO_ROOT).returncode
         if rc != 0:

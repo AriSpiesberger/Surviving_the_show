@@ -50,7 +50,7 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from prospects.classifier.architectures import landmark_survival as lm
 from prospects.classifier.architectures.survival import (
-    ELITE_KEY, MAX_OBS_YEAR, STAR_KEY, _trigger_year,
+    ELITE_KEY, MAX_OBS_YEAR, STAR_KEY, _trigger_year, _last_active_year,
 )
 from prospects.storage import ProspectDB
 from scripts_v17.train.train_v1_18b_prod import (
@@ -58,7 +58,10 @@ from scripts_v17.train.train_v1_18b_prod import (
 )
 
 XGB_OUT = REPO_ROOT / "models" / "joint_xgb_v2.0b_prod.pkl"
-TIMING_PKL = REPO_ROOT / "models" / "time_to_debut_v1.18b_prod.pkl"
+TIMING_PKL = REPO_ROOT / "models" / "time_to_debut_v2.0b_prod.pkl"  # M6 (v2.1): was v1.18b (fit+val contaminated)
+# v2.1: load the PROD hazards that train_v2_0b_prod_hazards actually writes
+# (was importing v1.18b_landmark_prod — a different, older file = pipeline drift).
+LM_HAZ_OUT = REPO_ROOT / "models" / "event_classifiers_v2.0b_prod.pkl"
 SNAP_LONG = REPO_ROOT / "results" / "scored" / "snap2026_v1.18b_landmark_long.csv"
 BUYLIST_ALL = REPO_ROOT / "results" / "buy_lists" / "buy_list_v2.0b_ALL_SCORED.csv"
 BUYLIST_FINAL = REPO_ROOT / "results" / "buy_lists" / "buy_list_v2.0b_FINAL.csv"
@@ -76,7 +79,7 @@ def _ev_name(e) -> str:
 def score_snap_with_landmark(
     hazards: dict, prospects: list[dict], stats_by_pid: dict,
     snap_year: int, out_csv: Path, horizon: int = 15,
-    verbose: bool = True,
+    verbose: bool = True, exit_grace: int = 2,
 ) -> int:
     """Score every prospect at one fixed snap year using landmark hazards.
 
@@ -129,6 +132,20 @@ def score_snap_with_landmark(
         debut = p.get("mlb_debut_year")
         if debut is not None and debut <= snap_year - 1:
             # Already debuted before snap year — outside the buy universe.
+            continue
+        # EXIT event: a never-debuted player whose last MiLB season is more
+        # than exit_grace years before the snap has washed out / retired and is
+        # no longer at-risk. Mirrors the right-censoring used in hazard training
+        # (which drops never-firer rows where label_year > last_active), so the
+        # scoring universe matches the training universe. (la is None => brand-
+        # new entrant with no stats yet — keep.)
+        # M5 (v2.1): compute last_active POINT-IN-TIME (seasons <= snap only).
+        # Using full-history last_active leaks future comebacks at historical
+        # walk-forward snaps (a guy who returns in 2025 looks "active" at 2022).
+        _filt = {p["player_id"]: [s for s in stats_by_pid.get(p["player_id"], [])
+                                  if (s.get("season_year") or 0) <= snap_year]}
+        la = _last_active_year(p, _filt)
+        if la is not None and la < snap_year - exit_grace:
             continue
         rc = dict(p)
         rc["_entry_year"] = ey
@@ -228,7 +245,11 @@ def score_snap_with_landmark(
         if "STAR" in per_ev and "ELITE" in per_ev:
             ps, ts, _, _ = per_ev["STAR"]
             pe, te, _, _ = per_ev["ELITE"]
-            p_u = 1.0 - (1.0 - ps) * (1.0 - pe)
+            # m1 (v2.1): ELITE's trigger components (all_star_three, major_award)
+            # are a SUBSET of STAR's (all_star_once + all_star_three + award), so
+            # STAR ∪ ELITE == STAR. The old 1-(1-ps)(1-pe) double-counted the
+            # shared events. The union probability is just P(STAR).
+            p_u = ps
             trigs = [t for t in (ts, te) if t is not None]
             trig_u = min(trigs) if trigs else None
             elig_u = int(trig_u is None or trig_u > snap_year)
@@ -283,11 +304,14 @@ def main():
         print(f"\n[1/3] Training joint XGBoost on OOF stacked (HONEST, no "
               f"in-sample hazard leakage) -> {XGB_OUT.name}", flush=True)
         rc = subprocess.run(
-            [sys.executable, "-m", "scripts_v17.train.fit_joint_xgb_v2",
+            [sys.executable, "-m", "scripts_v17.train.fit_joint_xgb_cond",
              "--fit", str(oof_fit),
              "--val", str(oof_val),
              "--db",  args.db,
-             "--censor-window", "6",   # censoring correction (XGB layer only)
+             # v2.1c conditional refinement: per-horizon censoring built in;
+             # train h in 1..10, publish the buy list at h=6.
+             "--h-max", "10",
+             "--publish-h", "6",
              "--out", tmp],
             cwd=REPO_ROOT,
         ).returncode

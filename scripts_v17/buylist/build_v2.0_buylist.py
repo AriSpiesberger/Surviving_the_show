@@ -18,56 +18,42 @@ from __future__ import annotations
 import argparse
 import pickle
 import sqlite3
+import sys
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import xgboost as xgb
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from prospects.classifier.joint_cond import predict_trajectory, prep_base
 
 DEFAULT_LONG = "results/scored/snap2026_v17_all_long.csv"
-DEFAULT_XGB = "models/joint_xgb_v2.0_prod.pkl"
-DEFAULT_TIMING = "models/time_to_debut_v1.18_prod.pkl"
+DEFAULT_XGB = "models/joint_xgb_v2.0b_prod.pkl"
+DEFAULT_TIMING = "models/time_to_debut_v2.0b_prod.pkl"  # retrained on v2.0b haz
 DEFAULT_PRICES = "data/prices_bowman_chrome_auto_v13.csv"
 DEFAULT_DB = "prospects_snapshot.db"
 AGE_CENTER, YIP_CENTER = 22, 3
 
 
 def _add_feats(df, db):
-    c = sqlite3.connect(db)
-    birth = pd.read_sql("SELECT player_id, birth_date FROM prospects", c)
-    c.close()
-    birth["birth_year"] = pd.to_datetime(
-        birth["birth_date"], errors="coerce").dt.year
-    df = df.merge(birth[["player_id", "birth_year"]],
-                  on="player_id", how="left")
-    df["age_at_snap"] = (df["snap_year"] - df["birth_year"]).fillna(22.0)
-    df["age_at_snap_centered"] = df["age_at_snap"] - AGE_CENTER
-    df["years_in_pro"] = df["snap_offset"]
-    df["yip_centered"] = df["snap_offset"] - YIP_CENTER
-    for col in [c for c in df.columns if c.startswith("p_")]:
-        if f"{col}_x_yip_centered" not in df.columns:
-            df[f"{col}_x_yip_centered"] = df[col] * df["yip_centered"]
-    import sys as _sys
-    from pathlib import Path as _Path
-    _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-    from prospects.features.scouting_grades import attach_scouting_summary
-    df = attach_scouting_summary(df)  # point-in-time scouting summary cols
+    # Horizon-independent feature prep shared with the trainer/eval. Adds
+    # age_at_snap_centered, years_in_pro, yip_centered, hazard x yip interactions
+    # and the point-in-time scouting summary. We additionally keep the
+    # non-centered age_at_snap for the slim output schema.
+    df = prep_base(df, db)
+    df["age_at_snap"] = df["age_at_snap_centered"] + AGE_CENTER
     return df
 
 
 def _score_xgb(df, xgb_pkl):
+    """Score the conditional model and return the publish-horizon (h=6) cumulative
+    probability per event, as {event: ndarray}. The full per-year trajectory
+    (xp_<event>_h{1..H}) is computed internally; the buy list is a single-horizon
+    artifact so we surface the h=PUBLISH_H slice the bundle was trained to publish."""
     with open(xgb_pkl, "rb") as fh:
         bundle = pickle.load(fh)
-    feat = bundle["feature_names"]
-    scaler = bundle["scaler"]
-    booster = bundle["model"]
-    best_iter = bundle.get("best_iteration")
-    X = scaler.transform(df[feat].values.astype(np.float32))
-    d = xgb.DMatrix(X, feature_names=list(feat))
-    if best_iter is not None:
-        P = booster.predict(d, iteration_range=(0, best_iter + 1))
-    else:
-        P = booster.predict(d)
-    return {ev: P[:, k] for k, ev in enumerate(bundle["events"])}
+    scored = predict_trajectory(bundle, df)
+    return {ev: scored[f"xp_{ev}"].to_numpy() for ev in bundle["events"]}
 
 
 def _score_timing(df, timing_pkl, p_debut):
@@ -180,11 +166,28 @@ def main():
     ap.add_argument("--long", "--snap-long", dest="long",
                     default=DEFAULT_LONG)
     ap.add_argument("--xgb", default=DEFAULT_XGB)
+    ap.add_argument("--xgb-ceiling", default=None,
+                    help="Legacy: single model for both est+star.")
+    ap.add_argument("--xgb-est", default=None,
+                    help="v2.1: model for ESTABLISHED_MLB (e.g. est@9).")
+    ap.add_argument("--xgb-star", default=None,
+                    help="v2.1: model for STAR_PLUS_ELITE (e.g. star@12).")
     ap.add_argument("--timing", default=DEFAULT_TIMING)
     ap.add_argument("--prices", default=DEFAULT_PRICES)
     ap.add_argument("--db", default=DEFAULT_DB)
     ap.add_argument("--threshold", type=float, default=0.60,
-                    help="Flat P(MLB_DEBUT) threshold for FINAL list")
+                    help="Flat P(MLB_DEBUT within debut-horizon yrs) threshold "
+                         "for the FINAL list")
+    ap.add_argument("--debut-horizon", type=int, default=3,
+                    help="Buy thesis = P(MLB_DEBUT within this many years). The "
+                         "FINAL filter, sort, and the output p_MLB_DEBUT column "
+                         "all use this horizon's cumulative slice (default 3y).")
+    ap.add_argument("--max-yip", type=int, default=None,
+                    help="Drop players with > this many years of service "
+                         "(snap_offset). e.g. 4 = only <=4 yrs in pro.")
+    ap.add_argument("--yip-thresholds", default=None,
+                    help="JSON file {yip: P(debut) threshold} for per-yip "
+                         "precision-calibrated cutoffs (overrides --threshold).")
     ap.add_argument("--sort-by", default="p_MLB_DEBUT")
     ap.add_argument("--events", nargs="+",
                     default=["TOP_100_PROSPECT", "MLB_DEBUT",
@@ -202,13 +205,29 @@ def main():
     df = _add_feats(df, args.db)
     df = _join_prospect_meta(df, args.db)
     df = _join_current_level(df, args.db)
-    print(f"Scoring with {args.xgb}")
-    scores = _score_xgb(df, args.xgb)
-    for ev, arr in scores.items():
-        df[f"p_lasso_{ev}"] = arr   # holds v2.0 calibrated probability
-    p_debut = scores["MLB_DEBUT"]
+    print(f"Scoring conditional trajectory with {args.xgb}")
+    with open(args.xgb, "rb") as fh:
+        bundle = pickle.load(fh)
+    scored = predict_trajectory(bundle, df)  # adds xp_<ev>_h{1..H} + xp_<ev> (h6)
+    dh = args.debut_horizon
+    debut_col = f"xp_MLB_DEBUT_h{dh}"
+    if debut_col not in scored.columns:
+        raise SystemExit(f"FATAL: model h_max < debut-horizon={dh} "
+                         f"(missing {debut_col})")
+    # Ceiling/context events reported at the publish horizon (h=6).
+    for ev in args.events:
+        df[f"p_lasso_{ev}"] = scored[f"xp_{ev}"].to_numpy()
+    # Buy thesis: P(MLB debut within `dh` years) drives the filter, sort and the
+    # output p_MLB_DEBUT column. Keep the h=6 debut prob as a context column.
+    df["p_lasso_MLB_DEBUT"] = scored[debut_col].to_numpy()
+    df["p_lasso_MLB_DEBUT_6y"] = scored["xp_MLB_DEBUT_h6"].to_numpy()
+    print(f"  buy thesis = P(MLB_DEBUT <= {dh}y) [{debut_col}]; "
+          f"ceiling events at h=6")
+    # Time-to-debut: feed the publish-horizon (h6) debut prob, the distribution
+    # the timing model was trained against.
     print(f"Scoring time-to-debut with {args.timing}")
-    df["time_to_debut"] = _score_timing(df, args.timing, p_debut)
+    df["time_to_debut"] = _score_timing(df, args.timing,
+                                        scored["xp_MLB_DEBUT"].to_numpy())
 
     if args.prices:
         print(f"Joining eBay prices from {args.prices}")
@@ -216,13 +235,18 @@ def main():
 
     # Universe filters
     n0 = len(df)
-    df = df[df["year_top_100"].isna()].copy()
-    print(f"Drop ever-top-100: {n0:,} -> {len(df):,}  "
+    # Point-in-time: drop only players who were already top-100 AS OF the snap
+    # year. A player who first makes top-100 *after* the snap was not yet known,
+    # so he legitimately belongs in the buy universe at that snap (the
+    # buy-before-pop case). At snap=present this reduces to "drop ever-top-100".
+    was_top100 = (df["year_top_100"].notna()
+                  & (df["year_top_100"] <= df["snap_year"]))
+    df = df[~was_top100].copy()
+    print(f"Drop top-100-as-of-snap: {n0:,} -> {len(df):,}  "
           f"({n0-len(df):,} removed)")
-    n_r1 = len(df)
-    df = df[df["bucket"] != "R1"].copy()
-    print(f"Drop R1 picks (R1 picks are 'top-100' by another name): "
-          f"{n_r1:,} -> {len(df):,}  ({n_r1-len(df):,} removed)")
+    # NOTE: R1 picks are kept — they belong in the buy universe unless they're
+    # already a known (point-in-time) top-100 prospect, handled by the filter
+    # above. (Previously dropped wholesale as "top-100 by another name".)
     if "eligible_MLB_DEBUT" in df.columns:
         n1 = len(df)
         df = df[df["eligible_MLB_DEBUT"] == 1].copy()
@@ -232,23 +256,42 @@ def main():
     df = df[df["cur_level_2026"] != "MLB"].copy()
     print(f"Drop currently-MLB: {n2:,} -> {len(df):,}  "
           f"({n2-len(df):,} removed)")
+    if args.max_yip is not None and "snap_offset" in df.columns:
+        n3 = len(df)
+        df = df[df["snap_offset"] <= args.max_yip].copy()
+        print(f"Drop >{args.max_yip} yrs service (snap_offset): "
+              f"{n3:,} -> {len(df):,}  ({n3-len(df):,} removed)")
 
-    # Apply flat threshold on P(MLB_DEBUT)
-    df["passes_filter"] = df["p_lasso_MLB_DEBUT"] >= args.threshold
-    print(f"P(MLB_DEBUT) >= {args.threshold}: "
-          f"{int(df['passes_filter'].sum()):,} pass")
+    # Threshold: per-yip map (calibrated precision) or a flat cutoff
+    if args.yip_thresholds:
+        import json as _json
+        ymap = {int(k): float(v)
+                for k, v in _json.load(open(args.yip_thresholds)).items()}
+        thr_row = df["snap_offset"].map(ymap)
+        # A yip with no calibrated threshold can't reach the target precision
+        # at any cutoff -> nobody at that yip passes.
+        df["passes_filter"] = thr_row.notna() & (df["p_lasso_MLB_DEBUT"] >= thr_row)
+        print(f"Per-yip thresholds {ymap} on P(debut<={dh}y): "
+              f"{int(df['passes_filter'].sum()):,} pass")
+    else:
+        df["passes_filter"] = df["p_lasso_MLB_DEBUT"] >= args.threshold
+        print(f"P(MLB_DEBUT <= {dh}y) >= {args.threshold}: "
+              f"{int(df['passes_filter'].sum()):,} pass")
 
     keep = ["player_id", "name", "bucket", "draft_year", "draft_round",
             "primary_position", "current_org", "cur_level_2026",
             "age_at_snap", "years_in_pro"]
     keep += [f"p_lasso_{ev}" for ev in args.events]
+    keep += ["p_lasso_MLB_DEBUT_6y"]  # context: P(debut<=6y) alongside the 3y thesis
     keep += ["time_to_debut", "passes_filter"]
     for c in ("ebay_price_median", "ebay_price_p25", "ebay_n_listings",
               "ebay_top_listing_url"):
         if c in df.columns:
             keep.append(c)
-    # Rename p_lasso_* -> p_<event> for slim output
+    # Rename p_lasso_* -> p_<event> for slim output. p_MLB_DEBUT holds the
+    # debut-horizon (3y) thesis; p_MLB_DEBUT_6y is the longer-window context.
     rename = {f"p_lasso_{ev}": f"p_{ev}" for ev in args.events}
+    rename["p_lasso_MLB_DEBUT_6y"] = "p_MLB_DEBUT_6y"
     out = df[keep].rename(columns=rename).copy()
     sort_col = rename.get(args.sort_by, args.sort_by)
     if sort_col in out.columns:
