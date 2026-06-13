@@ -1091,6 +1091,14 @@ def build_scouting_features(
     if milb_only:
         season_stats = [s for s in season_stats
                         if (s.get("level") or "").upper() != "MLB"]
+    # No-lookahead guard (v2.1): drop any season AFTER the snapshot. The
+    # windowed features filter season_year<=as_of locally, but has_any_milb_data
+    # / has_hitting / has_pitching and the years_in_pro / years_in_current_system
+    # fallbacks scan this list RAW — without this they leak whether (and when) a
+    # player will eventually play, and future position conversions. At inference
+    # no future rows exist, so this also removes train/serve skew.
+    season_stats = [s for s in season_stats
+                    if (s.get("season_year") or 0) <= as_of_year]
 
     pos = (prospect.get("primary_position") or "").upper()
     is_pitcher = pos in PITCHER_POS or bool(prospect.get("is_pitcher"))

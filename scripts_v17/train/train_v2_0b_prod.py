@@ -80,6 +80,7 @@ def score_snap_with_landmark(
     hazards: dict, prospects: list[dict], stats_by_pid: dict,
     snap_year: int, out_csv: Path, horizon: int = 15,
     verbose: bool = True, exit_grace: int = 2,
+    prorate_asof: str | None = None,
 ) -> int:
     """Score every prospect at one fixed snap year using landmark hazards.
 
@@ -114,7 +115,10 @@ def score_snap_with_landmark(
             return "IFA"
         r = p.get("draft_round")
         if r is None:
-            return "IFA"
+            # Not international + no draft round: a genuine domestic UNDRAFTED
+            # free agent (its own section), unless we know they were drafted
+            # but lack the round (treat as a late pick).
+            return "UDFA" if p.get("draft_year") is None else "R10+"
         r = int(r)
         if r == 1:
             return "R1"
@@ -162,6 +166,19 @@ def score_snap_with_landmark(
                          if (s.get("season_year") or 0) <= snap_year]
         for r in cohort
     }
+    if prorate_asof:
+        # Mid-season scoring: interpolate the in-progress snap_year season to
+        # a full-season equivalent so counting features stay in-distribution
+        # (the panel trains on complete seasons only). Opt-in — historical
+        # walk-forward snaps must NEVER pro-rate their complete seasons.
+        import datetime as _dt
+        from prospects.features.prorate import prorate_partial_season
+        _asof = _dt.date.fromisoformat(prorate_asof)
+        sub_stats = {pid: prorate_partial_season(rows, snap_year, _asof)
+                     for pid, rows in sub_stats.items()}
+        if verbose:
+            print(f"[score-snap] pro-rated in-progress {snap_year} season "
+                  f"to full equivalents (as of {prorate_asof})", flush=True)
     # Chunk the inference. predict_cumulative_batch_landmark builds the
     # 238-feature vector per player in a tight Python loop; doing that for
     # 35k prospects at once fragments heap badly enough to MemoryError on
@@ -277,6 +294,12 @@ def main():
     ap.add_argument("--skip-xgb", action="store_true")
     ap.add_argument("--skip-score", action="store_true")
     ap.add_argument("--skip-buylist", action="store_true")
+    ap.add_argument("--prorate-asof", default=None, metavar="YYYY-MM-DD",
+                    help="Mid-season scoring: interpolate the in-progress "
+                         "snap-year season to full-season equivalents as of "
+                         "this date (counting stats only; rows under 50 PA / "
+                         "15 IP dropped). Live snaps only — never use on "
+                         "historical walk-forward snaps.")
     args = ap.parse_args()
 
     t_start = time.time()
@@ -342,6 +365,10 @@ def main():
                 WHERE (p.draft_year IS NOT NULL
                         AND p.draft_year BETWEEN 2010 AND ?)
                    OR COALESCE(p.is_international, 0) = 1
+                   OR (p.draft_year IS NULL
+                        AND COALESCE(p.is_international, 0) = 0
+                        AND p.player_id IN (SELECT DISTINCT player_id
+                                            FROM season_stats))
             """, (args.snap_year - 1,)).fetchall()]
             stats_rows = conn.execute(
                 "SELECT * FROM season_stats").fetchall()
@@ -355,7 +382,7 @@ def main():
         n = score_snap_with_landmark(
             hazards, prospects, stats_by_pid,
             snap_year=args.snap_year, out_csv=SNAP_LONG,
-            verbose=True,
+            verbose=True, prorate_asof=args.prorate_asof,
         )
         print(f"  wrote {n:,} rows in {time.time()-t0:.0f}s -> {SNAP_LONG}",
               flush=True)

@@ -206,11 +206,19 @@ def build_landmark_panel(
     landmark_years: list[int] = []
     joined: list[dict] = []
     n_skipped = 0
+    n_ifa_capped = 0
     for p in prospects:
         stats = stats_by_pid.get(p["player_id"], [])
         sy = _start_year(p, stats_by_pid)
         if sy is None:
             n_skipped += 1
+            continue
+        # C3 (v2.1): cap IFA entry year the SAME way draft year is capped in the
+        # SQL. IFAs have no draft_year, so the query's `draft_year <= max` never
+        # filtered them — post-cutoff IFAs were leaking into training (and into
+        # the "held-out" 2021 walk-forward). Drop IFAs whose entry > cutoff.
+        if p.get("draft_year") is None and sy > max_draft_year:
+            n_ifa_capped += 1
             continue
         # Landmark range: from start_year+1 (so we have at least one
         # observed pre-landmark season feeding the features) up to
@@ -228,7 +236,8 @@ def build_landmark_panel(
     n_rows = len(plan)
     if verbose:
         print(f"[landmark-panel] {n_rows:,} landmark rows planned "
-              f"({n_skipped} prospects skipped, no start_year)")
+              f"({n_skipped} skipped no start_year, "
+              f"{n_ifa_capped:,} IFAs capped at entry<={max_draft_year})")
 
     X_lm = np.empty((n_rows, N_FEATURES), dtype=np.float32)
     CHUNK = 5000
@@ -314,6 +323,15 @@ def landmark_event_rows(
 
         for k in range(1, K + 1):
             label_year = S + k
+            # Symmetric censoring: the label year must be fully observed.
+            # Past the data cutoff a positive is counted only because it's
+            # already recorded, while a same-year negative simply hasn't
+            # happened yet (e.g. an August debut at a June refresh) — the C1
+            # half-resolved pattern. Drop the whole tail; label_year only grows
+            # with k, so break (mirrors exit_landmark_rows). This also drops the
+            # year's recorded positives — the price of symmetric censoring.
+            if label_year > max_obs_year:
+                break
             # Never fires by end of observation: y=0 if at-risk, dropped
             # if censored.
             if trig is None:

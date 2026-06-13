@@ -96,7 +96,9 @@ def _bucket_of(player: dict) -> str:
         return "IFA"
     r = player.get("draft_round")
     if r is None:
-        return "IFA"
+        # not international + no draft round -> domestic UDFA (own section),
+        # unless drafted with an unknown round.
+        return "UDFA" if player.get("draft_year") is None else "R10+"
     r = int(r)
     if r == 1:
         return "R1"

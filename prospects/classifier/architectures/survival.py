@@ -443,6 +443,12 @@ def labels_and_eligibility(
     eligible = np.zeros(n, dtype=bool)
     y = np.zeros(n, dtype=np.int8)
     for i, (p, yr) in enumerate(zip(joined, years)):
+        # Label year past the data cutoff is half-resolved: recorded positives
+        # are counted while same-year negatives simply haven't happened yet.
+        # Drop symmetrically (mirrors landmark_event_rows / exit_landmark_rows).
+        if yr > max_obs_year:
+            eligible[i] = False
+            continue
         trig = _trigger_year(p, event)
         if trig is None:
             if right_censor:
