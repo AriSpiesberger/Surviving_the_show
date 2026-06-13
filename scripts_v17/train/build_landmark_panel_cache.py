@@ -86,6 +86,10 @@ def step1_prep(db_path: str, max_draft_year: int) -> int:
             JOIN career_outcomes o ON o.player_id = p.player_id
             WHERE (p.draft_year IS NOT NULL AND p.draft_year <= ?)
                OR COALESCE(p.is_international, 0) = 1
+               OR (p.draft_year IS NULL
+                    AND COALESCE(p.is_international, 0) = 0
+                    AND p.player_id IN (SELECT DISTINCT player_id
+                                        FROM season_stats))
         """, (max_draft_year,)).fetchall()]
         stats_rows = conn.execute("SELECT * FROM season_stats").fetchall()
         try:

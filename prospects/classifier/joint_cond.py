@@ -80,8 +80,14 @@ FEAT_BASE = (
 )
 # Horizon-specific anchors: the hazard model's own cumulative answer at h.
 HAZ_CUM_H = [f"haz_cum_h_{e}" for e in EVENTS]
+# Acquisition / pedigree tier — point-in-time (known at signing, no look-ahead).
+# The hazard layer has draft_round/signing-bonus but NO is_udfa flag, so it can't
+# tell a domestic UNDRAFTED free agent from a low-info draftee and over-projects
+# them (val calib: UDFA debut 1.49x, establish 1.71x; IFA establish 1.41x; R1
+# establish UNDER at 0.67x). These let the XGB shrink UDFA/IFA and lift R1.
+ACQ_FEATS = ["is_ifa", "is_udfa", "draft_round_filled"]
 # Full conditional feature vector.
-FEAT_COND = FEAT_BASE + HAZARD_CURVE + HAZ_CUM_H + ["h_centered"]
+FEAT_COND = FEAT_BASE + HAZARD_CURVE + HAZ_CUM_H + ["h_centered"] + ACQ_FEATS
 
 
 # --------------------------------------------------------------------------
@@ -97,17 +103,33 @@ def prep_base(df: pd.DataFrame, db: str, max_entry: int | None = None) -> pd.Dat
     c = sqlite3.connect(db)
     birth = pd.read_sql("SELECT player_id, birth_date FROM prospects", c)
     c.close()
-    birth["birth_year"] = pd.to_datetime(
-        birth["birth_date"], errors="coerce").dt.year
-    df = df.merge(birth[["player_id", "birth_year"]], on="player_id", how="left")
-    df["age_at_snap_centered"] = (
-        (df["snap_year"] - df["birth_year"]).fillna(22.0) - AGE_CENTER
-    )
+    birth["_bd"] = pd.to_datetime(birth["birth_date"], errors="coerce")
+    df = df.merge(birth[["player_id", "_bd"]], on="player_id", how="left")
+    # Baseball age as of July 1 of the snap season (matches
+    # season_stats.age_during_season used by the hazard panel). Calendar age
+    # (snap_year - birth_year) over-counts up to a year for late-year birthdays.
+    _ref = pd.to_datetime(df["snap_year"].astype("Int64").astype("string")
+                          + "-07-01", errors="coerce")
+    _age = (_ref - df["_bd"]).dt.days / 365.25
+    df["age_at_snap_centered"] = _age.fillna(22.0) - AGE_CENTER
+    df = df.drop(columns=["_bd"])
     df["years_in_pro"] = df["snap_offset"]
     df["yip_centered"] = df["snap_offset"] - YIP_CENTER
     for p in HAZARD_PROBS:
         if p in df.columns:
             df[f"{p}_x_yip_centered"] = df[p] * df["yip_centered"]
+    # Acquisition tier (point-in-time; known at signing). is_international is in
+    # the longs; UDFA = domestic with no draft_year; draft_round_filled gives the
+    # XGB the pedigree depth (NaN -> 50 = undrafted/IFA late sentinel).
+    _intl = (pd.to_numeric(df["is_international"], errors="coerce").fillna(0)
+             if "is_international" in df.columns else pd.Series(0.0, index=df.index))
+    _dy = (pd.to_numeric(df["draft_year"], errors="coerce")
+           if "draft_year" in df.columns else pd.Series(np.nan, index=df.index))
+    _dr = (pd.to_numeric(df["draft_round"], errors="coerce")
+           if "draft_round" in df.columns else pd.Series(np.nan, index=df.index))
+    df["is_ifa"] = (_intl == 1).astype(float)
+    df["is_udfa"] = ((_intl != 1) & _dy.isna()).astype(float)
+    df["draft_round_filled"] = _dr.fillna(50.0)
     df = attach_scouting_summary(df)
     if max_entry is not None and "entry_year" in df.columns:
         df = df[df.entry_year <= max_entry].copy()

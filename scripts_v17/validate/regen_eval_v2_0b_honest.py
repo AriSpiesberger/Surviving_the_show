@@ -147,7 +147,9 @@ def _bucket_of(row) -> str:
     try:
         rnd = int(rnd)
     except Exception:
-        return "UNKNOWN"
+        # not international + no draft round -> domestic UDFA, unless drafted
+        # with an unknown round.
+        return "UDFA" if row.get("draft_year") in (None, "") else "R10+"
     if rnd == 1:
         return "R1"
     if 2 <= rnd <= 3:
