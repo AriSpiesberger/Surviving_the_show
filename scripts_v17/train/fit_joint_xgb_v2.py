@@ -101,6 +101,11 @@ def main():
     # observation (their 0 label is unreliable — the event may still occur).
     # Positives are always kept. Applies to the fit set ONLY, never val.
     ap.add_argument("--censor-window", type=int, default=0)
+    # Resolve the censor window on ONE specific event (its negatives need W fwd
+    # years to be trustworthy) rather than "any event". Lets each per-event
+    # model use that event's true resolution window (debut 5, estab 9, star 12).
+    ap.add_argument("--censor-event", default=None,
+                    help="Event name to resolve censoring on (default: any).")
     ap.add_argument("--out", default="models/joint_xgb_v2.0h.pkl")
     args = ap.parse_args()
 
@@ -108,11 +113,16 @@ def main():
     fit = _prep(pd.read_csv(args.fit), args.db, args.max_entry)
     val = _prep(pd.read_csv(args.val), args.db, args.max_entry)
     if args.censor_window > 0:
-        pos = fit[[f"realized_{e}" for e in EVENTS]].sum(axis=1) > 0
-        keep = (fit["years_fwd"] >= args.censor_window) | pos
-        print(f"  censor-window={args.censor_window}: keeping "
-              f"{int(keep.sum()):,}/{len(fit):,} fit rows "
-              f"(all {int(pos.sum()):,} positives + resolved negatives)")
+        # C1 (v2.1): SYMMETRIC horizon-matched censoring. Keep a row only if it
+        # has >= W forward years of observation -- drop short-window rows
+        # REGARDLESS of outcome. The old "(years_fwd>=W) | any-positive" kept all
+        # short-window positives while dropping short-window negatives, which
+        # selected on the label (recent snaps became ~98% positive) and inflated
+        # every metric. Symmetric dropping removes that selection bias.
+        keep = fit["years_fwd"] >= args.censor_window
+        tag = args.censor_event or "obs-window"
+        print(f"  censor-window={args.censor_window} ({tag}, symmetric): keeping "
+              f"{int(keep.sum()):,}/{len(fit):,} fit rows (>= W fwd yrs)")
         fit = fit[keep].reset_index(drop=True)
     print(f"  fit: {len(fit):,} rows, {fit.player_id.nunique():,} players")
     print(f"  val: {len(val):,} rows, {val.player_id.nunique():,} players")

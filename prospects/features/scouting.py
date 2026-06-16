@@ -124,6 +124,19 @@ PEDIGREE_FEATS = [
     "times_top100",           # count of years in top-100 <= as_of_year
     "years_since_first_top100",  # as_of_year - earliest top-100 year
     "log_best_top100_rank",   # log(rank+1) — better as a linear feature
+    # v2.0c: TheBaseballCube ORG (team-level) prospect rankings, as-of aware.
+    # Much higher coverage than top-100 (every org top-30 vs national top-100),
+    # so this fires for far more players. Per year we collapse multi-source
+    # lists to the best (min) org rank. Trends are anchored to the most recent
+    # ranked year <= as_of; POSITIVE trend = climbed toward #1 in the org.
+    "ever_org_ranked",            # 1 if on any org list in a year <= as_of_year
+    "best_org_rank",              # min org rank over years <= as_of (MISSING if never)
+    "recent_org_rank",            # org rank in the latest year <= as_of
+    "times_org_ranked",           # count of distinct years on an org list <= as_of
+    "years_since_first_org_ranked",  # as_of_year - earliest org-ranked year
+    "log_best_org_rank",          # log(best_org_rank + 1)
+    "org_rank_trend_1y",          # rank(recent-1) - rank(recent); + = climbed
+    "org_rank_trend_2y",          # rank(recent-2) - rank(recent); + = climbed
 ]
 
 # Per-year features (computed for yT, y1, y2)
@@ -1174,6 +1187,48 @@ def build_scouting_features(
         pedigree["times_top100"] = 0.0
         pedigree["years_since_first_top100"] = MISSING
         pedigree["log_best_top100_rank"] = MISSING
+
+    # v2.0c: TBC ORG rankings, as-of-year aware. prospect["_org_rankings"] is a
+    # list of (year, org_rank) attached at panel-build time. Collapse to one
+    # best (min) org rank per year, using only years <= as_of_year so no future
+    # ranking leaks into a snapshot.
+    org_rankings = prospect.get("_org_rankings") or []
+    org_by_year: dict[int, int] = {}
+    for (y, rk) in org_rankings:
+        if y is None or rk is None:
+            continue
+        y = int(y)
+        if y > as_of_year:
+            continue
+        rk = int(rk)
+        if y not in org_by_year or rk < org_by_year[y]:
+            org_by_year[y] = rk
+    if org_by_year:
+        years_sorted = sorted(org_by_year)
+        best_org = min(org_by_year.values())
+        recent_year = years_sorted[-1]
+        recent_org = org_by_year[recent_year]
+        first_year = years_sorted[0]
+        pedigree["ever_org_ranked"] = 1.0
+        pedigree["best_org_rank"] = float(best_org)
+        pedigree["recent_org_rank"] = float(recent_org)
+        pedigree["times_org_ranked"] = float(len(org_by_year))
+        pedigree["years_since_first_org_ranked"] = float(as_of_year - first_year)
+        pedigree["log_best_org_rank"] = float(math.log1p(best_org))
+        # Trend anchored to the most recent ranked year (+ = climbed toward #1).
+        prev1 = org_by_year.get(recent_year - 1)
+        prev2 = org_by_year.get(recent_year - 2)
+        pedigree["org_rank_trend_1y"] = float(prev1 - recent_org) if prev1 is not None else MISSING
+        pedigree["org_rank_trend_2y"] = float(prev2 - recent_org) if prev2 is not None else MISSING
+    else:
+        pedigree["ever_org_ranked"] = 0.0
+        pedigree["best_org_rank"] = MISSING
+        pedigree["recent_org_rank"] = MISSING
+        pedigree["times_org_ranked"] = 0.0
+        pedigree["years_since_first_org_ranked"] = MISSING
+        pedigree["log_best_org_rank"] = MISSING
+        pedigree["org_rank_trend_1y"] = MISSING
+        pedigree["org_rank_trend_2y"] = MISSING
 
     # ---- B. Per-year aggregates (compute for yT, y1, y2) ----
     year_aggs: dict[int, dict] = {}

@@ -98,6 +98,13 @@ def step1_prep(db_path: str, max_draft_year: int) -> int:
                 "FROM prospect_rankings").fetchall()
         except Exception:
             rank_rows = []
+        try:
+            # v2.0c: TBC org (team-level) rankings. as_of is 'YYYY-01-01'.
+            org_rank_rows = conn.execute(
+                "SELECT player_id, as_of, org_rank FROM rankings_history "
+                "WHERE org_rank IS NOT NULL").fetchall()
+        except Exception:
+            org_rank_rows = []
 
     stats_by_pid: dict[str, list[dict]] = {}
     for s in stats_rows:
@@ -109,6 +116,19 @@ def step1_prep(db_path: str, max_draft_year: int) -> int:
         rankings_by_pid.setdefault(r[0], []).append((r[1], r[2], r[3]))
     for p in prospects:
         p["_top100_rankings"] = rankings_by_pid.get(p["player_id"], [])
+
+    # v2.0c: attach TBC org rankings as (year, org_rank) tuples.
+    org_rankings_by_pid: dict[str, list[tuple[int, int]]] = {}
+    for r in org_rank_rows:
+        try:
+            yr = int(str(r[1])[:4])
+        except (ValueError, TypeError):
+            continue
+        org_rankings_by_pid.setdefault(r[0], []).append((yr, int(r[2])))
+    for p in prospects:
+        p["_org_rankings"] = org_rankings_by_pid.get(p["player_id"], [])
+    n_with_org = sum(1 for p in prospects if p["_org_rankings"])
+    print(f"         {n_with_org:,} prospects have >=1 org ranking")
 
     n_draft = sum(1 for p in prospects if p.get("draft_year") is not None)
     print(f"         {len(prospects):,} prospects "
