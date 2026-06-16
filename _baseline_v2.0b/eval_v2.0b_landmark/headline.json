@@ -1,0 +1,32 @@
+{
+  "model": "C:\\Users\\arisp\\Documents\\Research\\Surviving_the_show\\models\\joint_xgb_v2.0b_oof.pkl",
+  "val_long": "C:\\Users\\arisp\\Documents\\Research\\Surviving_the_show\\results\\training\\v2.0b_oof_val_long.csv",
+  "eval_horizon": 6,
+  "weighted_ap": 0.4424335479327871,
+  "per_event": [
+    {
+      "event": "TOP_100_PROSPECT",
+      "ap": 0.4441994082026083,
+      "auc": 0.9806735796408089,
+      "ap_lift": 48.49579564113246
+    },
+    {
+      "event": "MLB_DEBUT",
+      "ap": 0.6477825095519237,
+      "auc": 0.9460655715431031,
+      "ap_lift": 8.763743498175948
+    },
+    {
+      "event": "ESTABLISHED_MLB",
+      "ap": 0.3555621364586745,
+      "auc": 0.9606693844125535,
+      "ap_lift": 17.895946381568496
+    },
+    {
+      "event": "STAR_PLUS_ELITE",
+      "ap": 0.11684117589880548,
+      "auc": 0.9628152247520486,
+      "ap_lift": 26.014984867706072
+    }
+  ]
+}

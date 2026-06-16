@@ -172,6 +172,28 @@ def score_with_xgb(long_csv, xgb_pkl,
     with open(xgb_pkl, "rb") as fh:
         bundle = pickle.load(fh)
     df = _prepare_long(long_csv, age_center, yip_center, db)
+
+    # v2.0c: conditional per-horizon bundle (fit_joint_xgb_cond). Its features
+    # are per-horizon (hk*, haz_cum_h, h_centered) so a flat booster.predict is
+    # wrong — integrate the hazard curve via predict_trajectory and expose the
+    # publish-horizon cumulative P(event by h) as lasso_score_<event>. We score
+    # on a raw prep_base copy and merge xp_<event> back onto the eval cohort by
+    # (player_id, snap_year) so all downstream tables keep _prepare_long's cols.
+    if str(bundle.get("kind", "")).startswith("joint_xgb_cond") or "h_max" in bundle:
+        from prospects.classifier.joint_cond import prep_base, predict_trajectory
+        events = list(bundle["events"])
+        raw = prep_base(pd.read_csv(long_csv), db)
+        raw = predict_trajectory(bundle, raw)
+        xp_cols = [f"xp_{ev}" for ev in events if f"xp_{ev}" in raw.columns]
+        df = df.merge(raw[["player_id", "snap_year"] + xp_cols],
+                      on=["player_id", "snap_year"], how="left")
+        for ev in events:
+            if f"xp_{ev}" in df.columns:
+                df[f"lasso_score_{ev}"] = df[f"xp_{ev}"]
+        if "MLB_DEBUT" in events:
+            df["lasso_score"] = df["lasso_score_MLB_DEBUT"]
+        return df, events
+
     booster = bundle["model"]
     scaler = bundle["scaler"]
     feat = bundle["feature_names"]

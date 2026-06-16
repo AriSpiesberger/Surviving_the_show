@@ -42,10 +42,9 @@ from sklearn.metrics import (
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
+from prospects.classifier.joint_cond import prep_base, predict_trajectory
 from scripts_v17.validate.regen_eval_v2_0b_honest import (
-    EVENTS, EVENT_WEIGHTS, AGE_CENTER, YIP_CENTER, HAZARD_PROBS,
-    _prep_for_xgb, _score_xgb, _join_current_level, _metric_row,
-    _bucket_of,
+    EVENTS, EVENT_WEIGHTS, _join_current_level, _metric_row, _bucket_of,
 )
 
 VAL_LONG = REPO_ROOT / "results" / "training" / "v2.0b_oof_val_long.csv"
@@ -54,20 +53,40 @@ TIMING_PKL = REPO_ROOT / "models" / "time_to_debut_v1.18_prod.pkl"
 DB = REPO_ROOT / "prospects_snapshot.db"
 OUT_DIR = REPO_ROOT / "evaluation" / "v2.0b_landmark"
 
-# Confidence intervals on AUC via DeLong-ish bootstrap-ish — simpler version
-def _auc_ci(y, p, n_boot=200, seed=42) -> tuple[float, float, float]:
+# AUC + bootstrap CI. M3 (v2.1): when `groups` (player_id) is given, do a
+# CLUSTER bootstrap — resample players with replacement and take ALL their rows
+# — because ~7.4 near-duplicate landmark rows per player make an iid row
+# bootstrap several times too narrow. Falls back to iid if groups is None.
+def _auc_ci(y, p, groups=None, n_boot=200, seed=42) -> tuple[float, float, float]:
     if y.sum() == 0 or y.sum() == len(y):
         return float("nan"), float("nan"), float("nan")
     rng = np.random.default_rng(seed)
-    n = len(y)
-    aucs = []
-    for _ in range(n_boot):
-        idx = rng.integers(0, n, n)
-        ys = y[idx]; ps = p[idx]
-        if ys.sum() == 0 or ys.sum() == len(ys):
-            continue
-        aucs.append(roc_auc_score(ys, ps))
     a = float(roc_auc_score(y, p))
+    aucs = []
+    if groups is not None:
+        groups = np.asarray(groups)
+        idx_by_g: dict = {}
+        for i, g in enumerate(groups):
+            idx_by_g.setdefault(g, []).append(i)
+        uniq = np.array(list(idx_by_g.keys()), dtype=object)
+        idx_by_g = {g: np.asarray(v) for g, v in idx_by_g.items()}
+        for _ in range(n_boot):
+            samp = rng.choice(len(uniq), len(uniq), replace=True)
+            idx = np.concatenate([idx_by_g[uniq[j]] for j in samp])
+            ys = y[idx]; ps = p[idx]
+            if ys.sum() == 0 or ys.sum() == len(ys):
+                continue
+            aucs.append(roc_auc_score(ys, ps))
+    else:
+        n = len(y)
+        for _ in range(n_boot):
+            idx = rng.integers(0, n, n)
+            ys = y[idx]; ps = p[idx]
+            if ys.sum() == 0 or ys.sum() == len(ys):
+                continue
+            aucs.append(roc_auc_score(ys, ps))
+    if not aucs:
+        return a, float("nan"), float("nan")
     return a, float(np.percentile(aucs, 2.5)), float(np.percentile(aucs, 97.5))
 
 
@@ -133,7 +152,8 @@ def _detailed_metrics(sub: pd.DataFrame, event: str,
     p = sub[p_col].astype(float).values
     pos = int(y.sum())
     base = float(y.mean())
-    auc, auc_lo, auc_hi = _auc_ci(y, p)
+    grp = sub["player_id"].values if "player_id" in sub.columns else None
+    auc, auc_lo, auc_hi = _auc_ci(y, p, groups=grp)  # M3: cluster by player
     ap = float(average_precision_score(y, p)) if pos else float("nan")
     ap_lift = ap / base if base > 0 and ap == ap else float("nan")
     brier = float(brier_score_loss(y, p)) if pos else float("nan")
@@ -421,13 +441,14 @@ def main():
     df = pd.read_csv(args.val_long)
     print(f"  {len(df):,} rows, {df.player_id.nunique():,} pids")
     if args.resolved_window > 0:
-        rcols = [c for c in df.columns if c.startswith("realized_")]
-        keep = (df["years_fwd"] >= args.resolved_window) | (df[rcols].sum(axis=1) > 0)
+        # C1 (v2.1): symmetric — >= W fwd yrs regardless of outcome (no label
+        # selection; the old "| any-positive" inflated the base rate).
+        keep = df["years_fwd"] >= args.resolved_window
         df = df[keep].reset_index(drop=True)
-        print(f"  resolved-window={args.resolved_window}: {len(df):,} rows")
-    df = _prep_for_xgb(df, str(DB), args.max_entry)
+        print(f"  resolved-window={args.resolved_window} (symmetric): {len(df):,} rows")
+    df = prep_base(df, str(DB), max_entry=args.max_entry)
     print(f"Scoring with {XGB_PKL.name}...")
-    df = _score_xgb(df, XGB_PKL)
+    df = predict_trajectory(pickle.load(open(XGB_PKL, "rb")), df)
     df = _join_current_level(df, str(DB))
     df["bucket"] = df.apply(_bucket_of, axis=1)
     print(f"  prepared: {len(df):,} rows\n")
