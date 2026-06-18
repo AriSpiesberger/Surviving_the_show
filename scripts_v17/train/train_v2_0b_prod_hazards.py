@@ -35,7 +35,20 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--tag", default=None,
+                    help="Read the tagged panel cache "
+                         "(scratch/v20b_oof_<tag>/) and write tagged prod "
+                         "hazards, matching run_v2_0b_oof --tag. The panel is "
+                         "already partial-sampled if it was built that way, so "
+                         "no separate partial flag is needed here.")
     args = ap.parse_args()
+
+    global PANEL_NPZ, PANEL_META, OUT
+    if args.tag:
+        scratch = REPO_ROOT / "scratch" / f"v20b_oof_{args.tag}"
+        PANEL_NPZ = scratch / "panel_cache.npz"
+        PANEL_META = scratch / "panel_meta.pkl"
+        OUT = REPO_ROOT / "models" / f"event_classifiers_v2.0b_{args.tag}_prod.pkl"
 
     if OUT.exists() and not args.force:
         print(f"PROD hazards already exist at {OUT}. --force to overwrite.")

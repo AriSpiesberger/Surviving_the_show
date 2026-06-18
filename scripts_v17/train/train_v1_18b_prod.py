@@ -56,6 +56,7 @@ from prospects.classifier.architectures import landmark_survival as lm
 from prospects.classifier.architectures.survival import (
     ELITE_KEY, MAX_OBS_YEAR, STAR_KEY, _trigger_year,
 )
+from prospects.features.partial_sample import partial_for_features
 from prospects.schema import CareerEvent
 from prospects.storage import ProspectDB
 
@@ -114,6 +115,7 @@ def score_pids_with_landmark(
     pid_set: set[str], out_csv: Path,
     max_entry_year: int = 2020, observe_through: int = MAX_OBS_YEAR,
     max_offset: int = 10, horizon: int = 15, verbose: bool = True,
+    partial_seed: int | None = None,
 ) -> int:
     """For each pid in pid_set, score at snap = entry_year + 0..max_offset
     using landmark hazards. Emits CSV with same columns as
@@ -163,8 +165,10 @@ def score_pids_with_landmark(
     for si, snap in enumerate(snap_keys):
         group = snap_groups[snap]
         sub_stats = {
-            r["player_id"]: [s for s in stats_by_pid.get(r["player_id"], [])
-                             if (s.get("season_year") or 0) <= snap]
+            r["player_id"]: partial_for_features(
+                [s for s in stats_by_pid.get(r["player_id"], [])
+                 if (s.get("season_year") or 0) <= snap],
+                snap, r["player_id"], partial_seed)
             for r in group
         }
         out = lm.predict_cumulative_batch_landmark(

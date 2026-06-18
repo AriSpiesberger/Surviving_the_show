@@ -56,6 +56,7 @@ from prospects.classifier.architectures.survival import (
     STAR_COMPONENT_COLS, STAR_KEY,
     _last_active_year, _trigger_year, build_windowed_features,
 )
+from prospects.features.partial_sample import partial_for_features
 from prospects.features.scouting import FEATURE_NAMES, N_FEATURES
 from prospects.schema import CareerEvent
 from prospects.storage import ProspectDB
@@ -135,8 +136,18 @@ def build_landmark_panel(
     max_landmark_year: int | None = None,
     include_ifa: bool = True,
     verbose: bool = True,
+    partial_seed: int | None = None,
 ) -> tuple[np.ndarray, list[str], list[int], list[dict], dict]:
     """Build the per-landmark feature matrix.
+
+    partial_seed : int | None
+        Training-time partial-season augmentation. When None (default) the
+        panel is built from complete seasons exactly as before. When set, the
+        current (landmark-year S) stint of each landmark is stochastically
+        down-sampled to an in-progress partial line via
+        partial_for_features, so the hazards train on the real mid-season
+        feature manifold instead of only complete seasons. Deterministic in
+        (player_id, S, partial_seed).
 
     Returns
     -------
@@ -249,7 +260,9 @@ def build_landmark_panel(
             # so it never peeks at the label year; here the label year is
             # S+k (k>=1), so features at as_of=S are equivalent in
             # information leakage to as_of=year-1 in survival.py.
-            vec = build_windowed_features(p, stats, S, milb_only=True)
+            # Optionally down-sample season S to a partial in-progress line.
+            stats_S = partial_for_features(stats, S, p["player_id"], partial_seed)
+            vec = build_windowed_features(p, stats_S, S, milb_only=True)
             X_lm[i, :] = vec
         gc.collect()
         if verbose:
