@@ -8,6 +8,7 @@ README never drifts from the numbers.
 """
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 
@@ -77,6 +78,25 @@ def _per_horizon(df):
 
 
 def main():
+    global EV, OUT
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--in-dir", default=str(EV),
+                    help="Directory of per_* CSVs + headline.json to render.")
+    ap.add_argument("--out", default=str(OUT),
+                    help="Output markdown path.")
+    ap.add_argument("--tag", default=None,
+                    help="Convenience: render the tagged eval "
+                         "(evaluation/v2.0b_<tag>_landmark/ -> "
+                         "evaluation/README_<tag>.md) unless overridden.")
+    args = ap.parse_args()
+    if args.tag:
+        if args.in_dir == str(EV):
+            args.in_dir = str(REPO / "evaluation" / f"v2.0b_{args.tag}_landmark")
+        if args.out == str(OUT):
+            args.out = str(REPO / "evaluation" / f"README_{args.tag}.md")
+    EV = Path(args.in_dir)
+    OUT = Path(args.out)
+
     bucket = pd.read_csv(EV / "per_bucket_validation.csv")
     yip = pd.read_csv(EV / "per_yip_validation.csv")
     level = pd.read_csv(EV / "per_level_validation.csv")

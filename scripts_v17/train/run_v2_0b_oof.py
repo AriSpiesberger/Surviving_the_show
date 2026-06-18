@@ -59,6 +59,7 @@ from prospects.classifier.architectures.survival import (
     ELITE_KEY, MAX_OBS_YEAR, STAR_KEY, _trigger_year,
     build_windowed_features,
 )
+from prospects.features.partial_sample import partial_for_features
 from prospects.storage import ProspectDB
 from scripts_v17.train.train_v1_18b_prod import (
     _bucket_of, _entry_year as _entry_year_v18, _ev_name,
@@ -128,7 +129,8 @@ def _entry_year(player: dict, stats_by_pid: dict) -> int | None:
 
 
 # ---- Stage 1: panel build with tqdm ----
-def stage_panel(db_path: str, max_draft_year: int) -> tuple:
+def stage_panel(db_path: str, max_draft_year: int,
+                partial_seed: int | None = None) -> tuple:
     if PANEL_NPZ.exists() and PANEL_META.exists():
         print(f"[Stage 1] loading panel cache {PANEL_NPZ.name}")
         npz = np.load(PANEL_NPZ, allow_pickle=True)
@@ -238,7 +240,8 @@ def stage_panel(db_path: str, max_draft_year: int) -> tuple:
     for i in tqdm(range(n_rows), desc="panel", unit="row",
                   mininterval=1.0, smoothing=0.05):
         p, stats, S = plan[i]
-        X_lm[i, :] = build_windowed_features(p, stats, S, milb_only=True)
+        stats_S = partial_for_features(stats, S, p["player_id"], partial_seed)
+        X_lm[i, :] = build_windowed_features(p, stats_S, S, milb_only=True)
         if (i + 1) % 25000 == 0:
             gc.collect()
 
@@ -316,7 +319,8 @@ def stage_partition(prospects: list[dict], stats_by_pid: dict,
 def _score_checkpointed(hazards, prospects_all, stats_by_pid,
                          pid_set, out_csv: Path, partial_dir: Path,
                          max_entry_year: int, observe_through: int,
-                         max_offset: int, horizon: int):
+                         max_offset: int, horizon: int,
+                         partial_seed: int | None = None):
     """Per-snap checkpointed scorer. Writes one CSV per snap to
     partial_dir/snap_NNNN.csv, then concats into out_csv. If process
     dies, re-running picks up from the first missing snap."""
@@ -373,8 +377,10 @@ def _score_checkpointed(hazards, prospects_all, stats_by_pid,
         for chunk_lo in range(0, len(group_full), PLAYER_CHUNK):
             group = group_full[chunk_lo:chunk_lo + PLAYER_CHUNK]
             sub_stats = {
-                r["player_id"]: [s for s in stats_by_pid.get(r["player_id"], [])
-                                 if (s.get("season_year") or 0) <= snap]
+                r["player_id"]: partial_for_features(
+                    [s for s in stats_by_pid.get(r["player_id"], [])
+                     if (s.get("season_year") or 0) <= snap],
+                    snap, r["player_id"], partial_seed)
                 for r in group
             }
             out = lm.predict_cumulative_batch_landmark(
@@ -460,7 +466,8 @@ def run_one_fold(X_lm, pids, S_yrs, joined, stats_by_pid,
                   prospects_all, train_set: set[str], score_set: set[str],
                   out_csv: Path, max_entry_year: int, seed: int,
                   partial_dir: Path, hazards_pkl: Path,
-                  hazard_hp: dict | None = None):
+                  hazard_hp: dict | None = None,
+                  partial_seed: int | None = None):
     train_mask = np.array([p in train_set for p in pids], dtype=bool)
     print(f"           train_mask: {int(train_mask.sum()):,} / "
           f"{len(pids):,} landmark rows")
@@ -497,6 +504,7 @@ def run_one_fold(X_lm, pids, S_yrs, joined, stats_by_pid,
         partial_dir,
         max_entry_year=max_entry_year,
         observe_through=MAX_OBS_YEAR, max_offset=10, horizon=15,
+        partial_seed=partial_seed,
     )
     return n, hazards
 
@@ -508,14 +516,38 @@ def main():
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--max-draft-year", type=int, default=2020)
     ap.add_argument("--max-entry-year", type=int, default=2020)
+    ap.add_argument("--partial-seed", type=int, default=None,
+                    help="Enable partial-final-season training augmentation "
+                         "with this seed (down-samples each landmark's current "
+                         "season to an in-progress line). Omit for the "
+                         "complete-season baseline.")
+    ap.add_argument("--tag", default=None,
+                    help="Artifact namespace suffix (e.g. 'partial'). When set, "
+                         "the scratch dir + stacked/val longs + XGB are written "
+                         "side-by-side under this tag, leaving the baseline "
+                         "v2.0b artifacts intact.")
     args = ap.parse_args()
+
+    # Namespace all outputs under --tag so a partial run sits beside the
+    # complete-season baseline (the panel cache that train_v2_0b_prod_hazards
+    # reuses lives in this tagged scratch dir).
+    global SCRATCH, PANEL_NPZ, PANEL_META, OOF_STACKED, OOF_VAL, XGB_OUT
+    if args.tag:
+        SCRATCH = REPO_ROOT / "scratch" / f"v20b_oof_{args.tag}"
+        PANEL_NPZ = SCRATCH / "panel_cache.npz"
+        PANEL_META = SCRATCH / "panel_meta.pkl"
+        OOF_STACKED = TRAIN_DIR / f"v2.0b_{args.tag}_oof_stacked_long.csv"
+        OOF_VAL = TRAIN_DIR / f"v2.0b_{args.tag}_oof_val_long.csv"
+        XGB_OUT = REPO_ROOT / "models" / f"joint_xgb_v2.0b_{args.tag}_oof.pkl"
 
     SCRATCH.mkdir(parents=True, exist_ok=True)
     TRAIN_DIR.mkdir(parents=True, exist_ok=True)
     log_path = _install_logging()
     print("="*78)
     print(f"v2.0b OOF — K={args.k}, seed={args.seed}, "
-          f"max_entry={args.max_entry_year}")
+          f"max_entry={args.max_entry_year}"
+          + (f", partial_seed={args.partial_seed}, tag={args.tag}"
+             if args.partial_seed is not None or args.tag else ""))
     print(f"log -> {log_path}")
     print("="*78)
     t_start = time.time()
@@ -526,7 +558,7 @@ def main():
 
     # Stage 1
     X_lm, pids, S_yrs, joined, stats_by_pid = stage_panel(
-        args.db, args.max_draft_year)
+        args.db, args.max_draft_year, partial_seed=args.partial_seed)
 
     # Stage 2 — need a deduped prospects list for partitioning
     prospects_seen: set[str] = set()
@@ -563,6 +595,7 @@ def main():
             train_set=train_set, score_set=fold_sets[j], out_csv=out,
             max_entry_year=args.max_entry_year, seed=args.seed,
             partial_dir=partial_dir, hazards_pkl=hazards_pkl,
+            partial_seed=args.partial_seed,
         )
         print(f"           wrote {n:,} rows")
         last_hazards = hazards
@@ -599,6 +632,7 @@ def main():
             OOF_VAL, val_partial_dir,
             max_entry_year=args.max_entry_year,
             observe_through=MAX_OBS_YEAR, max_offset=10, horizon=15,
+            partial_seed=args.partial_seed,
         )
         print(f"           wrote {n:,} rows")
 

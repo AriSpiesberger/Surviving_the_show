@@ -1,0 +1,32 @@
+{
+  "model": "models\\joint_xgb_v2.0b_partial_oof.pkl",
+  "val_long": "results\\training\\v2.0b_valpartial_partialHaz_long.csv",
+  "eval_horizon": 6,
+  "weighted_ap": 0.443199322925458,
+  "per_event": [
+    {
+      "event": "TOP_100_PROSPECT",
+      "ap": 0.5295592432313426,
+      "auc": 0.9874328457679888,
+      "ap_lift": 71.0953862765146
+    },
+    {
+      "event": "MLB_DEBUT",
+      "ap": 0.6045666496505936,
+      "auc": 0.9469418110512491,
+      "ap_lift": 11.264258218382887
+    },
+    {
+      "event": "ESTABLISHED_MLB",
+      "ap": 0.32818859460360994,
+      "auc": 0.9725730656266551,
+      "ap_lift": 26.62404493240838
+    },
+    {
+      "event": "STAR_PLUS_ELITE",
+      "ap": 0.1491154774911501,
+      "auc": 0.9737309291785643,
+      "ap_lift": 52.63776355437598
+    }
+  ]
+}

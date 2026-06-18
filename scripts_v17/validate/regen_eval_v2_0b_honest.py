@@ -176,18 +176,43 @@ def _add_rby(df: pd.DataFrame, horizon: int) -> pd.DataFrame:
 
 
 def main():
+    global XGB_PKL, OUT_DIR, VAL_LONG
     ap = argparse.ArgumentParser()
     ap.add_argument("--max-entry", type=int, default=2020)
     ap.add_argument("--threshold", type=float, default=0.50,
                     help="Score cutoff for the confusion-matrix view. "
                          "0.60 is the production buy-list cutoff.")
     ap.add_argument("--val-long", default=str(VAL_LONG))
+    ap.add_argument("--xgb", default=str(XGB_PKL),
+                    help="Conditional joint XGB to evaluate.")
+    ap.add_argument("--out-dir", default=str(OUT_DIR),
+                    help="Directory for the per-* CSVs + headline.json.")
+    ap.add_argument("--tag", default=None,
+                    help="Convenience: evaluate the tagged model produced by "
+                         "run_v2_0b_oof --tag (sets --val-long, --xgb, and "
+                         "--out-dir to the tagged variants unless explicitly "
+                         "overridden).")
     ap.add_argument("--eval-horizon", type=int, default=PUBLISH_H,
                     help="Horizon h for the headline/stratified tables: score "
                          "xp_<event>_h{h} vs realized-within-h, on rows resolved "
                          "at h (years_fwd >= h). Default = publish horizon (6).")
     args = ap.parse_args()
     H = args.eval_horizon
+
+    if args.tag:
+        # Only fill in defaults the user didn't explicitly override.
+        if args.val_long == str(VAL_LONG):
+            args.val_long = str(REPO_ROOT / "results" / "training"
+                                / f"v2.0b_{args.tag}_oof_val_long.csv")
+        if args.xgb == str(XGB_PKL):
+            args.xgb = str(REPO_ROOT / "models"
+                           / f"joint_xgb_v2.0b_{args.tag}_oof.pkl")
+        if args.out_dir == str(OUT_DIR):
+            args.out_dir = str(REPO_ROOT / "evaluation"
+                               / f"v2.0b_{args.tag}_landmark")
+    XGB_PKL = Path(args.xgb)
+    OUT_DIR = Path(args.out_dir)
+    VAL_LONG = Path(args.val_long)
 
     print(f"Loading {Path(args.val_long).name}...")
     df = pd.read_csv(args.val_long)

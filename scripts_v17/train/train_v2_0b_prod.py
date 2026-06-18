@@ -300,7 +300,37 @@ def main():
                          "this date (counting stats only; rows under 50 PA / "
                          "15 IP dropped). Live snaps only — never use on "
                          "historical walk-forward snaps.")
+    ap.add_argument("--tag", default=None,
+                    help="Consume + write tagged artifacts (matching "
+                         "run_v2_0b_oof/train_v2_0b_prod_hazards --tag): the "
+                         "tagged OOF longs + prod hazards in, a tagged XGB / "
+                         "snap-long / buy list out. The 2026 snap scoring stays "
+                         "complete-season (live partials use --prorate-asof). "
+                         "The timing model is NOT tagged by default — pass "
+                         "--timing to override.")
+    ap.add_argument("--timing", default=str(TIMING_PKL),
+                    help="Timing model for the buy list (default: the baseline "
+                         "v2.0b timing model, reused across tags).")
     args = ap.parse_args()
+
+    global XGB_OUT, LM_HAZ_OUT, SNAP_LONG, BUYLIST_ALL, BUYLIST_FINAL
+    oof_fit = REPO_ROOT / "results" / "training" / "v2.0b_oof_stacked_long.csv"
+    oof_val = REPO_ROOT / "results" / "training" / "v2.0b_oof_val_long.csv"
+    if args.tag:
+        XGB_OUT = REPO_ROOT / "models" / f"joint_xgb_v2.0b_{args.tag}_prod.pkl"
+        LM_HAZ_OUT = (REPO_ROOT / "models"
+                      / f"event_classifiers_v2.0b_{args.tag}_prod.pkl")
+        SNAP_LONG = (REPO_ROOT / "results" / "scored"
+                     / f"snap{args.snap_year}_v2.0b_{args.tag}_landmark_long.csv")
+        BUYLIST_ALL = (REPO_ROOT / "results" / "buy_lists"
+                       / f"buy_list_v2.0b_{args.tag}_ALL_SCORED.csv")
+        BUYLIST_FINAL = (REPO_ROOT / "results" / "buy_lists"
+                         / f"buy_list_v2.0b_{args.tag}_FINAL.csv")
+        oof_fit = (REPO_ROOT / "results" / "training"
+                   / f"v2.0b_{args.tag}_oof_stacked_long.csv")
+        oof_val = (REPO_ROOT / "results" / "training"
+                   / f"v2.0b_{args.tag}_oof_val_long.csv")
+    timing_pkl = Path(args.timing)
 
     t_start = time.time()
     print("=" * 78)
@@ -318,8 +348,7 @@ def main():
         # into the XGB and inflates the rare-event (est/star) heads. The OOF
         # stacked CSV scores every row with a hazard model that never trained
         # on it, so the XGB learns the real "hazard prob -> outcome" mapping.
-        oof_fit = REPO_ROOT / "results" / "training" / "v2.0b_oof_stacked_long.csv"
-        oof_val = REPO_ROOT / "results" / "training" / "v2.0b_oof_val_long.csv"
+        # (oof_fit/oof_val resolved above — tagged when --tag is set.)
         if not oof_fit.exists() or not oof_val.exists():
             sys.exit("FATAL: missing OOF stacked/val long CSVs. Run "
                      "run_v2_0b_oof first (produces honest out-of-fold longs).")
@@ -398,7 +427,7 @@ def main():
                                  "buylist" / "build_v2.0_buylist.py"),
              "--long", str(SNAP_LONG),
              "--xgb", str(XGB_OUT),
-             "--timing", str(TIMING_PKL),
+             "--timing", str(timing_pkl),
              "--prices", str(PRICES_FROM),
              "--db", args.db,
              "--out-all", str(BUYLIST_ALL),
