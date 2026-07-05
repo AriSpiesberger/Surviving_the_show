@@ -191,6 +191,8 @@ CAREER_TO_DATE_FEATS = [
     "had_lost_season",                 # any gap year with no PA/IP between active yrs
     "seasons_missed_career",           # count of such gap years
     "consecutive_active_seasons",      # current active-year streak
+    "injury_suspected_last2",          # injury-flagged season in as_of-1..as_of
+    "injury_suspected_career",         # count of injury-flagged seasons <= as_of
     "current_pa_vs_max_pa",            # this year's PA / max single-year PA
     "current_ip_vs_max_ip",            # this year's IP / max single-year IP
     # Tier 2: performance regression vs personal peak
@@ -659,7 +661,20 @@ def _career_to_date(
         out["distinct_levels_played"] = 0.0
         out["reached_AA"] = 0.0
         out["reached_AAA"] = 0.0
+        out["injury_suspected_last2"] = 0.0
+        out["injury_suspected_career"] = 0.0
         return out
+
+    # ---- Injury-flag features (from season_meta_backfill.injury_suspected) ----
+    # A statistically-detected injury season (usage cratered vs the player's
+    # baseline). Lets the model DISCOUNT a low year as injury rather than read
+    # it as decline. last2 = flagged in the recent window (as_of-1..as_of);
+    # career = total flagged seasons observed so far.
+    inj_years = {int(r["season_year"]) for r in past
+                 if r.get("injury_suspected") and r.get("season_year") is not None}
+    out["injury_suspected_last2"] = float(
+        bool(inj_years & {as_of_year, as_of_year - 1}))
+    out["injury_suspected_career"] = float(len(inj_years))
 
     total_pa = sum((r.get("pa") or 0) for r in past)
     total_ip = sum((r.get("ip") or 0) for r in past)

@@ -1,11 +1,13 @@
 {
   "fired_2x_card_ids": [
-    "ebay-09-14655-81921"
+    "ebay-09-14655-81921",
+    "ebay-15-14656-85988"
   ],
   "fired_debut_player_ids": [
     "draft_2022_david_sandlin_r11p325",
     "draft_2023_sean_sullivan_r2p46",
+    "draft_2024_joshua_kuroda-grauer_r3p75",
     "ifa_695001"
   ],
-  "last_run": "2026-06-18"
+  "last_run": "2026-07-05"
 }

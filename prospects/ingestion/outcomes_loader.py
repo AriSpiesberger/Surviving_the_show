@@ -27,7 +27,7 @@ from typing import Optional
 
 import numpy as np
 
-from prospects.outcome_labels import label_career
+from prospects.outcome_labels import ESTABLISHED_SUSTAINED_SEASONS, label_career
 from prospects.schema import CareerEvent, CareerOutcome
 from prospects.storage import ProspectDB
 
@@ -240,19 +240,36 @@ def pull_outcomes(
     award_year_map = (awards_lower[major_award_mask]
                       .groupby("playerID")["yearID"].min().to_dict())
 
+    def _sustained_mlb_seasons(bbref: str) -> list[int]:
+        """MLB seasons with meaningful usage (>=100 PA or >=20 IP), sorted.
+        Role-fair: a multi-year reliever/utility career qualifies even below
+        the 200 IP / 500 PA cumulative bars."""
+        pa_by_yr = dict(bat_year_pa.get(bbref, []))
+        ip_by_yr = dict(pit_year_ip.get(bbref, []))
+        yrs = sorted(set(pa_by_yr) | set(ip_by_yr))
+        return [y for y in yrs
+                if pa_by_yr.get(y, 0) >= 100 or ip_by_yr.get(y, 0) >= 20]
+
     def _established_year(bbref: str) -> Optional[int]:
-        """First year cumulative PA >= 500 or cumulative IP >= 200."""
+        """First year the player crosses ANY established path: cumulative
+        PA >= 500, cumulative IP >= 200, or the 3rd meaningful MLB season."""
+        cands: list[int] = []
         cum_pa = 0.0
         for yr, pa in sorted(bat_year_pa.get(bbref, [])):
             cum_pa += pa
             if cum_pa >= 500:
-                return yr
+                cands.append(yr)
+                break
         cum_ip = 0.0
         for yr, ip in sorted(pit_year_ip.get(bbref, [])):
             cum_ip += ip
             if cum_ip >= 200:
-                return yr
-        return None
+                cands.append(yr)
+                break
+        sustained = _sustained_mlb_seasons(bbref)
+        if len(sustained) >= ESTABLISHED_SUSTAINED_SEASONS:
+            cands.append(sustained[ESTABLISHED_SUSTAINED_SEASONS - 1])
+        return min(cands) if cands else None
 
     if verbose:
         print(f"  Lahman ready ({time.time()-t0:.1f}s)")
@@ -300,6 +317,7 @@ def pull_outcomes(
 
             career_pa = int(bat_pa.get(bbref, 0) or 0)
             career_ip = float(pitch_ip.get(bbref, 0.0) or 0.0)
+            n_sustained = len(_sustained_mlb_seasons(bbref))
             allstar_n = int(allstar_counts.get(bbref, 0))
             mvp_n = int(mvp_counts.get(bbref, 0))
             cy_n = int(cy_counts.get(bbref, 0))
@@ -311,6 +329,7 @@ def pull_outcomes(
                 career_complete=(last_int is None or last_int < 2025),
                 career_pa=career_pa,
                 career_ip=career_ip,
+                n_sustained_mlb_seasons=n_sustained,
                 career_war=0.0,  # Lahman doesn't carry WAR
                 all_star_selections=allstar_n,
                 mvp_count=mvp_n,

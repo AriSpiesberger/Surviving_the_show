@@ -175,6 +175,13 @@ def main():
     ap.add_argument("--timing", default=DEFAULT_TIMING)
     ap.add_argument("--prices", default=DEFAULT_PRICES)
     ap.add_argument("--db", default=DEFAULT_DB)
+    ap.add_argument("--calibrators", default=None,
+                    help="prob_calibrators_v2.0b.pkl (from fit_prob_calibrators). "
+                         "When set, the output p_<event> columns are isotonic-"
+                         "calibrated to true probabilities (raw kept as "
+                         "p_<event>_raw). The debut filter then operates on the "
+                         "calibrated debut prob, so --threshold reads as a real "
+                         "probability.")
     ap.add_argument("--threshold", type=float, default=0.60,
                     help="Flat P(MLB_DEBUT within debut-horizon yrs) threshold "
                          "for the FINAL list")
@@ -182,6 +189,11 @@ def main():
                     help="Buy thesis = P(MLB_DEBUT within this many years). The "
                          "FINAL filter, sort, and the output p_MLB_DEBUT column "
                          "all use this horizon's cumulative slice (default 3y).")
+    ap.add_argument("--debut-horizons", default="2,3,4,6",
+                    help="Comma list of debut horizons to emit as "
+                         "p_MLB_DEBUT_<h>y columns (the trajectory, not one "
+                         "number). The --debut-horizon thesis and 6y are always "
+                         "included. Default 2,3,4,6.")
     ap.add_argument("--max-yip", type=int, default=None,
                     help="Drop players with > this many years of service "
                          "(snap_offset). e.g. 4 = only <=4 yrs in pro.")
@@ -214,15 +226,51 @@ def main():
     if debut_col not in scored.columns:
         raise SystemExit(f"FATAL: model h_max < debut-horizon={dh} "
                          f"(missing {debut_col})")
+    # Optional isotonic calibration: map raw conditional-XGB scores -> true
+    # probabilities using per-(event, horizon) calibrators fit on the held-out
+    # val. Keeps the raw score as p_lasso_<col>_raw.
+    cal = None
+    if args.calibrators:
+        with open(args.calibrators, "rb") as fh:
+            cal = pickle.load(fh)["calibrators"]
+        print(f"  calibrating probabilities with {Path(args.calibrators).name} "
+              f"({len(cal)} (event,h) calibrators)")
+
+    def _cal(values, event, h):
+        """Calibrate a raw score vector for (event, h); identity if no cal."""
+        if cal is None or (event, h) not in cal:
+            return values
+        return cal[(event, h)].predict(values)
+
     # Ceiling/context events reported at the publish horizon (h=6).
     for ev in args.events:
-        df[f"p_lasso_{ev}"] = scored[f"xp_{ev}"].to_numpy()
-    # Buy thesis: P(MLB debut within `dh` years) drives the filter, sort and the
-    # output p_MLB_DEBUT column. Keep the h=6 debut prob as a context column.
-    df["p_lasso_MLB_DEBUT"] = scored[debut_col].to_numpy()
-    df["p_lasso_MLB_DEBUT_6y"] = scored["xp_MLB_DEBUT_h6"].to_numpy()
+        if ev == "MLB_DEBUT":
+            continue  # debut handled below across multiple horizons
+        raw = scored[f"xp_{ev}"].to_numpy()
+        if cal is not None:
+            df[f"p_lasso_{ev}_raw"] = raw
+        df[f"p_lasso_{ev}"] = _cal(raw, ev, 6)
+    # DEBUT IS A TRAJECTORY, not one number: emit P(MLB debut <= h) at every
+    # requested horizon (default 2y/3y/4y/6y), each with its own calibrator.
+    # dh (default 3y) is the thesis that drives the filter/sort.
+    debut_hs = sorted({int(x) for x in str(args.debut_horizons).split(",")}
+                      | {dh, 6})
+    for h in debut_hs:
+        col = f"xp_MLB_DEBUT_h{h}"
+        if col not in scored.columns:
+            continue
+        raw = scored[col].to_numpy()
+        if cal is not None:
+            df[f"p_lasso_MLB_DEBUT_{h}y_raw"] = raw
+        df[f"p_lasso_MLB_DEBUT_{h}y"] = _cal(raw, "MLB_DEBUT", h)
+    # Thesis column (filter/sort) = the debut-horizon slice.
+    df["p_lasso_MLB_DEBUT"] = df[f"p_lasso_MLB_DEBUT_{dh}y"]
+    if cal is not None:
+        df["p_lasso_MLB_DEBUT_raw"] = df[f"p_lasso_MLB_DEBUT_{dh}y_raw"]
     print(f"  buy thesis = P(MLB_DEBUT <= {dh}y) [{debut_col}]; "
-          f"ceiling events at h=6")
+          f"debut horizons emitted: {', '.join(f'{h}y' for h in debut_hs)}; "
+          f"ceiling events at h=6"
+          + ("  [CALIBRATED]" if cal is not None else ""))
     # Time-to-debut: feed the publish-horizon (h6) debut prob, the distribution
     # the timing model was trained against.
     print(f"Scoring time-to-debut with {args.timing}")
@@ -278,20 +326,39 @@ def main():
         print(f"P(MLB_DEBUT <= {dh}y) >= {args.threshold}: "
               f"{int(df['passes_filter'].sum()):,} pass")
 
+    debut_hs = sorted({int(x) for x in str(args.debut_horizons).split(",")}
+                      | {dh, 6})
     keep = ["player_id", "name", "bucket", "draft_year", "draft_round",
             "primary_position", "current_org", "cur_level_2026",
             "age_at_snap", "years_in_pro"]
-    keep += [f"p_lasso_{ev}" for ev in args.events]
-    keep += ["p_lasso_MLB_DEBUT_6y"]  # context: P(debut<=6y) alongside the 3y thesis
+    # ceiling events + the debut thesis col + the full debut trajectory
+    keep += [f"p_lasso_{ev}" for ev in args.events if ev != "MLB_DEBUT"]
+    keep += ["p_lasso_MLB_DEBUT"]
+    keep += [f"p_lasso_MLB_DEBUT_{h}y" for h in debut_hs]
     keep += ["time_to_debut", "passes_filter"]
     for c in ("ebay_price_median", "ebay_price_p25", "ebay_n_listings",
               "ebay_top_listing_url"):
         if c in df.columns:
             keep.append(c)
-    # Rename p_lasso_* -> p_<event> for slim output. p_MLB_DEBUT holds the
-    # debut-horizon (3y) thesis; p_MLB_DEBUT_6y is the longer-window context.
-    rename = {f"p_lasso_{ev}": f"p_{ev}" for ev in args.events}
-    rename["p_lasso_MLB_DEBUT_6y"] = "p_MLB_DEBUT_6y"
+    # Rename p_lasso_* -> p_<event>. p_MLB_DEBUT = the thesis (dh) slice;
+    # p_MLB_DEBUT_<h>y = the calibrated debut probability at each horizon.
+    rename = {f"p_lasso_{ev}": f"p_{ev}"
+              for ev in args.events if ev != "MLB_DEBUT"}
+    rename["p_lasso_MLB_DEBUT"] = "p_MLB_DEBUT"
+    for h in debut_hs:
+        rename[f"p_lasso_MLB_DEBUT_{h}y"] = f"p_MLB_DEBUT_{h}y"
+    # When calibrated, carry the raw scores alongside (p_<event>_raw).
+    if cal is not None:
+        for ev in args.events:
+            if ev == "MLB_DEBUT":
+                continue
+            rc = f"p_lasso_{ev}_raw"
+            if rc in df.columns:
+                keep.append(rc); rename[rc] = f"p_{ev}_raw"
+        for h in debut_hs:
+            rc = f"p_lasso_MLB_DEBUT_{h}y_raw"
+            if rc in df.columns:
+                keep.append(rc); rename[rc] = f"p_MLB_DEBUT_{h}y_raw"
     out = df[keep].rename(columns=rename).copy()
     sort_col = rename.get(args.sort_by, args.sort_by)
     if sort_col in out.columns:

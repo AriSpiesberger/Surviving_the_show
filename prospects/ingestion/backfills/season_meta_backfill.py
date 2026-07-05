@@ -183,14 +183,26 @@ def derive_injury_suspected(db: ProspectDB, verbose: bool = True) -> int:
             agg["rids"].append(s["rowid"])
         years = sorted(per_year)
         for i, y in enumerate(years):
-            if i == 0 or i == len(years) - 1:
-                continue  # need both neighbors
+            if i == 0:
+                continue  # need a prior season as a baseline
             cur = per_year[y]
             prev = per_year[years[i - 1]]
-            nxt = per_year[years[i + 1]]
-            tiny_h = cur["pa"] < 100 and prev["pa"] >= 400 and nxt["pa"] >= 400
-            tiny_p = (cur["ip"] < 30 and prev["ip"] >= 100 and nxt["ip"] >= 100)
-            if tiny_h or tiny_p:
+            nxt = per_year[years[i + 1]] if i < len(years) - 1 else None
+            # (a) sandwiched-low: usage craters between two full seasons.
+            sand_h = (nxt is not None and cur["pa"] < 100
+                      and prev["pa"] >= 400 and nxt["pa"] >= 400)
+            sand_p = (nxt is not None and cur["ip"] < 30
+                      and prev["ip"] >= 100 and nxt["ip"] >= 100)
+            # (b) one-sided sharp drop after a full season — fires WITHOUT a
+            # full next season, so it catches season-ending injuries and the
+            # most-recent / current year (the live-scoring blind spot). The
+            # prev>= guards gate by role (a pitcher's prev_pa~0, a hitter's
+            # prev_ip~0), so the two paths don't cross-fire on two-way lines.
+            drop_h = (prev["pa"] >= 300 and cur["pa"] < 250
+                      and cur["pa"] < 0.40 * prev["pa"])
+            drop_p = (prev["ip"] >= 80 and cur["ip"] < 60
+                      and cur["ip"] < 0.40 * prev["ip"])
+            if sand_h or sand_p or drop_h or drop_p:
                 for rid in cur["rids"]:
                     flag_updates.append((1, rid))
 

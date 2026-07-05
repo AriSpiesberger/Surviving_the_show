@@ -22,6 +22,11 @@ from prospects.schema import CareerEvent, CareerOutcome
 
 ESTABLISHED_MLB_PA = 500          # ~one full position-player season
 ESTABLISHED_MLB_IP = 200          # ~one starter year or 3 RP years
+# Role-fair "sustained MLB" path: a multi-year MLB contributor counts as
+# established even below the volume bars above. Captures career relievers /
+# utility players that the 200 IP / 500 PA cumulative thresholds wrongly
+# excluded (e.g. a 7-year reliever at 55 IP/yr never reaches 200 career IP).
+ESTABLISHED_SUSTAINED_SEASONS = 3  # >=3 MLB seasons with meaningful usage
 
 TOP_100_RANK_THRESHOLD = 100      # ever appeared on a major top-100 list
 TOP_25_RANK_THRESHOLD = 25        # ever appeared in top 25
@@ -62,6 +67,7 @@ def label_career(outcome: CareerOutcome) -> CareerOutcome:
     events[CareerEvent.ESTABLISHED_MLB] = (
         outcome.career_pa >= ESTABLISHED_MLB_PA
         or outcome.career_ip >= ESTABLISHED_MLB_IP
+        or outcome.n_sustained_mlb_seasons >= ESTABLISHED_SUSTAINED_SEASONS
     )
 
     # Star events

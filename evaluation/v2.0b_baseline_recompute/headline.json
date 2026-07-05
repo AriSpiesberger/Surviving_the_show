@@ -1,6 +1,6 @@
 {
-  "model": "models\\joint_xgb_v2.0b_oof.pkl",
-  "val_long": "results\\training\\v2.0b_oof_val_long.csv",
+  "model": "C:\\Users\\arisp\\Documents\\Research\\Surviving_the_show\\models\\joint_xgb_v2.0b_oof.pkl",
+  "val_long": "C:\\Users\\arisp\\Documents\\Research\\Surviving_the_show\\results\\training\\v2.0b_oof_val_long.csv",
   "eval_horizon": 6,
   "weighted_ap": 0.4912802531920228,
   "per_event": [
