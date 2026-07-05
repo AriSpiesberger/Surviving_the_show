@@ -53,6 +53,12 @@ def main():
     ap.add_argument("--max-entry", type=int, default=2020)
     ap.add_argument("--min-n", type=int, default=15,
                     help="Skip a yip with fewer than this many eligible rows.")
+    ap.add_argument("--calibrators", default=None,
+                    help="prob_calibrators pkl. When set, thresholds are emitted "
+                         "in CALIBRATED probability space, so they apply directly "
+                         "to a calibrated buy list (build_v2.0_buylist "
+                         "--calibrators). Ranking is unchanged (isotonic is "
+                         "monotone) — only the threshold VALUES are calibrated.")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
     H = args.horizon
@@ -63,6 +69,12 @@ def main():
     df = pd.read_csv(args.val_long)
     df = prep_base(df, DB, max_entry=args.max_entry)
     df = predict_trajectory(pickle.load(open(args.xgb, "rb")), df)
+
+    if args.calibrators:
+        cals = pickle.load(open(args.calibrators, "rb"))["calibrators"]
+        if (ev, H) in cals:
+            df[p_col] = cals[(ev, H)].predict(df[p_col].astype(float).values)
+            print(f"  thresholds in CALIBRATED space ({Path(args.calibrators).name})")
 
     # Resolved at H (label trustworthy), in the buy universe (not yet debuted),
     # and carrying a debut score.

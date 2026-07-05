@@ -52,6 +52,62 @@ VAL_LONG = REPO_ROOT / "results" / "training" / "v2.0b_oof_val_long.csv"
 XGB_PKL = REPO_ROOT / "models" / "joint_xgb_v2.0b_oof.pkl"
 DB = REPO_ROOT / "prospects_snapshot.db"
 OUT_DIR = REPO_ROOT / "evaluation" / "v2.0b_landmark"
+SCOUT_PATH = (REPO_ROOT / "scratch" / "fangraphs_board"
+              / "scouting_grades_pointintime.csv")
+
+
+def _attach_scout_fv(df: pd.DataFrame) -> pd.DataFrame:
+    """Attach point-in-time FanGraphs FV as-of the snapshot (latest grade with
+    season <= snap_year, backward merge_asof by player_id — no lookahead).
+    Adds a `scout_fv` column; unscouted rows get NaN. Mirrors the join in
+    xgb_summary_ablation.py."""
+    s = pd.read_csv(SCOUT_PATH, low_memory=False)
+    s = (s.sort_values(["player_id", "season", "source"])
+           .drop_duplicates(["player_id", "season"], keep="first")
+           [["player_id", "season", "fv"]].sort_values("season"))
+    m = pd.merge_asof(df.sort_values("snap_year"), s,
+                      left_on="snap_year", right_on="season",
+                      by="player_id", direction="backward")
+    m["scout_fv"] = m["fv"]
+    return m.drop(columns=["season", "fv"], errors="ignore")
+
+
+def _score_metric(sub: pd.DataFrame, event: str, score_col: str,
+                  scorer: str, horizon: int) -> dict:
+    """Ranking metrics (AUC/AP/lift/spearman) for one slice ranked by
+    `score_col` against realized_by_h. Rows with a missing score are dropped,
+    so the MODEL and FV scorers are compared on the SAME scouted population
+    when called with the scouted subset. Threshold/calibration cells are
+    omitted (FV is a 20-80 grade, not a probability)."""
+    y_col = f"rby_{event}"
+    elig_col = f"eligible_{event}"
+    if score_col not in sub.columns or y_col not in sub.columns:
+        return {}
+    if elig_col in sub.columns:
+        sub = sub[sub[elig_col] == 1]
+    sub = sub[sub[score_col].notna()]
+    n = len(sub)
+    if n == 0:
+        return {}
+    y = sub[y_col].astype(int).values
+    p = sub[score_col].astype(float).values
+    pos = int(y.sum())
+    base = float(y.mean())
+    auc = float(roc_auc_score(y, p)) if 0 < pos < n else float("nan")
+    ap = float(average_precision_score(y, p)) if pos > 0 else float("nan")
+    ap_lift = (ap / base if base > 0 else float("nan")) if ap == ap \
+        else float("nan")
+    if 0 < pos < n and p.std() > 0:
+        rho, _ = spearmanr(p, y)
+        spearman_rho = float(rho)
+    else:
+        spearman_rho = float("nan")
+    return {
+        "event": event, "scorer": scorer, "horizon": horizon,
+        "n": n, "pos": pos, "base_rate": base,
+        "auc": auc, "ap": ap, "ap_lift": ap_lift,
+        "spearman_rho": spearman_rho,
+    }
 
 
 def _join_current_level(df: pd.DataFrame, db: str) -> pd.DataFrame:
@@ -196,6 +252,11 @@ def main():
                     help="Horizon h for the headline/stratified tables: score "
                          "xp_<event>_h{h} vs realized-within-h, on rows resolved "
                          "at h (years_fwd >= h). Default = publish horizon (6).")
+    ap.add_argument("--fv-ablation", action="store_true",
+                    help="Also emit fv_ablation.csv: per-event MODEL ranking "
+                         "(AP/AUC) vs a scout_fv-only ranker on the same "
+                         "resolved/eligible slice — how much the model beats "
+                         "just using the FanGraphs FV grade.")
     args = ap.parse_args()
     H = args.eval_horizon
 
@@ -227,6 +288,16 @@ def main():
     print(f"Joining current level...")
     df = _join_current_level(df, str(DB))
     df["bucket"] = df.apply(_bucket_of, axis=1)
+
+    if args.fv_ablation:
+        if SCOUT_PATH.exists():
+            df = _attach_scout_fv(df)
+            print(f"  attached scout_fv (point-in-time): "
+                  f"{int(df['scout_fv'].notna().sum()):,} of {len(df):,} rows "
+                  f"scouted")
+        else:
+            print(f"  WARNING: {SCOUT_PATH} missing — skipping FV ablation")
+            args.fv_ablation = False
 
     # Headline / stratified tables: evaluate at the publish horizon on the
     # RESOLVED slice (>= H forward years), so negatives are trustworthy.
@@ -311,6 +382,37 @@ def main():
     for r in overall:
         print(f"  {r['event']:<22} AP={r['ap']:.3f}  lift={r['ap_lift']:.1f}x  "
               f"AUC={r['auc']:.3f}")
+
+    # ---- FV-only ablation: model vs scout_fv on the SCOUTED subset (apples-
+    # to-apples — both scorers ranked over the same players that have an FV). ----
+    if args.fv_ablation:
+        scouted = resolved[resolved["scout_fv"].notna()].copy()
+        print(f"\n=== FV-only ablation (h={H}, ALL bucket, scouted subset "
+              f"n={len(scouted):,}) ===")
+        abl_rows = []
+        for ev in EVENTS:
+            # model + FV both scored on the SAME scouted slice
+            mr = _score_metric(scouted, ev, f"xp_{ev}_h{H}", "model", H)
+            fr = _score_metric(scouted, ev, "scout_fv", "FV_only", H)
+            # model on the FULL resolved population, for context
+            mfull = _metric_row(resolved, ev, "bucket", "ALL",
+                                args.threshold, H)
+            if not mr or not fr:
+                continue
+            abl_rows.append({
+                "event": ev, "horizon": H, "n_scouted": mr["n"],
+                "pos_scouted": mr["pos"], "base_rate_scouted": mr["base_rate"],
+                "model_ap": mr["ap"], "fv_ap": fr["ap"],
+                "ap_ratio_model_over_fv": (mr["ap"] / fr["ap"]
+                                           if fr["ap"] else float("nan")),
+                "model_auc": mr["auc"], "fv_auc": fr["auc"],
+                "model_spearman": mr["spearman_rho"],
+                "fv_spearman": fr["spearman_rho"],
+                "model_ap_full_pop": (mfull or {}).get("ap"),
+            })
+            print(f"  {ev:<22} AP: model={mr['ap']:.3f} vs FV={fr['ap']:.3f}  "
+                  f"AUC: model={mr['auc']:.3f} vs FV={fr['auc']:.3f}")
+        _write_table(abl_rows, OUT_DIR / "fv_ablation.csv")
 
 
 if __name__ == "__main__":

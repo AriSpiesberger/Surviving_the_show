@@ -76,6 +76,44 @@ def _ev_name(e) -> str:
     return e.name if hasattr(e, "name") else str(e).lstrip("_")
 
 
+def attach_rankings(prospects: list[dict], conn) -> None:
+    """Attach `_top100_rankings` + `_org_rankings` to each prospect dict, the
+    same way the training panel (run_v2_0b_oof.stage_panel / build_landmark_
+    panel) does. Without this the snap-scoring feature vector omits the ranking
+    features the model trained on (they default to 'unranked'), a train/
+    inference mismatch. Mutates `prospects` in place; missing tables are
+    tolerated (empty rankings)."""
+    try:
+        rank_rows = conn.execute(
+            "SELECT player_id, year, rank, source FROM prospect_rankings"
+        ).fetchall()
+    except Exception:
+        rank_rows = []
+    by_pid: dict[str, list] = {}
+    for r in rank_rows:
+        by_pid.setdefault(r[0], []).append((r[1], r[2], r[3]))
+    try:
+        org_rows = conn.execute(
+            "SELECT player_id, as_of, org_rank FROM rankings_history "
+            "WHERE org_rank IS NOT NULL").fetchall()
+    except Exception:
+        org_rows = []
+    org_by_pid: dict[str, list] = {}
+    for r in org_rows:
+        try:
+            yr = int(str(r[1])[:4])
+        except (ValueError, TypeError):
+            continue
+        org_by_pid.setdefault(r[0], []).append((yr, int(r[2])))
+    for p in prospects:
+        p["_top100_rankings"] = by_pid.get(p["player_id"], [])
+        p["_org_rankings"] = org_by_pid.get(p["player_id"], [])
+    n_rank = sum(1 for p in prospects if p["_top100_rankings"])
+    n_org = sum(1 for p in prospects if p["_org_rankings"])
+    print(f"  attached rankings: {n_rank:,} with top-100, {n_org:,} with org",
+          flush=True)
+
+
 def score_snap_with_landmark(
     hazards: dict, prospects: list[dict], stats_by_pid: dict,
     snap_year: int, out_csv: Path, horizon: int = 15,
@@ -401,6 +439,7 @@ def main():
             """, (args.snap_year - 1,)).fetchall()]
             stats_rows = conn.execute(
                 "SELECT * FROM season_stats").fetchall()
+            attach_rankings(prospects, conn)
         stats_by_pid: dict[str, list] = {}
         for s in stats_rows:
             d = dict(s)

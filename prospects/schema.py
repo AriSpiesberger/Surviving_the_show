@@ -214,6 +214,10 @@ class CareerOutcome:
     career_pa: int = 0
     career_ip: float = 0.0
     career_war: float = 0.0
+    # Number of MLB seasons with meaningful usage (>=20 IP or >=100 PA). Used
+    # for the role-fair ESTABLISHED_MLB rule so multi-year relievers / utility
+    # players count as established even below the 200 IP / 500 PA volume bars.
+    n_sustained_mlb_seasons: int = 0
     all_star_selections: int = 0
     mvp_count: int = 0
     cy_young_count: int = 0
