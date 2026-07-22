@@ -39,7 +39,14 @@ def _ensure_columns(con: sqlite3.Connection) -> None:
         con.execute("ALTER TABLE prospects ADD COLUMN draft_conflation_fixed INTEGER")
 
 
-def run(db_path: str, dry_run: bool = False, max_gap: int = MAX_PLAUSIBLE_GAP):
+def run(db_path: str, dry_run: bool = False, max_gap: int = MAX_PLAUSIBLE_GAP,
+        min_entry_year: int = 2000):
+    """min_entry_year guards against the OTHER failure mode: a modern draftee
+    name-matched to a 19th-century player. There the welded career is bogus, so
+    adopting its first season would set draft_year to e.g. 1875 — far worse than
+    leaving it. Those records self-quarantine anyway (their pre-2007 trigger year
+    makes them ineligible at every landmark, so they never enter the risk set),
+    so we simply skip them."""
     con = sqlite3.connect(db_path)
     con.row_factory = sqlite3.Row
     _ensure_columns(con)
@@ -57,16 +64,34 @@ def run(db_path: str, dry_run: bool = False, max_gap: int = MAX_PLAUSIBLE_GAP):
     """).fetchall()
 
     fixes = []
+    n_skipped_ancient = 0
+    n_skipped_impossible = 0
     for r in rows:
         first = r["first_milb"] if r["first_milb"] is not None else r["first_any"]
         if first is None:
             continue
         dy = int(r["draft_year"])
         gap = int(first) - dy
-        if first < dy or gap >= max_gap:
+        if int(first) < min_entry_year:
+            n_skipped_ancient += 1
+            continue
+        # ONLY positive gaps are recoverable. A career starting BEFORE the draft
+        # is physically impossible, so it belongs to an older same-name player
+        # (classically a father: "George Lombard Jr." drafted 2023 matched to
+        # George Lombard Sr.'s 2005 career). Adopting that start date would be
+        # as wrong as the 19th-century case. Those need detaching, not
+        # re-dating, so we skip them here.
+        if first < dy:
+            n_skipped_impossible += 1
+            continue
+        if gap >= max_gap:
             fixes.append((int(first), dy, r["player_id"], r["name"], gap))
 
     print(f"[conflation] scanned {len(rows):,} drafted players with stats")
+    print(f"[conflation] skipped {n_skipped_ancient:,} ancient welds "
+          f"(first season < {min_entry_year}; bogus career, self-quarantining)")
+    print(f"[conflation] skipped {n_skipped_impossible:,} impossible welds "
+          f"(career starts BEFORE draft; belongs to an older same-name player)")
     print(f"[conflation] flagged {len(fixes):,} with career inconsistent with "
           f"draft_year (starts before draft, or gap >= {max_gap})")
     for first, dy, pid, name, gap in sorted(fixes, key=lambda x: -abs(x[4]))[:10]:
@@ -97,5 +122,6 @@ if __name__ == "__main__":
     ap.add_argument("--db", default="prospects_snapshot.db")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--max-gap", type=int, default=MAX_PLAUSIBLE_GAP)
+    ap.add_argument("--min-entry-year", type=int, default=2000)
     args = ap.parse_args()
-    run(args.db, args.dry_run, args.max_gap)
+    run(args.db, args.dry_run, args.max_gap, args.min_entry_year)
