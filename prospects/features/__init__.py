@@ -1,7 +1,5 @@
-from prospects.features.build import (
-    FEATURE_NAMES,
-    build_feature_vector,
-    build_training_matrix,
-)
+"""Feature engineering: the panel definition and its point-in-time inputs.
 
-__all__ = ["FEATURE_NAMES", "build_feature_vector", "build_training_matrix"]
+`scouting.py` owns FEATURE_NAMES / N_FEATURES — the panel's feature contract.
+Nothing is re-exported here; import the specific module you need.
+"""
