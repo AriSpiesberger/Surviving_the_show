@@ -10,7 +10,7 @@ generation's hazard file because two modules disagreed about its name).
 
 Scope boundary: this module owns *where things live* — paths, the database,
 the environment, and run namespaces. It does NOT own the model's feature
-contract. ``prospects.classifier.joint_cond`` owns EVENTS, FEAT_COND, H_MAX,
+contract. ``prospects.model.joint`` owns EVENTS, FEAT_COND, H_MAX,
 PUBLISH_H, AGE_CENTER and YIP_CENTER, and remains the single source of truth
 for them so feature ordering can never drift. Import them from there, not
 from here.

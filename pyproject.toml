@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "surviving-the-show"
+version = "2.1.0"
+description = "Prospect outcome model and card buy list"
+requires-python = ">=3.11"
+dependencies = [
+    "requests",
+    "numpy",
+    "pandas",
+    "scipy",
+    "scikit-learn",
+    "xgboost",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.setuptools.packages.find]
+# The importable package. `tools/` and `tests/` are deliberately excluded:
+# they are run as scripts against an installed copy of the package, not
+# imported by it.
+include = ["prospects*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

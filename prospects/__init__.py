@@ -28,7 +28,7 @@ Module structure:
     tests/               - test suite
 """
 
-from prospects.schema import (
+from prospects.core.schema import (
     CardEV,
     CareerEvent,
     CareerOutcome,
@@ -42,12 +42,12 @@ from prospects.schema import (
     SeasonStats,
     StochasticValue,
 )
-from prospects.outcome_labels import (
+from prospects.core.labels import (
     base_rates,
     describe_cohort,
     label_career,
 )
-from prospects.storage import ProspectDB
+from prospects.core.storage import ProspectDB
 
 __all__ = [
     # Schema

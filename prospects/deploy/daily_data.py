@@ -15,8 +15,8 @@ import sys
 import time
 from datetime import datetime, timezone
 
-from prospects.ingestion.milb_stats import pull_milb_season, LEVEL_TO_SPORT_ID
-from prospects.storage import ProspectDB
+from prospects.data.sources.milb import pull_milb_season, LEVEL_TO_SPORT_ID
+from prospects.core.storage import ProspectDB
 
 
 LEVELS = ["MLB", "AAA", "AA", "A+", "A", "A-", "RK", "WIN"]
