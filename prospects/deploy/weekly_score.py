@@ -51,21 +51,21 @@ import subprocess
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # Required artifacts for the v2.0b production pipeline (landmark hazards +
 # conditional joint XGBoost). check_artifacts runs AFTER retrain, so a clean
 # run never trips it — anything listed here that retrain does NOT produce is
 # a real external dependency and is called out as such.
+from prospects.config import REPO_ROOT
 REQUIRED = [
-    # --- Stage A (scripts_v17.train.train_v1_18b_prod) ---
+    # --- Stage A (prospects.model.pipelines.stage_a) ---
     # Landmark hazards, the upstream of everything downstream.
     "models/event_classifiers_v1.18b_landmark_prod.pkl",
     # The L1 bundle is superseded as a scoring head by the joint XGB, but
     # fit_time_to_debut_v18b still reads it for the p_debut_lasso feature.
     "models/lasso_logits_v1.18b_prod.pkl",
     "models/time_to_debut_v1.18b_prod.pkl",
-    # --- Stage B (scripts_v17.train.train_v2_0b_prod) ---
+    # --- Stage B (prospects.model.pipelines.prod) ---
     # The conditional joint XGB (fit_joint_xgb_cond) is the actual scoring
     # head, plus its retrained timing model.
     "models/joint_xgb_v2.0b_prod.pkl",
@@ -78,7 +78,6 @@ REQUIRED = [
     # --- Shared infra ---
     "models/player_position_from_stats.csv",
     "prospects_snapshot.db",
-    "scripts_v17/buylist/build_v2.0_buylist.py",
 ]
 
 
@@ -123,9 +122,9 @@ def run_retrain() -> int:
     Delegates the heavy lifting to two orchestrator scripts that already
     encode the v2.0b production pipeline:
 
-      - scripts_v17.train.train_v1_18b_prod : panel rebuild + landmark
+      - prospects.model.pipelines.stage_a : panel rebuild + landmark
         hazards + score fit/val + downstream lasso/timing refit.
-      - scripts_v17.train.train_v2_0b_prod : conditional joint XGB
+      - prospects.model.pipelines.prod : conditional joint XGB
         (fit_joint_xgb_cond) on landmark longs + snap=2026 scoring + buy
         list build."""
     print(f"\n{'#'*70}\n# WEEKLY RETRAIN (v2.0b)\n{'#'*70}", flush=True)
@@ -134,7 +133,7 @@ def run_retrain() -> int:
     # a failure isolates cleanly.
     # Always a clean rebuild: we omit --skip-hazards so the orchestrator
     # retrains rather than reusing the existing .pkl.
-    v18b_cmd = [sys.executable, "-m", "scripts_v17.train.train_v1_18b_prod"]
+    v18b_cmd = [sys.executable, "-m", "prospects.model.pipelines.stage_a"]
     rc = run_step("retrain/v1.18b", v18b_cmd, REPO_ROOT)
     if rc != 0:
         return rc
@@ -143,7 +142,7 @@ def run_retrain() -> int:
     # + buy list. Produces results/buy_lists/buy_list_v2.0b_FINAL.csv as
     # the prod artifact.
     rc = run_step("retrain/v2.0b",
-                  [sys.executable, "-m", "scripts_v17.train.train_v2_0b_prod"],
+                  [sys.executable, "-m", "prospects.model.pipelines.prod"],
                   REPO_ROOT)
     if rc != 0:
         return rc
@@ -218,7 +217,7 @@ def main():
         # --skip-xgb keeps the prod XGB pkl; --skip-buylist is set when the
         # caller really only wants the snap_long.
         cmd = [sys.executable, "-m",
-               "scripts_v17.train.train_v2_0b_prod",
+               "prospects.model.pipelines.prod",
                "--skip-xgb"]
         if args.score_only:
             cmd.append("--skip-buylist")
@@ -232,9 +231,7 @@ def main():
                   f"run without --buylist-only first")
             sys.exit(3)
         rc = run_step("buylist", [
-            sys.executable,
-            str(REPO_ROOT / "scripts_v17" / "buylist" /
-                "build_v2.0_buylist.py"),
+            sys.executable, "-m", "prospects.buylist.build",
             "--long", str(snap_long),
             "--xgb", str(REPO_ROOT / "models" /
                           "joint_xgb_v2.0b_prod.pkl"),

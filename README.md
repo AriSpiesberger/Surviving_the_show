@@ -117,9 +117,9 @@ Result: ~300 players per cycle. R1 + ever-top-100 are excluded because their car
 
 ## Maintenance
 
-- **DB refresh**: re-ingest `season_stats` via `prospects/ingestion/milb_stats.py` (~30 min for full season)
+- **DB refresh**: re-ingest `season_stats` via `prospects/data/sources/milb.py` (~30 min for full season)
 - **Top-100 refresh**: update `career_outcomes.year_top_100` when new BA / MLB Pipeline lists come out
-- **eBay refresh**: `python -m prospects.scripts.fetch_prospect_prices --grades buy_list_v1.17_FINAL.csv --top-n 300`
-- **Panel rebuild**: only needed when feature-builder code changes — `python -m prospects.classifier.build_panel ...`
+- **eBay refresh**: `python -m tools.fetch_prices --grades buy_list_v1.17_FINAL.csv --top-n 300`
+- **Panel rebuild**: only needed when feature-builder code changes — `python -m prospects.model.build_panel ...`
 - **Hazard retraining**: only needed when panel rebuilds or new training data arrives
 - **Lasso / model B retraining**: only needed if validation drifts; use `scripts_v17/train/refit_models_honest.py`

@@ -316,15 +316,15 @@ head is the fix (ranking needs none).
 ```bash
 # OOF folds + hazards, then the conditional joint XGB (per-horizon censoring is
 # built in; wired into run_v2_0b_oof stage 6 and train_v2_0b_prod stage 1)
-python -m scripts_v17.train.run_v2_0b_oof
-python -m scripts_v17.train.train_v2_0b_prod    # 100% prod hazards + cond XGB + score 2026
+python -m prospects.model.pipelines.oof
+python -m prospects.model.pipelines.prod    # 100% prod hazards + cond XGB + score 2026
 
 # validation — per-horizon, headline at the publish horizon (h=6)
-python -m scripts_v17.validate.regen_eval_v2_0b_honest --eval-horizon 6
-python -m scripts_v17.validate.gen_eval_readme
+python -m prospects.evaluation.run --eval-horizon 6
+python -m prospects.evaluation.report
 
 # buy list — P(debut <= 3y) thesis
-python scripts_v17/buylist/build_v2.0_buylist.py \
+python prospects/buylist/build.py \
     --long results/scored/snap2026_v1.18b_landmark_long.csv \
     --xgb models/joint_xgb_v2.0b_prod.pkl --debut-horizon 3 --threshold 0.60
 ```
