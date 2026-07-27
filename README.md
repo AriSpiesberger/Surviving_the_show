@@ -1,125 +1,102 @@
-# Prospect Card Buy List — v1.17 Production
+# Surviving the Show
 
-End-to-end pipeline that scores MiLB prospects, ranks the buy universe, and produces a card buy list with model EV vs eBay prices.
+A model that scores minor-league baseball prospects on their probability of
+reaching MLB milestones, and turns those scores into a card **buy list** —
+players whose Bowman 1st Chrome autos look cheap relative to the model's
+outlook.
 
-## Two-command weekly deploy
+Current model: **v2.1c** — landmark discrete-time hazards feeding a
+horizon-conditional joint XGBoost. Held-out weighted AP @ h=6 ≈ **0.50**
+(see [`runs/current/evaluation/README.md`](runs/current/evaluation/README.md)).
+
+## Layout
+
+```
+prospects/            the importable package — one folder per concept
+├── config.py         paths, database, environment, run namespaces
+├── core/             schema, SQLite storage, outcome labels
+├── data/             download & organize: sources/, backfills/, pull.py
+├── features/         the panel: scouting, grades, prorate, panel/
+├── model/            hazards/, joint.py, train/, pipelines/, calibration, thresholds
+├── evaluation/       held-out metrics (run.py) + README generator (report.py)
+├── buylist/          build.py — universe filter, scoring, price join
+├── market/           eBay client + price aggregation
+└── deploy/           the scheduled jobs (daily_data, daily_prices, weekly_score, alerts)
+
+tools/                hand-run maintenance CLIs (price pulls, scouting scrape, backfills)
+ops/                  Windows Task Scheduler wrappers (run_job.ps1, register_tasks.ps1)
+tests/                pytest suite
+reference/            hand-curated inputs (prices, baseballcube, scouting grades, baselines)
+
+runs/current/         the live model run — everything one run produces:
+├── models/           hazards.pkl, joint_xgb.pkl, calibrators.pkl, timing.pkl, ...
+├── training/         fit/val longs, OOF longs, panel caches, pid lists
+├── scored/           snap scoring output
+├── buy_lists/        all_scored.csv, final.csv
+└── evaluation/       metric CSVs + headline.json + README.md   (committed)
+
+archive/              superseded runs, DB backups, retired artifacts (git-ignored)
+```
+
+Every path resolves through `prospects.config`. There are no scattered path
+literals: a run's artifacts all live under `runs/<tag>/` (default `current`),
+and the model's feature contract (event list, feature order, horizons) lives in
+`prospects.model.joint`.
+
+## Databases
+
+- `prospects.db` — the **live** database; `deploy/daily_data.py` appends
+  current-season stats nightly.
+- `prospects_snapshot.db` — the **modeling** database. `deploy/weekly_score.py`
+  copies the live DB over it at the start of each weekly run, so a long training
+  job reads a stable file. (The name is historical; it is not frozen.)
+
+## Run it
+
+Install once (editable, so imports and `python -m` just work):
 
 ```bash
-# 1. Score current prospects with v1.17 production hazards
-python -m scripts_v17.score.score_panel_v17 --snap-year 2026
-
-# 2. Apply lassos + model B + universe filter + eBay prices
-python scripts_v17/buylist/build_v17_buylist.py
+pip install -e .
 ```
 
-Outputs:
-- `buy_list_v1.17_FINAL.csv` — universe-filtered, per-yip-threshold passing players
-- `buy_list_v1.17_ALL_SCORED.csv` — all snap=2026 prospects with full scoring
+Rebuild the buy list from the current run's artifacts — **no arguments**, every
+default points at `runs/current/`:
 
-## Production artifacts
-
-All in `models/`:
-
-| file | what it is |
-|---|---|
-| `event_classifiers_v1.17_prod.pkl` | hazards trained on 100% of panel (production) |
-| `event_classifiers_v1.17.pkl` | 80%-trained twin (kept for honest validation) |
-| `debut_lasso_universe_v1.17h.pkl` | debut composite scorer (universe-aware, held-out validated) |
-| `top100_lasso_v1.17h.pkl` | top-100 composite scorer (held-out validated) |
-| `model_b_outcomes_v1.17h.pkl` | P(cup/utility/regular/breakout \| debut) |
-| `player_position_from_stats.csv` | corrected positions from season_stats |
-
-Per-yip filter thresholds in `scripts_v17/v17h_thresholds.json`:
-```
-yip 0 → lasso ≥ 4.241
-yip 1 → lasso ≥ 1.713
-yip 2 → lasso ≥ 2.549
-yip 3 → lasso ≥ 3.913
-yip 4 → lasso ≥ 3.755
+```bash
+python -m prospects.buylist.build
 ```
 
-## Directory layout
+Retrain end to end (the weekly cycle) and re-evaluate:
 
-```
-.
-├── README.md
-├── CV_VALIDATION_PLAN.md, HANDOFF.md, RUNBOOK.md
-├── prospects_snapshot.db       # source DB (46,692 prospects, 237,904 stat rows)
-├── panel_v1.14n.npz, panel_v1.17.npz  # active panels (kept at root for speed)
-│
-├── scripts_v17/                # PRODUCTION pipeline
-│   ├── score/score_panel_v17.py       # score current prospects
-│   ├── buylist/build_v17_buylist.py   # build final ranked list
-│   ├── buylist/apply_model_b_to_buylist.py
-│   ├── buylist/merge_prices_to_buylist.py
-│   ├── validate/validate_universe.py  # canonical val script (non-R1, non-top100)
-│   ├── validate/validate_full.py      # per-yip percentile slabs + 2021 lookback
-│   ├── validate/compare_models_full.py# AUC/PR/McNemar/DeLong/Brier/ECE
-│   ├── train/refit_models_honest.py   # train lassos + model B on honest data
-│   ├── train/train_top100_lasso.py
-│   └── v17h_thresholds.json
-│
-├── models/                     # all model artifacts
-├── data/                       # eBay prices, raw inputs
-├── backtests/v17/              # snap=2022/2023/2024 backtest sheets
-├── buy_lists/                  # historical buy lists
-├── panels/                     # old panels (v1.14i, v1.15, etc)
-│
-├── prospects/                  # core Python package
-│   ├── classifier/             # hazard training, feature builders
-│   ├── ingestion/              # data sources (MLB Stats, Lahman, NCAA)
-│   ├── features/               # scouting.py (238-feature builder)
-│   ├── market/                 # eBay client + price aggregation
-│   ├── schema.py, storage.py
-│
-├── archive/                    # everything historical/abandoned
-│   ├── v14n_v16_iterations/    # scripts, csvs from v14n/v16 era
-│   ├── v17_iterations/         # comparison files, val outputs, intermediate csvs
-│   ├── v15_betacal_abandoned/  # the v1.15 beta-calibrator attempt
-│   ├── v16_proxy_backfill_abandoned/  # v1.16 (kept for reference)
-│   ├── old_scratch_scripts/    # historical _*.py one-off scripts
-│   ├── grades/, edges/, etc.   # legacy output dirs
-│   └── panel_v1.14i.*, panel_v1.15.*
-│
-├── scratch/                    # intermediate working files
-│   ├── v17_intermediate_chunks/  # chunked scoring outputs (regeneratable)
-│   ├── v17_long_files/         # fit/val long files (regeneratable)
-│   ├── cohort_pids/            # cohort pid lists (regeneratable)
-│   ├── shap_iterations/        # one-off SHAP analyses
-│   └── old_logs/
-│
-├── experiments/                # historical experiment subdirs
-└── mnt/                        # external data drop zone
+```bash
+python -m prospects.model.pipelines.oof     # OOF folds + hazards + conditional joint XGB
+python -m prospects.model.pipelines.prod    # full-panel prod hazards + score 2026 + buy list
+python -m prospects.evaluation.run          # held-out metrics -> runs/current/evaluation/
+python -m prospects.evaluation.report       # regenerate that run's README
 ```
 
-## Validation summary (held-out 80%-hazard, universe-filtered)
+A different run tag (backtest, A/B) writes to `runs/<tag>/` instead — pass
+`--tag <name>` to the pipeline commands, or set `RUN_TAG=<name>`.
 
-Per-yip cumulative-from-top score threshold for **≥50% MLB_DEBUT realized**:
+## Scheduled deploy (Windows Task Scheduler)
 
-| yip | n_total | base | threshold | n above | realized |
-|---|---|---|---|---|---|
-| 0 | 3388 | 8.4% | ≥4.241 | 30 | 50% |
-| 1 | 3378 | 8.1% | ≥1.713 | 144 | 50% |
-| 2 | 3356 | 7.5% | ≥2.549 | 188 | 50% |
-| 3 | 3297 | 5.9% | ≥3.913 | 124 | 50% |
-| 4 | 3237 | 4.1% | ≥3.755 | 74 | 50% |
+Four tasks drive the live loop, all through `ops/run_job.ps1`:
 
-These are the thresholds baked into `build_v17_buylist.py`.
+| Task | When | Module |
+|---|---|---|
+| daily_data | 00:30 daily | `prospects.deploy.daily_data` — pull current-season stats |
+| weekly_score | Mon 05:00 | `prospects.deploy.weekly_score` — full retrain + buy list |
+| daily_prices | 09:00 daily | `prospects.deploy.daily_prices` — eBay pull for buy-list names |
+| daily_digest | 10:00 daily | `prospects.deploy.alerts` — email digest |
 
-## Universe definition
+Register (idempotent) with:
 
-The "buy universe" filter applied in build_v17_buylist:
-- `bucket != R1` (round-1 draftees are too expensive on Bowman 1st Chrome auto)
-- `year_top_100 IS NULL` (never been on a public top-100 prospect list)
-- per-yip lasso score >= threshold above
+```powershell
+powershell -ExecutionPolicy Bypass -File ops\register_tasks.ps1
+```
 
-Result: ~300 players per cycle. R1 + ever-top-100 are excluded because their cards are priced at the level the model has already converged on.
+## Docs
 
-## Maintenance
-
-- **DB refresh**: re-ingest `season_stats` via `prospects/data/sources/milb.py` (~30 min for full season)
-- **Top-100 refresh**: update `career_outcomes.year_top_100` when new BA / MLB Pipeline lists come out
-- **eBay refresh**: `python -m tools.fetch_prices --grades buy_list_v1.17_FINAL.csv --top-n 300`
-- **Panel rebuild**: only needed when feature-builder code changes — `python -m prospects.model.build_panel ...`
-- **Hazard retraining**: only needed when panel rebuilds or new training data arrives
-- **Lasso / model B retraining**: only needed if validation drifts; use `scripts_v17/train/refit_models_honest.py`
+- [`docs/runbook.md`](docs/runbook.md) — operating the pipeline, retraining, promoting a run.
+- [`docs/architecture.md`](docs/architecture.md) — the model, stage by stage, and how a run is namespaced.
+- [`docs/data.md`](docs/data.md) — data sources, the two databases, and the backfills.

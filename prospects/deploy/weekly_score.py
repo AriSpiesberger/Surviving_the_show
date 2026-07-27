@@ -56,36 +56,39 @@ from pathlib import Path
 # conditional joint XGBoost). check_artifacts runs AFTER retrain, so a clean
 # run never trips it — anything listed here that retrain does NOT produce is
 # a real external dependency and is called out as such.
+from prospects import config
 from prospects.config import REPO_ROOT
+
+_RUN = config.run()  # runs/current
+# Required artifacts, as absolute paths under the current run. check_artifacts
+# runs AFTER retrain, so a clean run never trips it — anything here that
+# retrain does NOT produce is a real external dependency, flagged as such.
 REQUIRED = [
     # --- Stage A (prospects.model.pipelines.stage_a) ---
-    # Landmark hazards, the upstream of everything downstream.
-    "models/event_classifiers_v1.18b_landmark_prod.pkl",
-    # The L1 bundle is superseded as a scoring head by the joint XGB, but
-    # fit_time_to_debut_v18b still reads it for the p_debut_lasso feature.
-    "models/lasso_logits_v1.18b_prod.pkl",
-    "models/time_to_debut_v1.18b_prod.pkl",
+    _RUN.hazards_landmark,   # landmark hazards, upstream of everything
+    _RUN.lasso_logits,       # L1 bundle; feeds the p_debut_lasso timing feature
+    _RUN.timing_stage_a,
     # --- Stage B (prospects.model.pipelines.prod) ---
-    # The conditional joint XGB (fit_joint_xgb_cond) is the actual scoring
-    # head, plus its retrained timing model.
-    "models/joint_xgb_v2.0b_prod.pkl",
-    "models/time_to_debut_v2.0b_prod.pkl",
-    # NOT produced by run_retrain: train_v2_0b_prod READS these 100%-panel
-    # prod hazards, but only train_v2_0b_prod_hazards writes them and that
-    # script is hand-run. Listed so a missing/stale file fails loudly here
-    # rather than silently scoring against whatever is on disk.
-    "models/event_classifiers_v2.0b_prod.pkl",
+    _RUN.joint_xgb_prod,     # conditional joint XGB — the scoring head
+    _RUN.timing,             # its retrained timing model
+    # NOT produced by run_retrain: prod READS these 100%-panel prod hazards,
+    # but only model.train.hazards writes them and that step is hand-run.
+    # Listed so a missing/stale file fails loudly rather than scoring silently.
+    _RUN.hazards,
     # --- Shared infra ---
-    "models/player_position_from_stats.csv",
-    "prospects_snapshot.db",
+    config.POSITION_LOOKUP,
+    config.model_db(),
 ]
 
 
 def check_artifacts() -> list[str]:
     missing = []
-    for rel in REQUIRED:
-        if not (REPO_ROOT / rel).exists():
-            missing.append(rel)
+    for path in REQUIRED:
+        p = Path(path)
+        if not p.is_absolute():
+            p = REPO_ROOT / p
+        if not p.exists():
+            missing.append(str(path))
     return missing
 
 
@@ -204,9 +207,8 @@ def main():
             print(f"  - {m}")
         sys.exit(3)
 
-    scored_dir = REPO_ROOT / "results" / "scored"
-    scored_dir.mkdir(parents=True, exist_ok=True)
-    snap_long = scored_dir / f"snap{args.season}_v1.18b_landmark_long.csv"
+    _RUN.scored.mkdir(parents=True, exist_ok=True)
+    snap_long = _RUN.snap_long(args.season)
 
     # Step 1+2: snap=2026 landmark scoring + v2.0b buy list. When the full
     # retrain ran, train_v2_0b_prod already did this — so on a full-retrain
@@ -230,20 +232,15 @@ def main():
             print(f"FATAL: need {snap_long.name} but it doesn't exist; "
                   f"run without --buylist-only first")
             sys.exit(3)
+        # The weekly buy list is scored with the PROD joint XGB (in-sample
+        # hazards, no leakage on the fresh cohort) and the v2.0b timing model.
         rc = run_step("buylist", [
             sys.executable, "-m", "prospects.buylist.build",
             "--long", str(snap_long),
-            "--xgb", str(REPO_ROOT / "models" /
-                          "joint_xgb_v2.0b_prod.pkl"),
-            # Match Stage B: the v1.18b timing model was fit on contaminated
-            # fit+val data and was replaced by the v2.0b one in train_v2_0b_prod.
-            # This path was still passing the old model.
-            "--timing", str(REPO_ROOT / "models" /
-                             "time_to_debut_v2.0b_prod.pkl"),
-            "--out-all", str(REPO_ROOT / "results" / "buy_lists" /
-                              "buy_list_v2.0b_ALL_SCORED.csv"),
-            "--out-final", str(REPO_ROOT / "results" / "buy_lists" /
-                                "buy_list_v2.0b_FINAL.csv"),
+            "--xgb", str(_RUN.joint_xgb_prod),
+            "--timing", str(_RUN.timing),
+            "--out-all", str(_RUN.buy_list_all),
+            "--out-final", str(_RUN.buy_list_final),
         ], REPO_ROOT)
         if rc != 0:
             sys.exit(2)
@@ -260,11 +257,10 @@ def main():
             print(f"[debut_comps] WARN: exited {rc}; buy list still valid",
                   flush=True)
 
-    bl_dir = REPO_ROOT / "results" / "buy_lists"
     print(f"\n=== weekly_score season={args.season} OK ===")
     print(f"  snap long file: {snap_long}")
-    print(f"  buy list:       {bl_dir / 'buy_list_v2.0b_FINAL.csv'}")
-    print(f"  all scored:     {bl_dir / 'buy_list_v2.0b_ALL_SCORED.csv'}")
+    print(f"  buy list:       {_RUN.buy_list_final}")
+    print(f"  all scored:     {_RUN.buy_list_all}")
 
 
 if __name__ == "__main__":

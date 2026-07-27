@@ -12,7 +12,7 @@ needed in practice. If FG ever hardens it, drop a cf_clearance cookie in via
 the FG_CF_CLEARANCE / FG_USER_AGENT env vars (see _build_cookies).
 
 Cache layout:
-  scratch/fangraphs_board/
+  reference/fangraphs_board/
     raw/{year}/board.html            # raw page (so re-parse never re-hits net)
     raw/{year}/board.meta.json       # status, row count, season check
     parsed/{year}.csv                # flattened rows, one per prospect
@@ -38,12 +38,13 @@ from typing import Any
 import pandas as pd
 import requests
 from prospects.config import REPO_ROOT
+from prospects import config
 try:
     from curl_cffi import requests as crequests
 except ImportError:
     crequests = None
 
-CACHE_DIR = REPO_ROOT / "scratch" / "fangraphs_board"
+CACHE_DIR = config.FANGRAPHS_DIR
 RAW_DIR = CACHE_DIR / "raw"
 PARSED_DIR = CACHE_DIR / "parsed"
 

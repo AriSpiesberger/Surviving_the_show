@@ -1,6 +1,6 @@
 """Point-in-time scouting-grade features (FanGraphs Board + TWTC).
 
-Loads scratch/fangraphs_board/scouting_grades_pointintime.csv (built by
+Loads reference/fangraphs_board/scouting_grades_pointintime.csv (built by
 tools/build_scouting_grades.py) and exposes a no-lookahead lookup: for a
 player at as_of_year S, return the most recent grade snapshot with season <= S.
 Overlap seasons prefer fg_board over twtc.
@@ -16,9 +16,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from prospects.config import REPO_ROOT
-_CSV = (REPO_ROOT / "scratch" / "fangraphs_board"
-        / "scouting_grades_pointintime.csv")
+from prospects import config
+_CSV = config.SCOUTING_GRADES
 
 # Set SCOUTING_GRADES_OFF=1 to disable these features (baseline A/B run).
 _OFF = os.environ.get("SCOUTING_GRADES_OFF") == "1"

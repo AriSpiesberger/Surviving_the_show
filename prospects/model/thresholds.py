@@ -35,14 +35,16 @@ from prospects.model.joint import (  # noqa: E402
     predict_trajectory, prep_base, realized_by_h,
 )
 
+from prospects import config
 from prospects.config import REPO_ROOT
-DB = str(REPO_ROOT / "prospects_snapshot.db")
+_RUN = config.run()
+DB = str(config.model_db())
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--val-long", required=True)
-    ap.add_argument("--xgb", required=True)
+    ap.add_argument("--val-long", default=str(_RUN.oof_val_long))
+    ap.add_argument("--xgb", default=str(_RUN.joint_xgb))
     ap.add_argument("--horizon", type=int, default=3,
                     help="Debut window H: score xp_MLB_DEBUT_h{H} vs "
                          "realized-within-H, on rows resolved at H. Matches the "
@@ -60,6 +62,10 @@ def main():
                          "monotone) — only the threshold VALUES are calibrated.")
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
+    if args.out is None:
+        # runs/current/models/yip_thresholds_p{target}.json
+        args.out = str(_RUN.yip_thresholds(int(round(args.target * 100))))
+    Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     H = args.horizon
     ev = "MLB_DEBUT"
     p_col = f"xp_{ev}_h{H}"

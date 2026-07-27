@@ -36,11 +36,13 @@ from prospects.model.joint import (  # noqa: E402
     EVENTS, H_MAX, predict_trajectory, prep_base, realized_by_h,
 )
 
+from prospects import config
 from prospects.config import REPO_ROOT
-VAL_LONG = REPO_ROOT / "results" / "training" / "v2.0b_oof_val_long.csv"
-XGB_PKL = REPO_ROOT / "models" / "joint_xgb_v2.0b_oof.pkl"
-DB = str(REPO_ROOT / "prospects_snapshot.db")
-OUT = REPO_ROOT / "models" / "prob_calibrators_v2.0b.pkl"
+_RUN = config.run()
+VAL_LONG = _RUN.oof_val_long
+XGB_PKL = _RUN.joint_xgb
+DB = str(config.model_db())
+OUT = _RUN.calibrators
 MIN_POS = 25  # below this, calibration is noise -> fall back to identity
 
 

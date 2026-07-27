@@ -17,8 +17,9 @@ import sys
 import time
 from pathlib import Path
 
+from prospects import config
 from prospects.config import REPO_ROOT
-XGB_OUT = REPO_ROOT / "models" / "joint_xgb_v2.0b_oof.pkl"
+XGB_OUT = config.run().joint_xgb
 
 MAX_ATTEMPTS = 200
 SLEEP_BETWEEN = 5  # seconds
