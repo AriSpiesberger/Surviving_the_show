@@ -65,10 +65,12 @@ from prospects.model.pipelines.stage_a import (
 )
 
 # ---- paths ----
+from prospects import config
 from prospects.config import REPO_ROOT
-SCRATCH = REPO_ROOT / "scratch" / "v20b_oof"
-TRAIN_DIR = REPO_ROOT / "results" / "training"
-LOG_DIR = REPO_ROOT / "logs"
+_RUN = config.run()
+SCRATCH = _RUN.scratch / "oof"
+TRAIN_DIR = _RUN.training
+LOG_DIR = _RUN.logs
 
 
 class _TeeUnbuffered:
@@ -101,12 +103,12 @@ def _install_logging():
     sys.stdout = _TeeUnbuffered(sys.__stdout__, fh)
     sys.stderr = _TeeUnbuffered(sys.__stderr__, fh)
     return log_path
-VAL_PIDS_PATH = TRAIN_DIR / "v17_prod_val_pids.txt"
+VAL_PIDS_PATH = _RUN.val_pids
 PANEL_NPZ = SCRATCH / "panel_cache.npz"
 PANEL_META = SCRATCH / "panel_meta.pkl"
-OOF_STACKED = TRAIN_DIR / "v2.0b_oof_stacked_long.csv"
-OOF_VAL = TRAIN_DIR / "v2.0b_oof_val_long.csv"
-XGB_OUT = REPO_ROOT / "models" / "joint_xgb_v2.0b_oof.pkl"
+OOF_STACKED = _RUN.oof_stacked_long
+OOF_VAL = _RUN.oof_val_long
+XGB_OUT = _RUN.joint_xgb
 
 # Per-year hazard curve emission: hand the raw h_k (k=1..N) to the joint XGB so
 # it can integrate the curve itself instead of consuming only the cumulative.
@@ -530,14 +532,17 @@ def main():
     # Namespace all outputs under --tag so a partial run sits beside the
     # complete-season baseline (the panel cache that train_v2_0b_prod_hazards
     # reuses lives in this tagged scratch dir).
-    global SCRATCH, PANEL_NPZ, PANEL_META, OOF_STACKED, OOF_VAL, XGB_OUT
+    global SCRATCH, TRAIN_DIR, PANEL_NPZ, PANEL_META, OOF_STACKED, OOF_VAL, XGB_OUT
     if args.tag:
-        SCRATCH = REPO_ROOT / "scratch" / f"v20b_oof_{args.tag}"
+        # --tag points every output at runs/<tag>/ instead of runs/current/.
+        run = config.run(args.tag)
+        SCRATCH = run.scratch / "oof"
+        TRAIN_DIR = run.training
         PANEL_NPZ = SCRATCH / "panel_cache.npz"
         PANEL_META = SCRATCH / "panel_meta.pkl"
-        OOF_STACKED = TRAIN_DIR / f"v2.0b_{args.tag}_oof_stacked_long.csv"
-        OOF_VAL = TRAIN_DIR / f"v2.0b_{args.tag}_oof_val_long.csv"
-        XGB_OUT = REPO_ROOT / "models" / f"joint_xgb_v2.0b_{args.tag}_oof.pkl"
+        OOF_STACKED = run.oof_stacked_long
+        OOF_VAL = run.oof_val_long
+        XGB_OUT = run.joint_xgb
 
     SCRATCH.mkdir(parents=True, exist_ok=True)
     TRAIN_DIR.mkdir(parents=True, exist_ok=True)

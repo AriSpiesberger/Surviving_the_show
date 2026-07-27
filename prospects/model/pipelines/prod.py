@@ -51,22 +51,23 @@ from prospects.model.hazards.survival import (
     ELITE_KEY, MAX_OBS_YEAR, STAR_KEY, _trigger_year, _last_active_year,
 )
 from prospects.core.storage import ProspectDB
-from prospects.model.pipelines.stage_a import (
-    HAZ_OUT as LM_HAZ_OUT, LM_FIT_LONG, LM_VAL_LONG,
-)
+from prospects.model.pipelines.stage_a import LM_FIT_LONG, LM_VAL_LONG
 
+from prospects import config
 from prospects.config import REPO_ROOT
-XGB_OUT = REPO_ROOT / "models" / "joint_xgb_v2.0b_prod.pkl"
-TIMING_PKL = REPO_ROOT / "models" / "time_to_debut_v2.0b_prod.pkl"  # M6 (v2.1): was v1.18b (fit+val contaminated)
-# v2.1: load the PROD hazards that train_v2_0b_prod_hazards actually writes
-# (was importing v1.18b_landmark_prod — a different, older file = pipeline drift).
-LM_HAZ_OUT = REPO_ROOT / "models" / "event_classifiers_v2.0b_prod.pkl"
-SNAP_LONG = REPO_ROOT / "results" / "scored" / "snap2026_v1.18b_landmark_long.csv"
-BUYLIST_ALL = REPO_ROOT / "results" / "buy_lists" / "buy_list_v2.0b_ALL_SCORED.csv"
-BUYLIST_FINAL = REPO_ROOT / "results" / "buy_lists" / "buy_list_v2.0b_FINAL.csv"
-PRICES_FROM = REPO_ROOT / "data" / "prices_bowman_chrome_auto_v13.csv"
 
-# Per-year hazard curve emission (must match run_v2_0b_oof + fit_joint_xgb_v2).
+_RUN = config.run().mkdirs()
+XGB_OUT = _RUN.joint_xgb_prod
+# The PROD hazards that model.train.hazards writes (NOT the stage-A landmark
+# hazards — reading those here was a past source of pipeline drift).
+LM_HAZ_OUT = _RUN.hazards
+TIMING_PKL = _RUN.timing        # v2.1: was stage-A timing (fit+val contaminated)
+SNAP_LONG = _RUN.snap_long(2026)
+BUYLIST_ALL = _RUN.buy_list_all
+BUYLIST_FINAL = _RUN.buy_list_final
+PRICES_FROM = config.BUYLIST_PRICES
+
+# Per-year hazard curve emission (must match pipelines.oof + train.joint_xgb).
 _HK_STEPS = 10
 _HK_EVENTS = {"TOP_100_PROSPECT", "MLB_DEBUT", "ESTABLISHED_MLB", "ELITE", "STAR"}
 
@@ -351,22 +352,16 @@ def main():
     args = ap.parse_args()
 
     global XGB_OUT, LM_HAZ_OUT, SNAP_LONG, BUYLIST_ALL, BUYLIST_FINAL
-    oof_fit = REPO_ROOT / "results" / "training" / "v2.0b_oof_stacked_long.csv"
-    oof_val = REPO_ROOT / "results" / "training" / "v2.0b_oof_val_long.csv"
-    if args.tag:
-        XGB_OUT = REPO_ROOT / "models" / f"joint_xgb_v2.0b_{args.tag}_prod.pkl"
-        LM_HAZ_OUT = (REPO_ROOT / "models"
-                      / f"event_classifiers_v2.0b_{args.tag}_prod.pkl")
-        SNAP_LONG = (REPO_ROOT / "results" / "scored"
-                     / f"snap{args.snap_year}_v2.0b_{args.tag}_landmark_long.csv")
-        BUYLIST_ALL = (REPO_ROOT / "results" / "buy_lists"
-                       / f"buy_list_v2.0b_{args.tag}_ALL_SCORED.csv")
-        BUYLIST_FINAL = (REPO_ROOT / "results" / "buy_lists"
-                         / f"buy_list_v2.0b_{args.tag}_FINAL.csv")
-        oof_fit = (REPO_ROOT / "results" / "training"
-                   / f"v2.0b_{args.tag}_oof_stacked_long.csv")
-        oof_val = (REPO_ROOT / "results" / "training"
-                   / f"v2.0b_{args.tag}_oof_val_long.csv")
+    # --tag points every output at runs/<tag>/ instead of runs/current/.
+    run = config.run(args.tag)
+    run.mkdirs()
+    XGB_OUT = run.joint_xgb_prod
+    LM_HAZ_OUT = run.hazards
+    SNAP_LONG = run.snap_long(args.snap_year)
+    BUYLIST_ALL = run.buy_list_all
+    BUYLIST_FINAL = run.buy_list_final
+    oof_fit = run.oof_stacked_long
+    oof_val = run.oof_val_long
     timing_pkl = Path(args.timing)
 
     t_start = time.time()

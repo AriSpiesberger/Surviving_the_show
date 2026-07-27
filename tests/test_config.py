@@ -96,24 +96,9 @@ def test_current_tag_prefers_env(monkeypatch):
     assert config.current_tag() == "from_env"
 
 
-def test_current_tag_reads_pointer_file(tmp_path, monkeypatch):
-    pointer = tmp_path / "CURRENT"
-    pointer.write_text("v3\n", encoding="utf-8")
-    monkeypatch.setattr(config, "CURRENT_TAG_FILE", pointer)
-    assert config.current_tag() == "v3"
-
-
-def test_current_tag_falls_back_to_default(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, "CURRENT_TAG_FILE", tmp_path / "missing")
-    assert config.current_tag() == config.DEFAULT_TAG
-
-
-def test_env_tag_beats_pointer_file(tmp_path, monkeypatch):
-    pointer = tmp_path / "CURRENT"
-    pointer.write_text("from_file\n", encoding="utf-8")
-    monkeypatch.setattr(config, "CURRENT_TAG_FILE", pointer)
-    monkeypatch.setenv("RUN_TAG", "from_env")
-    assert config.current_tag() == "from_env"
+def test_current_tag_falls_back_to_default(monkeypatch):
+    monkeypatch.delenv("RUN_TAG", raising=False)
+    assert config.current_tag() == config.DEFAULT_TAG == "current"
 
 
 def test_run_returns_explicit_tag_over_current(monkeypatch):
@@ -130,10 +115,18 @@ def test_mkdirs_creates_every_subdirectory(tmp_path, monkeypatch):
         assert d.is_dir()
 
 
-def test_set_current_tag_roundtrips(tmp_path, monkeypatch):
-    monkeypatch.setattr(config, "RUNS_DIR", tmp_path / "runs")
-    monkeypatch.setattr(config, "CURRENT_TAG_FILE",
-                        tmp_path / "runs" / "CURRENT")
-    config.set_current_tag("v9")
-    assert config.current_tag() == "v9"
-    assert config.RunPaths("v9").models.is_dir()
+def test_canonical_artifact_names_carry_no_version_tag():
+    p = config.RunPaths("current")
+    for path in (p.hazards, p.hazards_landmark, p.joint_xgb, p.calibrators,
+                 p.timing, p.lasso_logits, p.buy_list_final):
+        # the point of the rename: no v1.18b / v2.0b / v3 in the filename
+        assert not any(tok in path.name for tok in ("v1.", "v2.", "_v3")), path
+    assert p.yip_thresholds(60).name == "yip_thresholds_p60.json"
+    assert p.snap_long(2026).name == "snap2026_long.csv"
+
+
+def test_artifacts_live_under_the_run_directory():
+    p = config.RunPaths("current")
+    assert p.joint_xgb.parent == p.models
+    assert p.oof_val_long.parent == p.training
+    assert p.buy_list_final.parent == p.buy_lists
