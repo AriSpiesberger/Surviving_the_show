@@ -44,10 +44,10 @@ from typing import Optional
 
 import numpy as np
 
-from prospects.features.scouting_grades import (
+from prospects.features.grades import (
     SCOUTING_GRADE_NAMES, scouting_grade_dict,
 )
-from prospects.storage import ProspectDB
+from prospects.core.storage import ProspectDB
 
 
 # ============================================================================

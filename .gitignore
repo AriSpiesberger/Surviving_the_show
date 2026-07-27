@@ -9,95 +9,68 @@ secrets.json
 *.key
 
 # =============================================================================
-# Large data / model artifacts (keep code in git, data out)
+# Runs — one directory per model run (see prospects/config.RunPaths)
 # =============================================================================
+# Keep code and the small published evaluation packet in git; keep the heavy
+# regeneratable binaries (models, panels, longs, scored, scratch) out.
+runs/**/models/
+runs/**/training/
+runs/**/scored/
+runs/**/scratch/
+runs/**/logs/
+runs/**/buy_lists/
+# ...but DO track each run's evaluation packet (CSVs + README + headline.json).
+!runs/**/evaluation/
+!runs/**/evaluation/**
 
-# Seed bundles (built locally by scripts/prepare_seed.py, hosted out-of-band)
-seed_*.tar.gz
+# =============================================================================
+# Archive — superseded runs, DB backups, retired artifacts (local only)
+# =============================================================================
+archive/
 
-# Per-job runtime logs from scripts/local/run_job.ps1
-logs/
-
-# Databases
+# =============================================================================
+# Databases (live + modeling; regenerated from ingestion)
+# =============================================================================
 *.db
+*.db.bak*
 *.db-journal
 *.db-shm
 *.db-wal
 *.sqlite
 *.sqlite3
 
-# Panels (regeneratable; >30MB each)
-panel_*.npz
-panel_*.joined.pkl
-panel_*.part*.npz
-panel_*.part*.joined.pkl
-panels/
+# =============================================================================
+# Reference inputs — hand-curated, checked in
+# =============================================================================
+# reference/ is tracked, but keep its bulk regeneration workspaces out of git.
+reference/**/milb_season_stats.csv
+# FanGraphs scouting: track the built inputs the model reads; ignore the
+# 85MB scrape/parse workspace that regenerates them.
+reference/fangraphs_board/raw/
+reference/fangraphs_board/parsed/
+reference/fangraphs_board/chadwick_register.csv
 
-# Model artifacts (regeneratable from training scripts)
+# =============================================================================
+# Legacy top-level artifact dirs (pre-runs/ layout; kept ignored so stray
+# regenerated files never re-enter git)
+# =============================================================================
 models/*.pkl
 models/*.joblib
 models/*.npz
-# Keep small lookup files in git
-!models/player_position_from_stats.csv
 !models/*.txt
-
-# Generated CSV outputs
-*.csv
-# Keep reference baseline tables (small, hand-curated)
-!baselines/*.csv
-!data/*.csv
-# Keep published validation packets (held-out eval summaries) — see evaluation/README.md
-!evaluation/**/*.csv
-!evaluation/**/*.txt
-
-# Backtest / buy list outputs (regenerated per cycle)
-buy_list_*.csv
-backtests/*.csv
-backtests/**/*.csv
-
-# Scoring intermediates (large, regeneratable)
-snap*_long.csv
-snap*_all_scored.csv
-v17_cohort*.csv
-v17_cohorts_*.csv
-v1.17h_*_long.csv
-v1.17_*_long.csv
-
-# =============================================================================
-# Scratch / regeneratable work
-# =============================================================================
+panel_*.npz
+panel_*.joined.pkl
+panels/
+results/
 scratch/
 outputs/
 logs/
-archive/
-
-# DB dumps
 db_dump/
-
-# External data mount
 mnt/
-
-# Comparison outputs and validation tables
-cmp_*.csv
-cmp_*.txt
-cmp.log
-val_*.csv
-val_*.txt
-shap_*.csv
-
-# Cohort pid lists
-cohort*_pids.txt
+backtests/*.csv
+buy_list_*.csv
+snap*_long.csv
 *_pids.txt
-
-# Score chunk dirs (always intermediate)
-v17_*_in/
-v17_*_out/
-v17h_*_in/
-v17h_*_out/
-s25_chunk_*
-s26_chunk_*
-v17_*_chunk_*
-v17h_*_chunk_*
 
 # =============================================================================
 # Python
@@ -114,22 +87,14 @@ build/
 dist/
 .coverage
 htmlcov/
-
-# Virtual envs
 venv/
 .venv/
 env/
 
 # =============================================================================
-# Logs and run output
+# Logs / editor / OS
 # =============================================================================
 *.log
-buylist_run.log
-build_panel.log
-
-# =============================================================================
-# Editor / OS
-# =============================================================================
 .DS_Store
 Thumbs.db
 .vscode/
@@ -138,8 +103,3 @@ Thumbs.db
 *.swo
 .claude/
 .cursor/
-
-# =============================================================================
-# One-shot scripts
-# =============================================================================
-scripts/_pathfix_*.py

@@ -1,0 +1,175 @@
+PlayerId,_fullname,_byear,Position,_seasons,_pid_is_num
+14330,Nick Williams,1994,OF,2017,True
+14344,Matt Olson,1994,1B/OF,2017,True
+14860,Kyle Martin,1991,RHP,2017,True
+15689,Luis Castillo,1993,RHP,2017,True
+17553,Andrew Moore,1995,RHP,2017,True
+17581,Ricardo Sanchez,1997,LHP,"2017,2018,2019",True
+18289,Brian Anderson,1994,3B,"2017,2018",True
+19170,Corey Ray,1994,CF,"2017,2018,2019,2020",True
+19274,Jacob Webb,1993,RHP,2019,True
+19287,Adolis García,1993,CF,"2018,2019,2021",True
+19352,Sean Murphy,1994,C,"2017,2018,2019,2020",True
+19755,Shohei Ohtani,1995,RHP,2018,True
+19913,Jesús Sánchez,1997,RF,"2017,2018,2019,2020,2021",True
+20047,Brian Miller,1995,CF,"2018,2019,2020",True
+20332,Luis Gonzalez,1995,RF,"2018,2019,2020,2021,2022",True
+20391,Luis Garcia,2000,2B,"2018,2019,2020",True
+20638,Luis Castillo,1995,SIRP,2021,True
+20805,Carlos Pérez,1996,C,2023,True
+21649,Luis Medina,1999,SIRP,"2018,2019,2020,2021,2022,2023",True
+21746,Jose Fermin,1999,SS,"2020,2021",True
+21924,Juan Morillo,1999,SIRP,"2020,2021,2023,2024,2025",True
+22318,Jose Hernandez,1997,SIRP,"2022,2023",True
+22713,Carlos Hernandez,1997,SIRP,"2018,2019,2020,2021",True
+22982,Jose Lopez,1999,MIRP,"2022,2023",True
+23697,Julio Rodríguez,2000,CF,"2019,2020,2021,2022",True
+23735,Luis Garcia,1996,SP,"2020,2021",True
+24388,Jose Rodriguez,2001,2B,"2020,2021,2022,2023",True
+24451,Julio Pablo Martinez,1996,CF,2019,True
+26467,Luis Matos,2002,CF,"2020,2021,2022,2023",True
+26693,Juan Brito,2001,2B,"2022,2023,2024,2025,2026",True
+26952,Anthony Molina,2002,SP,"2023,2024",True
+27646,Luis Ortiz,1999,SP,"2022,2023",True
+27684,Michael Massey,1998,2B,"2020,2021,2022",True
+27867,Cade Smith,1999,SIRP,2024,True
+28020,Jose Fernandez,2003,SS,"2022,2023,2024,2025,2026",True
+31757,Mason Miller,1998,SIRP,"2022,2023,2024",True
+31811,Elmer Rodríguez,2003,SP,"2022,2023,2024,2025,2026",True
+33552,LuJames Groover,2002,3B,"2024,2025,2026",True
+34847,Tyler Davis,1998,SIRP,2026,True
+sa3002796,Jose Martinez,1999,SIRP,"2020,2021",False
+sa3003083,Victor Santos,2000,SP,"2019,2020,2021",False
+sa3003090,Jose Alberto Rivera,1997,SIRP,"2020,2021",False
+sa3003109,Miguel Romero,1994,RHP,"2018,2019,2020",False
+sa3003197,David García,2000,C,"2019,2020,2021",False
+sa3005444,Juan Sanchez,2002,MIRP,2024,False
+sa3005478,Carlos D. Rodriguez,2000,CF,"2019,2020,2021,2022,2023,2024,2025",False
+sa3005603,Alberto Rodriguez,2000,RF,"2020,2021,2022",False
+sa3005795,Pedro Martinez,2001,2B,"2020,2021",False
+sa3005924,Anthony Garcia,2000,RF,"2019,2020,2021,2022,2023",False
+sa3006381,Victor Munoz,2000,SP,"2019,2020,2021,2022",False
+sa3006490,Edgar Martinez,2001,RHP,2020,False
+sa3006590,Carlos Garcia,1998,SIRP,"2020,2021",False
+sa3007295,Luis García,2000,SS,"2019,2020,2021,2022",False
+sa3007744,William Holmes,2000,SP,"2019,2020,2021",False
+sa3007992,Julio Rodriguez,2000,SIRP,2022,False
+sa3008074,Antonio Jimenez,2001,SIRP,"2022,2023,2024",False
+sa3008602,Víctor Víctor Mesa,1996,CF,"2020,2021",False
+sa3008744,Gabriel Rodriguez,2002,3B,"2020,2021",False
+sa3008747,Jose De La Cruz,2002,RF,"2020,2021,2022",False
+sa3008751,Eduardo Garcia,2002,SS,"2020,2021,2022,2023,2024,2025,2026",False
+sa3008805,Bryan Gonzalez,2001,RF,"2020,2021,2022",False
+sa3008845,Jose Ramos,2001,RF,"2021,2022,2023,2024",False
+sa3010162,Josh Mears,2001,LF,"2020,2021,2022",False
+sa3011747,Stephen Gingery,1997,SP,"2020,2021",False
+sa3014689,Luis Rodriguez,2002,CF,2021,False
+sa3014695,Alex Ramírez,2003,RF,"2021,2022,2023,2024",False
+sa3014932,Max Bain,1995,SIRP,"2021,2022,2023",False
+sa3015437,José Rodríguez,2001,SIRP,"2024,2025,2026",False
+sa3015801,Luis Castillo,2003,LF,2023,False
+sa3015828,Héctor  Rodríguez,2004,RF,"2022,2023,2024,2025,2026",False
+sa3016847,Luis Alvarez,2003,SIRP,"2024,2025,2026",False
+sa3017275,Luis R. Rodriguez,2002,SIRP,"2022,2023,2024,2025,2026",False
+sa3017478,Jackson Glenn,1997,2B,2022,False
+sa3018042,Jose Cabrera,2002,MIRP,2026,False
+sa3018278,Justin King,1997,SIRP,2024,False
+sa3018429,Michael Arroyo,2004,2B,"2023,2024,2025,2026",False
+sa3018432,Henry Ramos,2004,RF,2022,False
+sa3018476,Rafael Ramirez Jr.,2005,SS,2024,False
+sa3018826,Fernando Perez,2004,SP,"2024,2025,2026",False
+sa3020218,Everett Cooper III,2003,2B,2024,False
+sa3020327,Wilian Bormie,2003,SIRP,"2025,2026",False
+sa3020497,Austin Charles,2003,SS,"2023,2024,2025,2026",False
+sa3020659,Karson Milbrandt,2004,MIRP,"2023,2024,2025",False
+sa3020861,Thomas  Balboni Jr.,2000,SIRP,"2024,2025,2026",False
+sa3021101,Jeremy Rodriguez,2006,SS,"2023,2024,2025",False
+sa3021209,Carlos Taveras,2005,1B,2025,False
+sa3021226,Miguel Rodríguez,2005,C,"2024,2025,2026",False
+sa3021268,Angel Guzman,2005,LF,"2023,2024,2025",False
+sa3021298,Daniel  Jose Lopez,2005,CF,2025,False
+sa3021600,Bryan Martinez,2005,RF,2025,False
+sa3021637,Ramon Ramirez,2005,C,"2024,2025,2026",False
+sa3022336,Carlos Gutierrez,2004,LF,"2025,2026",False
+sa3022590,Josh Rivera,2002,SS,"2024,2025",False
+sa3023367,Sam Brown,2001,1B,2026,False
+sa3023507,Zach Fruit,2002,MIRP,"2024,2025,2026",False
+sa3023547,Cesar Hernandez,2003,CF,2024,False
+sa3023752,Jose Castro,2006,RF,2025,False
+sa3024111,Jose Ramos,2006,CF,2024,False
+sa3024303,Fernando Cruz,2006,SS,"2024,2025",False
+sa3024340,Juan Mateo,2007,SS,2025,False
+sa3024451,Drew Petska,2004,SIRP,2026,False
+sa3024574,Jose Parra,2005,SP,2026,False
+sa3024645,Gabriel Rodriguez,2007,SS,"2025,2026",False
+sa3067127,José Peña,2008,SS,"2025,2026",False
+sa3067129,Juan Sanchez,2007,3B,"2025,2026",False
+sa3067313,Trey Gregory-Alford,2004,SP,"2025,2026",False
+sa3067674,Elian Peña,2007,3B,"2025,2026",False
+sa3067702,Alejandro Cruz,2007,3B,2025,False
+sa3067734,Daniel Hernandez,2008,C,"2025,2026",False
+sa3067737,Angel De Los Santos,2008,SS,2026,False
+sa3067849,Ruben Castillo,2008,CF,2025,False
+sa3068082,Carlos Alvarez,2007,SP,2025,False
+sa3068110,Adrian  Pena,2008,SP,2025,False
+sa3068835,Alexander Frias,2008,RF,2026,False
+sa3069148,Kayson Cunningham,2006,2B,2026,False
+sa3069440,Francisco Renteria,2009,LF,2026,False
+sa3069441,Emanuel Luna,2009,OF,2026,False
+sa3069442,Carlos Carrion,2008,3B,2026,False
+sa3075039,Edelson Cabral,2009,SS,2026,False
+sa3075040,Angeibel Gomez,2008,RF,2026,False
+sa3075041,Jose Manon,2008,SS,2026,False
+sa3075042,Richard De Los Santos,2009,3B,2026,False
+sa3075045,Wandy Asigen,2009,SS,2026,False
+sa3075046,Johenssy Colome,2008,3B,2026,False
+sa3075048,Jeancer Custodio,2008,RF,2026,False
+sa3075049,Elian Rosario,2008,RF,2026,False
+sa3075052,Joniel Hernandez,2009,SS,2026,False
+sa3075053,Jose Luis Acevedo,2008,SS,2026,False
+sa3075055,Wilton Guerrero Jr.,2009,SS,2026,False
+sa3075056,Ariel Roque,2008,CF,2026,False
+sa3075057,Randy Santana,2008,CF,2026,False
+sa3075058,Jaider Suárez,2008,SS,2026,False
+sa3075059,Cleiner Ramirez,2008,OF,2026,False
+sa3075061,Samil Serrano,2008,LF,2026,False
+sa3075064,Fernando Graterol,2008,C,2026,False
+sa3075066,Ricky Duran,2008,3B,2026,False
+sa3075068,Pedro Gomez,2008,RF,2026,False
+sa3075069,Garielvin Silverio,2008,LF,2026,False
+sa3075070,Isaias Suarez,2008,CF,2026,False
+sa3075071,Gabriel Rosario,2008,LF,2026,False
+sa3075075,Albert Fermín,2009,3B,2026,False
+sa3075078,Manuel Bolivar,2008,C,2026,False
+sa3075079,Oscar Tineo,2009,SS,2026,False
+sa3075080,Starlyn De La Cruz,2008,CF,2026,False
+sa3075085,Sebastian Romero,2008,LF,2026,False
+sa3075086,Angel Ramirez,2008,CF,2026,False
+sa3076284,Luis Hernández,2008,SS,2026,False
+sa392439,Daniel Vasquez,2004,SS,2022,False
+sa550044,Chris Lee,1993,LHP,"2017,2018",False
+sa550522,Luis Gonzalez,1992,LHP,2018,False
+sa599306,Juan Perez,1992,UTIL,2017,False
+sa657308,Jose Paulino,1997,LHP,"2017,2018",False
+sa658262,Jordan Guerrero,1995,LHP,2017,False
+sa658576,Jameson Fisher,1995,LF,"2017,2018",False
+sa735825,David Rodriguez,1996,C,2017,False
+sa737904,Heath Quin,1996,OF,2017,False
+sa738988,Anfernee Grier,,CF,2017,False
+sa826652,Wladimir Gallindo,1997,3B,2018,False
+sa827974,Hector Martinez,1997,SS,2017,False
+sa828331,Jose Gomez,1997,UTIL,2018,False
+sa828797,Josh Morgan,1996,INF,"2017,2018",False
+sa830305,Luis Martinez,1996,RHP,2017,False
+sa872568,Pedro Gonzalez,1997,CF,"2017,2018,2019,2020,2021",False
+sa875023,D.J. Wilson,1997,OF,"2017,2018",False
+sa875026,Brandon Koch,1994,RHP,2017,False
+sa875647,Brad Zunica,1995,1B,"2018,2019",False
+sa909930,Yasiel Sierra,1992,RHP,2017,False
+sa914203,Eddy Julio Martinez,1996,OF,"2017,2018",False
+sa916719,Derian Cruz,2000,2B,"2017,2018",False
+sa917936,Hudson Potts,1998,3B,"2017,2018,2019,2020,2021",False
+sa917939,Andy Yerzy,1999,C,"2017,2018",False
+sa917964,Sylar Szynski,1998,RHP,2017,False
+sa922180,Alfredo Rodriguez,1995,SS,2018,False
+sa970515,Luis Almanzar,2000,SS,2018,False

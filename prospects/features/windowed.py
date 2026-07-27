@@ -30,7 +30,7 @@ from typing import Optional
 
 import numpy as np
 
-from prospects.storage import ProspectDB
+from prospects.core.storage import ProspectDB
 
 
 LEVEL_RANK = {
