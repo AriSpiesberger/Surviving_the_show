@@ -24,10 +24,12 @@ import numpy as np
 
 from prospects.model.hazards import landmark as lm
 
+from prospects import config
 from prospects.config import REPO_ROOT
-PANEL_NPZ = REPO_ROOT / "scratch" / "v20b_oof" / "panel_cache.npz"
-PANEL_META = REPO_ROOT / "scratch" / "v20b_oof" / "panel_meta.pkl"
-OUT = REPO_ROOT / "models" / "event_classifiers_v2.0b_prod.pkl"
+_RUN = config.run()
+PANEL_NPZ = _RUN.scratch / "oof" / "panel_cache.npz"
+PANEL_META = _RUN.scratch / "oof" / "panel_meta.pkl"
+OUT = _RUN.hazards
 
 
 def main():
@@ -44,10 +46,10 @@ def main():
 
     global PANEL_NPZ, PANEL_META, OUT
     if args.tag:
-        scratch = REPO_ROOT / "scratch" / f"v20b_oof_{args.tag}"
-        PANEL_NPZ = scratch / "panel_cache.npz"
-        PANEL_META = scratch / "panel_meta.pkl"
-        OUT = REPO_ROOT / "models" / f"event_classifiers_v2.0b_{args.tag}_prod.pkl"
+        run = config.run(args.tag)
+        PANEL_NPZ = run.scratch / "oof" / "panel_cache.npz"
+        PANEL_META = run.scratch / "oof" / "panel_meta.pkl"
+        OUT = run.hazards
 
     if OUT.exists() and not args.force:
         print(f"PROD hazards already exist at {OUT}. --force to overwrite.")

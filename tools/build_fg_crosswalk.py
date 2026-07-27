@@ -16,7 +16,7 @@ are flagged rather than silently picked.
   D. last+bdate+fi norm(last) + birth date + first initial (nickname variants)
   E. fuzzy         rapidfuzz on name within birth-year bucket (>=92), flagged
 
-Outputs (scratch/fangraphs_board/):
+Outputs (reference/fangraphs_board/):
   fg_crosswalk.csv   PlayerId, player_id, mlbam_id, method, confidence, names...
   fg_unmatched.csv   the FG players we could not place (with their seasons)
 
@@ -36,8 +36,9 @@ from pathlib import Path
 import pandas as pd
 
 from prospects.config import REPO_ROOT
-PARSED = REPO_ROOT / "scratch" / "fangraphs_board" / "parsed"
-OUT_DIR = REPO_ROOT / "scratch" / "fangraphs_board"
+from prospects import config
+PARSED = config.FANGRAPHS_DIR / "parsed"
+OUT_DIR = config.FANGRAPHS_DIR
 DB = REPO_ROOT / "prospects_snapshot.db"
 CHADWICK_CACHE = OUT_DIR / "chadwick_register.csv"
 

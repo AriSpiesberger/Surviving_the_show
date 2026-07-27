@@ -53,8 +53,7 @@ VAL_LONG = _RUN.oof_val_long
 XGB_PKL = _RUN.joint_xgb
 DB = config.model_db()
 OUT_DIR = _RUN.evaluation
-SCOUT_PATH = (REPO_ROOT / "scratch" / "fangraphs_board"
-              / "scouting_grades_pointintime.csv")
+SCOUT_PATH = config.SCOUTING_GRADES
 
 
 def _attach_scout_fv(df: pd.DataFrame) -> pd.DataFrame:

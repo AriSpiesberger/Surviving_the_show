@@ -100,6 +100,11 @@ PRICES_DIR_DEFAULT = REPO_ROOT / "prices"  # daily eBay pulls
 BASELINES_JSON = REFERENCE_DIR / "milb_baselines.json"      # league medians by level
 BUYLIST_PRICES = REFERENCE_DIR / "prices" / "prices_bowman_chrome_auto_v13.csv"
 BASEBALLCUBE_DIR = REFERENCE_DIR / "baseballcube"          # xref + rankings CSVs
+# FanGraphs scouting-grade pipeline (scrape -> parse -> crosswalk -> build).
+# SCOUTING_GRADES is the point-in-time output consumed at scoring time by
+# features.grades; the rest of the directory is the regeneration workspace.
+FANGRAPHS_DIR = REFERENCE_DIR / "fangraphs_board"
+SCOUTING_GRADES = FANGRAPHS_DIR / "scouting_grades_pointintime.csv"
 
 # Cross-run generated lookup consumed by both panel build and scoring: the
 # PA/IP-weighted modal position per player (overrides prospects.primary_position,

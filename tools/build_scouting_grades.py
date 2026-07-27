@@ -2,8 +2,8 @@
 keyed (player_id, season, source) -- mapping EVERYTHING usable.
 
 Outputs:
-  scratch/fangraphs_board/scouting_grades_pointintime.csv   numeric + encoded
-  scratch/fangraphs_board/scouting_reports_text.csv         report text (for
+  reference/fangraphs_board/scouting_grades_pointintime.csv   numeric + encoded
+  reference/fangraphs_board/scouting_reports_text.csv         report text (for
                                                             the embedding step)
 
 FG board (2017-2026): present/future tool grades (incl fArm), pitch grades,
@@ -25,12 +25,13 @@ import numpy as np
 import pandas as pd
 
 from prospects.config import REPO_ROOT
-FG_PARSED = REPO_ROOT / "scratch" / "fangraphs_board" / "parsed"
-XWALK = REPO_ROOT / "scratch" / "fangraphs_board" / "fg_crosswalk.csv"
-TWTC = REPO_ROOT / "scratch" / "external" / "twtc" / "data" / "twtc.csv"
+from prospects import config
+FG_PARSED = config.FANGRAPHS_DIR / "parsed"
+XWALK = config.FANGRAPHS_DIR / "fg_crosswalk.csv"
+TWTC = config.FANGRAPHS_DIR / "twtc.csv"
 DB = REPO_ROOT / "prospects_snapshot.db"
-OUT = REPO_ROOT / "scratch" / "fangraphs_board" / "scouting_grades_pointintime.csv"
-OUT_TXT = REPO_ROOT / "scratch" / "fangraphs_board" / "scouting_reports_text.csv"
+OUT = config.FANGRAPHS_DIR / "scouting_grades_pointintime.csv"
+OUT_TXT = config.FANGRAPHS_DIR / "scouting_reports_text.csv"
 
 FG_NUMERIC = {
     "pHit": "hit_p", "fHit": "hit_f", "pGame": "gamepower_p", "fGame": "gamepower_f",
