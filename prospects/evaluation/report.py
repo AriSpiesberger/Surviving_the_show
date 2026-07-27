@@ -14,9 +14,11 @@ from pathlib import Path
 
 import pandas as pd
 
+from prospects import config
 from prospects.config import REPO_ROOT as REPO
-EV = REPO / "evaluation" / "v2.0b_landmark"
-OUT = REPO / "evaluation" / "README.md"
+_RUN = config.run()
+EV = _RUN.evaluation
+OUT = _RUN.evaluation / "README.md"
 
 EVENTS = ["TOP_100_PROSPECT", "MLB_DEBUT", "ESTABLISHED_MLB", "STAR_PLUS_ELITE"]
 BUCKET_ORDER = ["ALL", "R1", "R2-R3", "R4-R10", "R10+", "IFA"]
@@ -85,15 +87,15 @@ def main():
     ap.add_argument("--out", default=str(OUT),
                     help="Output markdown path.")
     ap.add_argument("--tag", default=None,
-                    help="Convenience: render the tagged eval "
-                         "(evaluation/v2.0b_<tag>_landmark/ -> "
-                         "evaluation/README_<tag>.md) unless overridden.")
+                    help="Convenience: render runs/<tag>/evaluation/ into "
+                         "runs/<tag>/evaluation/README.md unless overridden.")
     args = ap.parse_args()
     if args.tag:
+        tagged = config.run(args.tag)
         if args.in_dir == str(EV):
-            args.in_dir = str(REPO / "evaluation" / f"v2.0b_{args.tag}_landmark")
+            args.in_dir = str(tagged.evaluation)
         if args.out == str(OUT):
-            args.out = str(REPO / "evaluation" / f"README_{args.tag}.md")
+            args.out = str(tagged.evaluation / "README.md")
     EV = Path(args.in_dir)
     OUT = Path(args.out)
 
@@ -103,6 +105,8 @@ def main():
     horizon = pd.read_csv(EV / "per_horizon.csv")
     head = json.loads((EV / "headline.json").read_text())
     H = int(head.get("eval_horizon", 6))
+    DH = config.DEFAULT_DEBUT_HORIZON
+    THR = config.DEFAULT_THRESHOLD
 
     # headline (ALL bucket per event) + weighted
     hl = ["| Event | n | base% | AP | lift | AUC | spearman | precision | recall | F1 |",
@@ -156,10 +160,10 @@ scout_is_scouted`) fed to the XGB. HOF_TRAJECTORY dropped from the event set.
 
 | Layer | Model | Trained on |
 |---|---|---|
-| Hazards (per-fold OOF, eval) | `scratch/v20b_oof/fold[0-5]_hazards.pkl` | Each fold trained on the OTHER 5 (val pids excluded). HistGBT, default HP, 314 features (incl. 76 scouting). Survival → censoring-aware. |
-| Hazards (production) | `models/event_classifiers_v2.0b_prod.pkl` | 100% of ≤2020 data. Scores the 2026 cohort (entry 2024–26 — not in training, so no leakage). |
-| Conditional joint XGB | `models/joint_xgb_v2.0b_{{oof,prod}}.pkl` (`fit_joint_xgb_cond.py`) | OOF stacked, expanded to resolved `(row, h)` pairs for h=1..10. `multi_output_tree` over the 4 heads; per-horizon censoring built in (no `--censor-window`). Outputs `P(event by snap+h)`; monotone in h via cummax at inference. |
-| Timing | `models/time_to_debut_v2.0b_prod.pkl` | LassoCV on v2.0b hazard probs + `mean_t`/`sd_t`. MAE 1.14 yr, Spearman 0.66. |
+| Hazards (per-fold OOF, eval) | `runs/current/scratch/oof/fold[0-5]_hazards.pkl` | Each fold trained on the OTHER 5 (val pids excluded). HistGBT, default HP, 314 features (incl. 76 scouting). Survival → censoring-aware. |
+| Hazards (production) | `runs/current/models/hazards.pkl` | 100% of ≤2020 data. Scores the 2026 cohort (entry 2024–26 — not in training, so no leakage). |
+| Conditional joint XGB | `runs/current/models/joint_xgb.pkl` (`model/train/joint_xgb.py`) | OOF stacked, expanded to resolved `(row, h)` pairs for h=1..10. `multi_output_tree` over the 4 heads; per-horizon censoring built in (no `--censor-window`). Outputs `P(event by snap+h)`; monotone in h via cummax at inference. |
+| Timing | `runs/current/models/timing.pkl` | LassoCV on v2.0b hazard probs + `mean_t`/`sd_t`. MAE 1.14 yr, Spearman 0.66. |
 
 **Buy-list (`build_v2.0_buylist.py`):** thesis = **`P(MLB_DEBUT ≤ 3y)`**
 (`xp_MLB_DEBUT_h3`) — filter, sort, and the output `p_MLB_DEBUT` column all use
@@ -209,9 +213,12 @@ head is the fix (ranking needs none).
 
 ## Reproducing
 
+All paths resolve through `prospects.config` to `runs/current/`; the commands
+below take no explicit artifact paths.
+
 ```bash
-# OOF folds + hazards, then the conditional joint XGB (per-horizon censoring is
-# built in; wired into run_v2_0b_oof stage 6 and train_v2_0b_prod stage 1)
+# OOF folds + hazards, then the conditional joint XGB (per-horizon censoring
+# is built in; wired into pipelines.oof stage 6 and pipelines.prod stage 1)
 python -m prospects.model.pipelines.oof
 python -m prospects.model.pipelines.prod    # 100% prod hazards + cond XGB + score 2026
 
@@ -219,10 +226,8 @@ python -m prospects.model.pipelines.prod    # 100% prod hazards + cond XGB + sco
 python -m prospects.evaluation.run --eval-horizon {H}
 python -m prospects.evaluation.report
 
-# buy list — P(debut <= 3y) thesis
-python prospects/buylist/build.py \\
-    --long results/scored/snap2026_v1.18b_landmark_long.csv \\
-    --xgb models/joint_xgb_v2.0b_prod.pkl --debut-horizon 3 --threshold 0.60
+# buy list — P(debut <= {DH}y) thesis
+python -m prospects.buylist.build --debut-horizon {DH} --threshold {THR}
 ```
 """
     OUT.write_text(md, encoding="utf-8")

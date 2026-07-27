@@ -59,16 +59,19 @@ from prospects.core.schema import CareerEvent
 from prospects.core.storage import ProspectDB
 
 
+from prospects import config
 from prospects.config import REPO_ROOT
-HAZ_OUT = REPO_ROOT / "models" / "event_classifiers_v1.18b_landmark_prod.pkl"
-LANDMARK_PANEL_CACHE = REPO_ROOT / "results" / "training" / "landmark_panel_v1.18b.npz"
-LM_FIT_LONG = REPO_ROOT / "results" / "training" / "v1.18b_landmark_fit_long.csv"
-LM_VAL_LONG = REPO_ROOT / "results" / "training" / "v1.18b_landmark_val_long.csv"
-LM_COMBINED_LONG = REPO_ROOT / "results" / "training" / "v1.18b_landmark_all_long.csv"
-BUNDLE_OUT = REPO_ROOT / "models" / "lasso_logits_v1.18b_prod.pkl"
-TIMING_OUT = REPO_ROOT / "models" / "time_to_debut_v1.18b_prod.pkl"
-FIT_PIDS = REPO_ROOT / "results" / "training" / "v17_prod_fit_pids.txt"
-VAL_PIDS = REPO_ROOT / "results" / "training" / "v17_prod_val_pids.txt"
+
+_RUN = config.run().mkdirs()
+HAZ_OUT = _RUN.hazards_landmark
+LANDMARK_PANEL_CACHE = _RUN.landmark_panel
+LM_FIT_LONG = _RUN.fit_long
+LM_VAL_LONG = _RUN.val_long
+LM_COMBINED_LONG = _RUN.all_long
+BUNDLE_OUT = _RUN.lasso_logits
+TIMING_OUT = _RUN.timing_stage_a
+FIT_PIDS = _RUN.fit_pids
+VAL_PIDS = _RUN.val_pids
 
 
 def _ev_name(e) -> str:

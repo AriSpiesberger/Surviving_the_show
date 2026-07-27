@@ -43,14 +43,16 @@ from prospects.model.joint import (  # noqa: E402
     EVENTS, H_MAX, PUBLISH_H, predict_trajectory, prep_base, realized_by_h,
 )
 
+from prospects import config
 from prospects.config import REPO_ROOT
 EVENT_WEIGHTS = {"TOP_100_PROSPECT": 1.0, "MLB_DEBUT": 2.0,
                  "ESTABLISHED_MLB": 1.0, "STAR_PLUS_ELITE": 1.0}
 
-VAL_LONG = REPO_ROOT / "results" / "training" / "v2.0b_oof_val_long.csv"
-XGB_PKL = REPO_ROOT / "models" / "joint_xgb_v2.0b_oof.pkl"
-DB = REPO_ROOT / "prospects_snapshot.db"
-OUT_DIR = REPO_ROOT / "evaluation" / "v2.0b_landmark"
+_RUN = config.run()
+VAL_LONG = _RUN.oof_val_long
+XGB_PKL = _RUN.joint_xgb
+DB = config.model_db()
+OUT_DIR = _RUN.evaluation
 SCOUT_PATH = (REPO_ROOT / "scratch" / "fangraphs_board"
               / "scouting_grades_pointintime.csv")
 
@@ -260,16 +262,14 @@ def main():
     H = args.eval_horizon
 
     if args.tag:
-        # Only fill in defaults the user didn't explicitly override.
+        # Point every default at runs/<tag>/ unless the user overrode it.
+        tagged = config.run(args.tag)
         if args.val_long == str(VAL_LONG):
-            args.val_long = str(REPO_ROOT / "results" / "training"
-                                / f"v2.0b_{args.tag}_oof_val_long.csv")
+            args.val_long = str(tagged.oof_val_long)
         if args.xgb == str(XGB_PKL):
-            args.xgb = str(REPO_ROOT / "models"
-                           / f"joint_xgb_v2.0b_{args.tag}_oof.pkl")
+            args.xgb = str(tagged.joint_xgb)
         if args.out_dir == str(OUT_DIR):
-            args.out_dir = str(REPO_ROOT / "evaluation"
-                               / f"v2.0b_{args.tag}_landmark")
+            args.out_dir = str(tagged.evaluation)
     XGB_PKL = Path(args.xgb)
     OUT_DIR = Path(args.out_dir)
     VAL_LONG = Path(args.val_long)

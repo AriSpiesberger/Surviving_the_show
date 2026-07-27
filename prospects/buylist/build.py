@@ -24,14 +24,15 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from prospects.model.joint import predict_trajectory, prep_base
+from prospects import config
+from prospects.model.joint import AGE_CENTER, YIP_CENTER, predict_trajectory, prep_base
 
-DEFAULT_LONG = "results/scored/snap2026_v17_all_long.csv"
-DEFAULT_XGB = "models/joint_xgb_v2.0b_prod.pkl"
-DEFAULT_TIMING = "models/time_to_debut_v2.0b_prod.pkl"  # retrained on v2.0b haz
-DEFAULT_PRICES = "data/prices_bowman_chrome_auto_v13.csv"
-DEFAULT_DB = "prospects_snapshot.db"
-AGE_CENTER, YIP_CENTER = 22, 3
+_RUN = config.run()  # runs/current unless RUN_TAG overrides
+DEFAULT_LONG = str(_RUN.snap_long(2026))
+DEFAULT_XGB = str(_RUN.joint_xgb)
+DEFAULT_TIMING = str(_RUN.timing)
+DEFAULT_PRICES = str(config.BUYLIST_PRICES)
+DEFAULT_DB = str(config.model_db())
 
 
 def _add_feats(df, db):
@@ -174,17 +175,20 @@ def main():
     ap.add_argument("--timing", default=DEFAULT_TIMING)
     ap.add_argument("--prices", default=DEFAULT_PRICES)
     ap.add_argument("--db", default=DEFAULT_DB)
-    ap.add_argument("--calibrators", default=None,
+    ap.add_argument("--calibrators",
+                    default=str(_RUN.calibrators)
+                    if _RUN.calibrators.exists() else None,
                     help="prob_calibrators_v2.0b.pkl (from fit_prob_calibrators). "
                          "When set, the output p_<event> columns are isotonic-"
                          "calibrated to true probabilities (raw kept as "
                          "p_<event>_raw). The debut filter then operates on the "
                          "calibrated debut prob, so --threshold reads as a real "
                          "probability.")
-    ap.add_argument("--threshold", type=float, default=0.60,
+    ap.add_argument("--threshold", type=float, default=config.DEFAULT_THRESHOLD,
                     help="Flat P(MLB_DEBUT within debut-horizon yrs) threshold "
                          "for the FINAL list")
-    ap.add_argument("--debut-horizon", type=int, default=3,
+    ap.add_argument("--debut-horizon", type=int,
+                    default=config.DEFAULT_DEBUT_HORIZON,
                     help="Buy thesis = P(MLB_DEBUT within this many years). The "
                          "FINAL filter, sort, and the output p_MLB_DEBUT column "
                          "all use this horizon's cumulative slice (default 3y).")
@@ -203,11 +207,10 @@ def main():
     ap.add_argument("--events", nargs="+",
                     default=["TOP_100_PROSPECT", "MLB_DEBUT",
                               "ESTABLISHED_MLB", "STAR_PLUS_ELITE"])
-    ap.add_argument("--out-all",
-                    default="results/buy_lists/buy_list_v2.0_ALL_SCORED.csv")
-    ap.add_argument("--out-final",
-                    default="results/buy_lists/buy_list_v2.0_FINAL.csv")
+    ap.add_argument("--out-all", default=str(_RUN.buy_list_all))
+    ap.add_argument("--out-final", default=str(_RUN.buy_list_final))
     args = ap.parse_args()
+    Path(args.out_all).parent.mkdir(parents=True, exist_ok=True)
 
     print(f"Loading {args.long}")
     df = pd.read_csv(args.long)
