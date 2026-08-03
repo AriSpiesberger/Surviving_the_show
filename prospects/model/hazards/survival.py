@@ -180,8 +180,8 @@ from prospects.features.scouting import (
 
 
 # ---- Baselines: loaded once on first use ----
+from prospects.config import BASELINES_JSON as _BASELINES_PATH_DEFAULT
 _BASELINES_CACHE: dict | None = None
-_BASELINES_PATH_DEFAULT = "baselines/milb_baselines.json"
 
 
 def _baselines() -> dict:
@@ -189,7 +189,7 @@ def _baselines() -> dict:
     need to pass them through explicitly — same surface as windowed.py."""
     global _BASELINES_CACHE
     if _BASELINES_CACHE is None:
-        _BASELINES_CACHE = load_baselines(_BASELINES_PATH_DEFAULT)
+        _BASELINES_CACHE = load_baselines(str(_BASELINES_PATH_DEFAULT))
     return _BASELINES_CACHE
 
 

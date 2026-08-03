@@ -1455,10 +1455,11 @@ def build_scouting_features(
 # ============================================================================
 
 def main():
+    from prospects import config
     parser = argparse.ArgumentParser()
-    parser.add_argument("--db", default="prospects.db")
+    parser.add_argument("--db", default=str(config.model_db()))
     parser.add_argument("--compute-baselines", action="store_true")
-    parser.add_argument("--out", default="baselines/milb_baselines.json")
+    parser.add_argument("--out", default=str(config.BASELINES_JSON))
     parser.add_argument("--smoke-test", action="store_true",
                         help="Build features for a few prospects to sanity-check")
     args = parser.parse_args()
