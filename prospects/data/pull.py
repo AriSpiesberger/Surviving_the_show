@@ -74,13 +74,17 @@ def phase_diagnostics() -> None:
 
 def phase_draft(db: ProspectDB, start: int, end: int) -> None:
     banner(f"PHASE: DRAFT DATA {start}-{end}")
-    # Prefer the local ncaa_bbStats draft cache (covers 1965-2025, no scraping).
-    # Fall back to pybaseball only if the cache is unavailable.
+    # Primary path: MLB Stats API draft as the mlbam spine, aligned injectively
+    # with the ncaa_bbStats cache (player_id scheme) and the baseballcube xref
+    # (birthdate/bonus). This is what stamps prospects.mlbam_id, which outcomes
+    # and milb match on — without it every player is labeled "never reached MLB".
     try:
-        from prospects.data.sources.mlb_draft import pull_draft_from_cache
-        pull_draft_from_cache(db, start_year=start, end_year=end, verbose=True)
+        from prospects.data.sources.draft_align import pull_draft_aligned
+        pull_draft_aligned(db, start_year=start, end_year=end, verbose=True,
+                           report_path="draft_align_audit.csv")
     except FileNotFoundError as e:
-        print(f"[draft] cache unavailable ({e}); falling back to pybaseball scrape")
+        # No cache (ncaa_bbStats not installed): fall back to cache-less paths.
+        print(f"[draft] aligned pull unavailable ({e}); trying pybaseball scrape")
         from prospects.data.sources.pybaseball import pull_draft_data
         pull_draft_data(db, start_year=start, end_year=end, verbose=True)
     print(f"\nDraft pull complete. Total prospects in DB: {db.count_prospects()}")
@@ -156,11 +160,33 @@ def phase_ncaa(db: ProspectDB) -> None:
     print(f"\nNCAA pull complete. {total} college season records added.")
 
 
+def _enable_permissive_ifa() -> None:
+    """Turn on IFA discovery in the milb pull: any mlbam id seen in affiliated-
+    ball rosters that isn't already a prospect becomes an is_international=1
+    `ifa_<mlbam>` stub. This is the portable IFA source — the MLB Stats API
+    rosters cover ~all affiliated IFAs, where the xref covers only ~46%.
+    """
+    from prospects.data.sources import milb as _milb
+    _milb.PERMISSIVE_IFA_MODE = True
+    print("[milb] permissive IFA mode ON — unknown mlbam_ids captured as IFA stubs")
+
+
+def phase_ifa(db_path: str) -> None:
+    banner("PHASE: IFA CLASSIFY + ENRICH")
+    # Permissive milb discovery mints `ifa_<mlbam>` stubs for every non-drafted
+    # player in affiliated ball. Classify each against the MLB people API into
+    # drafted / domestic-UDFA / international and fill origin, age, physicals.
+    from prospects.data.backfills.ifa_backfill import run_backfill
+    stats = run_backfill(db_path, all_rows=True, apply=True)
+    print(f"\nIFA classify/enrich complete: {stats}")
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--phase",
-        choices=["diagnostics", "draft", "outcomes", "milb", "mlb_seasons", "ncaa", "all"],
+        choices=["diagnostics", "draft", "outcomes", "milb", "mlb_seasons",
+                 "ncaa", "ifa", "all"],
         default="all",
         help="Which pull phase to run (default: all — the full pull).",
     )
@@ -193,11 +219,10 @@ def main():
         phase_outcomes(db)
     elif args.phase == "milb":
         if args.permissive_ifa:
-            from prospects.data import milb_stats as _ms
-            _ms.PERMISSIVE_IFA_MODE = True
-            print("[milb] permissive IFA mode ON — unknown mlbam_ids will be "
-                  "added as is_international=True stubs")
+            _enable_permissive_ifa()
         phase_milb(db, args.start, args.end, levels=args.levels)
+    elif args.phase == "ifa":
+        phase_ifa(args.db)
     elif args.phase == "mlb_seasons":
         banner("PHASE: MLB SEASONS (from Lahman)")
         from prospects.data.backfills.mlb_lahman_seasons import pull_mlb_seasons_from_lahman
@@ -209,7 +234,9 @@ def main():
         phase_diagnostics()
         phase_draft(db, args.start, args.end)
         phase_outcomes(db)
+        _enable_permissive_ifa()          # capture IFAs from affiliated rosters
         phase_milb(db, args.start, args.end)
+        phase_ifa(args.db)                # classify + enrich the IFA bucket
         from prospects.data.backfills.mlb_lahman_seasons import pull_mlb_seasons_from_lahman
         pull_mlb_seasons_from_lahman(db, verbose=True)
         phase_ncaa(db)

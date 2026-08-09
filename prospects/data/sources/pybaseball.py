@@ -37,6 +37,18 @@ from prospects.core.labels import label_career
 from prospects.core.storage import ProspectDB
 
 
+def _short_exc(exc: Exception, limit: int = 160) -> str:
+    """Collapse an exception to a single short line.
+
+    pybaseball's cache layer stuffs the full HTML response into the exception
+    message when baseball-reference blocks a scrape (e.g. ``amateur_draft``),
+    so ``str(exc)`` can be a 240 KB ad page. Clip it so a stray <html> body
+    can never be dumped to the console.
+    """
+    msg = " ".join(str(exc).split())
+    return msg[:limit] + "…" if len(msg) > limit else msg
+
+
 # ============================================================================
 # LAHMAN ZIP SOURCING
 # ============================================================================
@@ -121,13 +133,6 @@ def pull_draft_data(
     import pybaseball as pyb
     from tqdm import tqdm
 
-    def _short(exc: Exception, limit: int = 160) -> str:
-        # baseball-reference now serves a full HTML ad page when it blocks the
-        # scrape; pybaseball surfaces that page in the exception text. Clip it so
-        # a stray <html> body can never be dumped to the console.
-        msg = " ".join(str(exc).split())
-        return msg[:limit] + "…" if len(msg) > limit else msg
-
     total = 0
     years = range(start_year, end_year + 1)
     bar = tqdm(years, desc="draft", unit="yr", disable=not verbose)
@@ -154,7 +159,7 @@ def pull_draft_data(
                 # Older pybaseball signature
                 df = pyb.amateur_draft(year, 1)
             except Exception as e:
-                bar.write(f"[draft] {year}: scrape failed ({_short(e)})")
+                bar.write(f"[draft] {year}: scrape failed ({_short_exc(e)})")
                 continue
 
             if df is None or len(df) == 0:
@@ -209,7 +214,7 @@ def pull_draft_data(
             time.sleep(0.5)  # be nice to the source
 
         except Exception as e:
-            bar.write(f"[draft] {year}: {type(e).__name__} ({_short(e)})")
+            bar.write(f"[draft] {year}: {type(e).__name__} ({_short_exc(e)})")
             continue
 
     bar.close()
@@ -450,9 +455,9 @@ def quick_diagnostic(verbose: bool = True) -> dict:
         if verbose:
             print(f"[diag] playerid_lookup OK: {len(df)} rows, columns: {list(df.columns)[:8]}")
     except Exception as e:
-        results["player_lookup"] = {"ok": False, "error": str(e)}
+        results["player_lookup"] = {"ok": False, "error": _short_exc(e)}
         if verbose:
-            print(f"[diag] playerid_lookup FAILED: {e}")
+            print(f"[diag] playerid_lookup FAILED: {_short_exc(e)}")
 
     # Lahman batting
     try:
@@ -465,9 +470,9 @@ def quick_diagnostic(verbose: bool = True) -> dict:
         if verbose:
             print(f"[diag] lahman.batting OK: {len(df)} rows")
     except Exception as e:
-        results["lahman_batting"] = {"ok": False, "error": str(e)}
+        results["lahman_batting"] = {"ok": False, "error": _short_exc(e)}
         if verbose:
-            print(f"[diag] lahman.batting FAILED: {e}")
+            print(f"[diag] lahman.batting FAILED: {_short_exc(e)}")
 
     # Lahman All-Star
     try:
@@ -480,9 +485,9 @@ def quick_diagnostic(verbose: bool = True) -> dict:
         if verbose:
             print(f"[diag] lahman.allstar_full OK: {len(df)} rows")
     except Exception as e:
-        results["lahman_allstar"] = {"ok": False, "error": str(e)}
+        results["lahman_allstar"] = {"ok": False, "error": _short_exc(e)}
         if verbose:
-            print(f"[diag] lahman.allstar_full FAILED: {e}")
+            print(f"[diag] lahman.allstar_full FAILED: {_short_exc(e)}")
 
     # Draft data
     try:
@@ -495,8 +500,8 @@ def quick_diagnostic(verbose: bool = True) -> dict:
         if verbose:
             print(f"[diag] amateur_draft(2021,1) OK: {len(df)} rows, columns: {list(df.columns)[:8]}")
     except Exception as e:
-        results["amateur_draft"] = {"ok": False, "error": str(e)}
+        results["amateur_draft"] = {"ok": False, "error": _short_exc(e)}
         if verbose:
-            print(f"[diag] amateur_draft FAILED: {e}")
+            print(f"[diag] amateur_draft FAILED: {_short_exc(e)}")
 
     return results

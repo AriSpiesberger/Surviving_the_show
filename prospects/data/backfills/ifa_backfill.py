@@ -94,16 +94,16 @@ def _draft_roster() -> dict[int, tuple[int, int, int]]:
     return out
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--db", default=str(DEFAULT_DB))
-    ap.add_argument("--all", action="store_true")
-    ap.add_argument("--apply", action="store_true")
-    args = ap.parse_args()
+def run_backfill(db_path: str, all_rows: bool = False, apply: bool = False) -> dict:
+    """Classify and enrich the ``ifa_<mlbam>`` bucket against the MLB Stats API.
 
-    conn = sqlite3.connect(args.db)
+    Importable entry point (the full pull calls this after milb). ``all_rows``
+    processes every IFA-bucket row rather than only the active 2024+ set;
+    ``apply`` writes the updates (otherwise dry-run). Returns a small stats dict.
+    """
+    conn = sqlite3.connect(db_path)
     where = "p.is_international = 1"
-    if not args.all:
+    if not all_rows:
         where += (" AND p.player_id IN (SELECT DISTINCT player_id FROM "
                   "season_stats WHERE season_year >= 2024)")
     cols = ["player_id", "name", "mlbam_id", "birth_date", "origin",
@@ -119,7 +119,7 @@ def main():
         r["mlbam"] = _mlbam(r["player_id"], r["mlbam_id"])
     targets = [r for r in recs if r["mlbam"] is not None]
     print(f"IFA-bucket rows: {len(recs):,} | resolvable: {len(targets):,} "
-          f"({'ALL' if args.all else 'active 2024+'})")
+          f"({'ALL' if all_rows else 'active 2024+'})")
 
     drafted = _draft_roster()
 
@@ -196,17 +196,29 @@ def main():
         if items:
             print(f"  sample {tag}: " + " | ".join(str(x) for x in items[:6]))
 
-    if not args.apply:
+    stats = {"drafted": n_draft, "udfa": n_udfa, "intl": n_intl,
+             "resolved": len(people), "updates": len(updates)}
+    if not apply:
         print("\nDRY-RUN — re-run with --apply to write.")
         conn.close()
-        return
+        return stats
     cur = conn.cursor()
     for sets, vals, pid in updates:
         cur.execute(f"UPDATE prospects SET {', '.join(sets)} WHERE player_id = ?",
                     (*vals, pid))
     conn.commit()
-    print(f"\nWROTE {len(updates):,} prospect updates to {args.db}")
+    print(f"\nWROTE {len(updates):,} prospect updates to {db_path}")
     conn.close()
+    return stats
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--db", default=str(DEFAULT_DB))
+    ap.add_argument("--all", action="store_true")
+    ap.add_argument("--apply", action="store_true")
+    args = ap.parse_args()
+    run_backfill(args.db, all_rows=args.all, apply=args.apply)
 
 
 if __name__ == "__main__":

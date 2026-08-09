@@ -178,6 +178,13 @@ class ProspectDB:
                 "PRAGMA table_info(prospects)").fetchall()}
             if "mlbam_id" not in cols:
                 conn.execute("ALTER TABLE prospects ADD COLUMN mlbam_id TEXT")
+            # Biometrics columns, filled by ifa_backfill / biometrics_backfill.
+            # Part of the base schema so a fresh DB is buildable end-to-end
+            # (ifa_backfill SELECTs these; without them the pull would crash).
+            if "height_inches" not in cols:
+                conn.execute("ALTER TABLE prospects ADD COLUMN height_inches INTEGER")
+            if "weight_lbs" not in cols:
+                conn.execute("ALTER TABLE prospects ADD COLUMN weight_lbs INTEGER")
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_prospects_mlbam ON prospects(mlbam_id)"
             )
