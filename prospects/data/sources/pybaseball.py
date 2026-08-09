@@ -119,11 +119,19 @@ def pull_draft_data(
         Number of player records added/updated.
     """
     import pybaseball as pyb
+    from tqdm import tqdm
+
+    def _short(exc: Exception, limit: int = 160) -> str:
+        # baseball-reference now serves a full HTML ad page when it blocks the
+        # scrape; pybaseball surfaces that page in the exception text. Clip it so
+        # a stray <html> body can never be dumped to the console.
+        msg = " ".join(str(exc).split())
+        return msg[:limit] + "…" if len(msg) > limit else msg
 
     total = 0
-    for year in range(start_year, end_year + 1):
-        if verbose:
-            print(f"[draft] Pulling {year} draft...")
+    years = range(start_year, end_year + 1)
+    bar = tqdm(years, desc="draft", unit="yr", disable=not verbose)
+    for year in bar:
         try:
             # Pull all rounds for the year. pyb.amateur_draft signature varies;
             # try both common signatures.
@@ -146,17 +154,12 @@ def pull_draft_data(
                 # Older pybaseball signature
                 df = pyb.amateur_draft(year, 1)
             except Exception as e:
-                if verbose:
-                    print(f"  ERROR: {e}")
+                bar.write(f"[draft] {year}: scrape failed ({_short(e)})")
                 continue
 
             if df is None or len(df) == 0:
-                if verbose:
-                    print(f"  No data for {year}")
+                bar.write(f"[draft] {year}: no data")
                 continue
-
-            if verbose:
-                print(f"  Found {len(df)} picks. Columns: {list(df.columns)[:10]}...")
 
             for _, row in df.iterrows():
                 name = get_col(row, "Name", "Player", "name", default="")
@@ -202,13 +205,14 @@ def pull_draft_data(
                 db.upsert_prospect(p)
                 total += 1
 
+            bar.set_postfix(picks=total)
             time.sleep(0.5)  # be nice to the source
 
         except Exception as e:
-            if verbose:
-                print(f"  ERROR on {year}: {type(e).__name__}: {e}")
+            bar.write(f"[draft] {year}: {type(e).__name__} ({_short(e)})")
             continue
 
+    bar.close()
     if verbose:
         print(f"[draft] Loaded {total} draft picks total.")
     return total

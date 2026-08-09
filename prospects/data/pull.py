@@ -157,7 +157,8 @@ def main():
     parser.add_argument(
         "--phase",
         choices=["diagnostics", "draft", "outcomes", "milb", "mlb_seasons", "ncaa", "all"],
-        required=True,
+        default="all",
+        help="Which pull phase to run (default: all — the full pull).",
     )
     parser.add_argument("--start", type=int, default=2005, help="Start year")
     parser.add_argument("--end", type=int, default=2024, help="End year")

@@ -14,10 +14,18 @@ dependencies = [
     "scipy",
     "scikit-learn",
     "xgboost",
+    "tqdm",
+    "pybaseball",     # MLB outcomes, Lahman/Chadwick, draft-scrape fallback
+    "ncaa_bbStats",   # packaged draft cache (1965-2025) + NCAA college stats
 ]
 
 [project.optional-dependencies]
 dev = ["pytest"]
+
+[project.scripts]
+# The full historical data pull, packaged as one command. Defaults to the
+# `all` phase; runs draft -> outcomes -> milb -> mlb_seasons -> ncaa.
+prospects-pull = "prospects.data.pull:main"
 
 [tool.setuptools.packages.find]
 # The importable package. `tools/` and `tests/` are deliberately excluded:
