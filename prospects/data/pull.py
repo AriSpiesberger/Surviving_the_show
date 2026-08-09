@@ -15,12 +15,16 @@ Recommended sequence:
 Each phase is independent. If one fails, others still work.
 
 Usage:
+    prospects-pull                    # the full pull, packaged as one command
+    python -m prospects.data.pull     # same thing (phase defaults to "all")
+
+    # or run a single phase:
     python -m prospects.data.pull --phase diagnostics
     python -m prospects.data.pull --phase draft --start 2005 --end 2024
     python -m prospects.data.pull --phase outcomes
     python -m prospects.data.pull --phase milb --start 2005 --end 2024
     python -m prospects.data.pull --phase ncaa
-    python -m prospects.data.pull --phase all  # full pull
+    python -m prospects.data.pull --phase all  # full pull (explicit)
 
 Database path defaults to ./prospects.db. Override with --db.
 """
