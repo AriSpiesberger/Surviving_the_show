@@ -236,7 +236,12 @@ def main():
         phase_outcomes(db)
         _enable_permissive_ifa()          # capture IFAs from affiliated rosters
         phase_milb(db, args.start, args.end)
-        phase_ifa(args.db)                # classify + enrich the IFA bucket
+        try:                              # classify + enrich the IFA bucket
+            phase_ifa(args.db)            # fail-soft: don't waste the milb pull
+        except Exception as e:
+            print(f"[ifa] classify/enrich FAILED ({type(e).__name__}: {e}); "
+                  f"continuing. Re-run later with: python -m prospects.data.pull "
+                  f"--phase ifa --db {args.db}")
         from prospects.data.backfills.mlb_lahman_seasons import pull_mlb_seasons_from_lahman
         pull_mlb_seasons_from_lahman(db, verbose=True)
         phase_ncaa(db)

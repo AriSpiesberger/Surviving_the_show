@@ -489,7 +489,11 @@ def quick_diagnostic(verbose: bool = True) -> dict:
         if verbose:
             print(f"[diag] lahman.allstar_full FAILED: {_short_exc(e)}")
 
-    # Draft data
+    # Draft data. NOTE: pybaseball.amateur_draft scrapes baseball-reference,
+    # which now blocks it (returns an HTML page). We no longer use it — the
+    # draft universe comes from the MLB Stats API + ncaa_bbStats cache via
+    # draft_align. This probe stays only to record source health, and must
+    # never dump the blocked page to the console.
     try:
         df = pyb.amateur_draft(2021, 1)
         results["amateur_draft"] = {
@@ -500,8 +504,16 @@ def quick_diagnostic(verbose: bool = True) -> dict:
         if verbose:
             print(f"[diag] amateur_draft(2021,1) OK: {len(df)} rows, columns: {list(df.columns)[:8]}")
     except Exception as e:
-        results["amateur_draft"] = {"ok": False, "error": _short_exc(e)}
+        blocked = "html" in str(e).lower() or "<!doctype" in str(e).lower()
+        results["amateur_draft"] = {"ok": False, "blocked": blocked,
+                                    "error": "baseball-reference blocked" if blocked
+                                    else _short_exc(e)}
         if verbose:
-            print(f"[diag] amateur_draft FAILED: {_short_exc(e)}")
+            if blocked:
+                print("[diag] amateur_draft: baseball-reference blocks pybaseball "
+                      "(expected) — draft is sourced from the MLB Stats API + "
+                      "ncaa_bbStats cache via draft_align, not this.")
+            else:
+                print(f"[diag] amateur_draft FAILED: {_short_exc(e)}")
 
     return results

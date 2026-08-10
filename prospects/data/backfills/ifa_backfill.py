@@ -29,8 +29,9 @@ import json
 import re
 import sqlite3
 import time
-import urllib.request
 from pathlib import Path
+
+import requests
 
 from prospects.config import REPO_ROOT
 DEFAULT_DB = REPO_ROOT / "prospects_snapshot.db"
@@ -58,11 +59,18 @@ def _height_in(h) -> int | None:
     return int(m.group(1)) * 12 + int(m.group(2)) if m else None
 
 
+_UA = {"User-Agent": "ProspectClassifier/1.0 (research)"}
+
+
 def _get(url: str):
+    # requests bundles certifi's CA store, so TLS verification works without
+    # the machine's system certs configured (urllib did not — SSL failures on
+    # a fresh framework Python). Keeps IFA enrichment portable across computers.
     for attempt in range(3):
         try:
-            with urllib.request.urlopen(url, timeout=30) as r:
-                return json.load(r)
+            r = requests.get(url, headers=_UA, timeout=30)
+            r.raise_for_status()
+            return r.json()
         except Exception as e:  # noqa: BLE001
             if attempt == 2:
                 print(f"  fetch failed ({e!s}) {url[:60]}")

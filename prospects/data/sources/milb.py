@@ -22,6 +22,7 @@ from __future__ import annotations
 import csv
 import json
 import os
+import random
 import time
 from dataclasses import asdict, fields
 from typing import Optional
@@ -84,6 +85,48 @@ USER_AGENT = (
     "Mozilla/5.0 (compatible; ProspectClassifier/1.0; "
     "research project; contact: example@example.com)"
 )
+
+# Transient faults from the MLB endpoints (connection resets, read timeouts,
+# brief DNS failures) are common on a long pull. Retry them with exponential
+# backoff + jitter so a flaky moment never silently drops a team or a level.
+_RETRYABLE = (
+    requests.exceptions.ConnectionError,
+    requests.exceptions.Timeout,
+    requests.exceptions.ChunkedEncodingError,
+)
+
+
+def _get_json(url: str, timeout: int = 30, retries: int = 6,
+              verbose: bool = False) -> Optional[dict]:
+    """GET a JSON endpoint with retry/backoff.
+
+    Returns parsed JSON, or None for a definitive empty result (e.g. HTTP 404
+    or a non-retryable 4xx). Raises ``requests.RequestException`` only after
+    exhausting retries on *transient* faults, so callers can distinguish
+    "endpoint says no data" from "we failed to reach it" — the latter must not
+    be treated as an empty level.
+    """
+    last = None
+    for attempt in range(retries):
+        try:
+            r = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=timeout)
+            if r.status_code == 200:
+                return r.json()
+            if r.status_code not in (408, 425, 429, 500, 502, 503, 504):
+                return None  # 404 and other 4xx: genuinely no data, don't retry
+            last = f"HTTP {r.status_code}"
+        except _RETRYABLE as e:
+            last = e
+        except json.JSONDecodeError as e:
+            last = e
+        if attempt < retries - 1:
+            wait = min(2.0 ** attempt + random.uniform(0, 0.75), 30.0)
+            if verbose:
+                print(f"    retry {attempt + 1}/{retries} in {wait:.1f}s "
+                      f"({str(last)[:70]})")
+            time.sleep(wait)
+    raise requests.exceptions.RequestException(
+        f"GET failed after {retries} tries ({str(last)[:80]}): {url[:90]}")
 
 
 _MLBAM_TO_PROSPECT: Optional[dict] = None
@@ -223,23 +266,48 @@ def pull_milb_season(
     if verbose:
         print(f"[milb] Found {len(team_ids)} teams. Fetching per-team stats...")
 
+    def _fetch(tid: int) -> int:
+        return _pull_team_stats(
+            db, season, level, sport_id, tid, stats_type,
+            verbose=verbose, csv_appender=csv_appender,
+        )
+
     total_records = 0
+    failed: list[int] = []
     for i, team_id in enumerate(team_ids):
         try:
-            n = _pull_team_stats(
-                db, season, level, sport_id, team_id, stats_type,
-                verbose=verbose, csv_appender=csv_appender,
-            )
-            total_records += n
+            total_records += _fetch(team_id)
         except Exception as e:
+            failed.append(team_id)
             if verbose:
-                print(f"  team {team_id} ERROR: {type(e).__name__}: {e}")
+                print(f"  team {team_id} failed inline retries "
+                      f"({type(e).__name__}); queued for sweep")
 
         if sleep_between_teams > 0:
             time.sleep(sleep_between_teams)
 
         if verbose and (i + 1) % 5 == 0:
             print(f"  {i+1}/{len(team_ids)} teams done, {total_records} records so far")
+
+    # Second-chance sweep: teams that exhausted their inline backoff get one
+    # more pass after a cooldown. Anything still failing is reported LOUDLY —
+    # never silently dropped — so incomplete data is visible, not assumed.
+    if failed:
+        if verbose:
+            print(f"  sweeping {len(failed)} failed team(s) after cooldown...")
+        time.sleep(5.0)
+        still: list[int] = []
+        for team_id in failed:
+            try:
+                total_records += _fetch(team_id)
+            except Exception:
+                still.append(team_id)
+            time.sleep(max(sleep_between_teams, 0.5))
+        if still:
+            print(f"  [milb] WARNING {level} {season} {stats_type}: "
+                  f"{len(still)}/{len(team_ids)} teams STILL failed after "
+                  f"retries+sweep: {still} — DATA INCOMPLETE, re-run this "
+                  f"level to backfill")
 
     if verbose:
         print(f"[milb] {level} {season} {stats_type}: {total_records} records total")
@@ -252,19 +320,12 @@ def _get_team_ids(season: int, sport_id: int, verbose: bool = False) -> list[int
         f"https://statsapi.mlb.com/api/v1/teams"
         f"?sportId={sport_id}&season={season}"
     )
-    try:
-        r = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=30)
-        if r.status_code != 200:
-            if verbose:
-                print(f"  teams API status: {r.status_code}")
-            return []
-        data = r.json()
-        teams = data.get("teams", [])
-        return [t["id"] for t in teams if "id" in t]
-    except Exception as e:
-        if verbose:
-            print(f"  team list ERROR: {e}")
+    # Raises on persistent failure — a network fault must not look like an
+    # empty level ("No teams found"), which would silently drop the whole pull.
+    data = _get_json(url, verbose=verbose)
+    if not data:
         return []
+    return [t["id"] for t in data.get("teams", []) if "id" in t]
 
 
 def _pull_team_stats(
@@ -286,15 +347,10 @@ def _pull_team_stats(
         f"&limit=100&offset=0&playerPool=ALL"
     )
 
-    r = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=30)
-    if r.status_code != 200:
-        if verbose:
-            print(f"  team {team_id} HTTP {r.status_code}")
-        return 0
-
-    try:
-        data = r.json()
-    except json.JSONDecodeError:
+    # Raises on persistent failure so the caller can retry-sweep this team
+    # rather than counting it as zero records.
+    data = _get_json(url, verbose=verbose)
+    if not data:
         return 0
 
     if data.get("totalSplits", 0) == 0:
