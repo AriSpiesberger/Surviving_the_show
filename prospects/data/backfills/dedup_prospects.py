@@ -58,6 +58,12 @@ def _pick_canonical(rows: list[dict]) -> dict:
     return max(rows, key=_row_score)
 
 
+def _has_table(con, name: str) -> bool:
+    return con.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)
+    ).fetchone() is not None
+
+
 def dedup(db_path: str, dry_run: bool = False) -> None:
     con = sqlite3.connect(db_path)
     con.row_factory = sqlite3.Row
@@ -164,26 +170,28 @@ def dedup(db_path: str, dry_run: bool = False) -> None:
                 n_co_collapsed += 1
     print(f"  career_outcomes rows collapsed: {n_co_collapsed:,}")
 
-    # Same for prospect_rankings (player_id + source + year is the natural key)
-    cur = con.execute(
-        "SELECT player_id, source, year, COUNT(*) n FROM prospect_rankings "
-        "GROUP BY player_id, source, year HAVING n > 1"
-    )
-    pr_dups = cur.fetchall()
+    # Same for prospect_rankings (player_id + source + year is the natural key).
+    # Legacy table — absent in the current schema (which uses rankings_history),
+    # so guard on existence rather than crashing before the commit.
     n_pr_collapsed = 0
-    for g in pr_dups:
-        rows = con.execute(
-            "SELECT rowid, rank FROM prospect_rankings "
-            "WHERE player_id=? AND source=? AND year=?",
-            (g["player_id"], g["source"], g["year"]),
-        ).fetchall()
-        # Keep the row with the BEST (smallest) rank
-        keep = min(rows, key=lambda r: r["rank"] or 9999)
-        for r in rows:
-            if r["rowid"] != keep["rowid"]:
-                con.execute("DELETE FROM prospect_rankings WHERE rowid=?",
-                            (r["rowid"],))
-                n_pr_collapsed += 1
+    if _has_table(con, "prospect_rankings"):
+        cur = con.execute(
+            "SELECT player_id, source, year, COUNT(*) n FROM prospect_rankings "
+            "GROUP BY player_id, source, year HAVING n > 1"
+        )
+        for g in cur.fetchall():
+            rows = con.execute(
+                "SELECT rowid, rank FROM prospect_rankings "
+                "WHERE player_id=? AND source=? AND year=?",
+                (g["player_id"], g["source"], g["year"]),
+            ).fetchall()
+            # Keep the row with the BEST (smallest) rank
+            keep = min(rows, key=lambda r: r["rank"] or 9999)
+            for r in rows:
+                if r["rowid"] != keep["rowid"]:
+                    con.execute("DELETE FROM prospect_rankings WHERE rowid=?",
+                                (r["rowid"],))
+                    n_pr_collapsed += 1
     print(f"  prospect_rankings rows collapsed: {n_pr_collapsed:,}")
 
     if dry_run:
