@@ -3,8 +3,11 @@
 Same pipeline as v1.18, but the per-event scoring engine is the joint
 XGBoost booster (models/joint_xgb_v2.0_prod.pkl) instead of the per-event
 lasso bundle. v2.0's logistic outputs are well-calibrated (honest val
-ECE 0.001-0.016), so we filter by an absolute P(MLB_DEBUT) >= 0.60
-threshold instead of per-yip cutoffs.
+ECE 0.001-0.016). The final list is filtered by the established per-yip
+precision cutoff (BUYLIST_PRECISION, default 0.60): for each years-in-pro,
+keep only picks above the score where empirical precision clears the target.
+Thresholds are computed on the current model's val slice each run (never
+stale). --precision 0 falls back to a flat probability --threshold.
 
 Universe filters (same as v1.18):
   - year_top_100 IS NULL  (drop ever-top-100)
@@ -33,6 +36,11 @@ DEFAULT_XGB = str(_RUN.joint_xgb)
 DEFAULT_TIMING = str(_RUN.timing)
 DEFAULT_PRICES = str(config.BUYLIST_PRICES)
 DEFAULT_DB = str(config.model_db())
+
+# Established buy-list knob: target per-yip debut precision. The buy list keeps
+# a pick only where empirical precision at its years-in-pro clears this. Set to
+# 0 (or --precision 0) to fall back to the flat --threshold instead.
+BUYLIST_PRECISION = 0.60
 
 
 def _add_feats(df, db):
@@ -185,8 +193,14 @@ def main():
                          "calibrated debut prob, so --threshold reads as a real "
                          "probability.")
     ap.add_argument("--threshold", type=float, default=config.DEFAULT_THRESHOLD,
-                    help="Flat P(MLB_DEBUT within debut-horizon yrs) threshold "
-                         "for the FINAL list")
+                    help="Flat P(MLB_DEBUT within debut-horizon yrs) fallback "
+                         "threshold, used only when --precision 0.")
+    ap.add_argument("--precision", type=float, default=BUYLIST_PRECISION,
+                    help=f"Target per-yip debut PRECISION for the final list "
+                         f"(default {BUYLIST_PRECISION}). The established cutoff: "
+                         f"computes per-yip thresholds on the current model so "
+                         f"each yip's picks clear this precision. --precision 0 "
+                         f"uses the flat --threshold instead.")
     ap.add_argument("--debut-horizon", type=int,
                     default=config.DEFAULT_DEBUT_HORIZON,
                     help="Buy thesis = P(MLB_DEBUT within this many years). The "
@@ -200,6 +214,10 @@ def main():
     ap.add_argument("--max-yip", type=int, default=None,
                     help="Drop players with > this many years of service "
                          "(snap_offset). e.g. 4 = only <=4 yrs in pro.")
+    ap.add_argument("--include-ifa", action="store_true",
+                    help="Keep IFA (ifa_*) prospects in the buy list. Off by "
+                         "default: IFAs aren't in the draft-keyed training "
+                         "panel, so their scores are untrustworthy extrapolation.")
     ap.add_argument("--yip-thresholds", default=None,
                     help="JSON file {yip: P(debut) threshold} for per-yip "
                          "precision-calibrated cutoffs (overrides --threshold).")
@@ -284,6 +302,15 @@ def main():
         df = _join_prices(df, args.prices)
 
     # Universe filters
+    # Drop IFAs by default: the training panel is draft-keyed, so IFAs were
+    # never in training — scoring them is extrapolation and their probabilities
+    # aren't trustworthy (they dominated an early buy list spuriously). Opt back
+    # in with --include-ifa once IFAs are trained on.
+    if not args.include_ifa:
+        n_ifa = len(df)
+        df = df[~df["player_id"].astype(str).str.startswith("ifa_")].copy()
+        print(f"Drop IFAs (not in training): {n_ifa:,} -> {len(df):,}  "
+              f"({n_ifa-len(df):,} removed)")
     n0 = len(df)
     # Point-in-time: drop only players who were already top-100 AS OF the snap
     # year. A player who first makes top-100 *after* the snap was not yet known,
@@ -312,20 +339,46 @@ def main():
         print(f"Drop >{args.max_yip} yrs service (snap_offset): "
               f"{n3:,} -> {len(df):,}  ({n3-len(df):,} removed)")
 
-    # Threshold: per-yip map (calibrated precision) or a flat cutoff
-    if args.yip_thresholds:
-        import json as _json
+    # Threshold. The ESTABLISHED default is the per-yip precision cutoff: for
+    # each years-in-pro, buy only above the score where empirical precision
+    # >= BUYLIST_PRECISION. Because base rates fall with yip, a flat probability
+    # cutoff is wrong (it only ever clears advanced arms); precision-per-yip is
+    # the right knob. We compute it on the CURRENT model's val slice (calibrated
+    # space, matching p_lasso_MLB_DEBUT) so it's never stale.
+    import json as _json
+    ymap = None
+    src = None
+    if args.yip_thresholds:                       # explicit pre-generated file
         ymap = {int(k): float(v)
                 for k, v in _json.load(open(args.yip_thresholds)).items()}
+        src = f"file {Path(args.yip_thresholds).name}"
+    elif args.precision and args.precision > 0:   # default: compute on current model
+        try:
+            from prospects.model.thresholds import compute_yip_thresholds
+            thr = compute_yip_thresholds(
+                str(_RUN.oof_val_long), args.xgb, horizon=dh,
+                target=args.precision, calibrators=args.calibrators,
+                db=args.db, verbose=False)
+            ymap = {int(k): float(v) for k, v in thr.items()}
+            out = _RUN.yip_thresholds(int(round(args.precision * 100)))
+            out.parent.mkdir(parents=True, exist_ok=True)
+            _json.dump(thr, open(out, "w"), indent=2)
+            src = (f"P{int(round(args.precision*100))} per-yip, computed on "
+                   f"current model -> {out.name}")
+        except Exception as e:
+            print(f"  [threshold] precision cutoff unavailable ({type(e).__name__}: "
+                  f"{e}); falling back to flat --threshold {args.threshold}")
+
+    if ymap is not None:
         thr_row = df["snap_offset"].map(ymap)
         # A yip with no calibrated threshold can't reach the target precision
         # at any cutoff -> nobody at that yip passes.
         df["passes_filter"] = thr_row.notna() & (df["p_lasso_MLB_DEBUT"] >= thr_row)
-        print(f"Per-yip thresholds {ymap} on P(debut<={dh}y): "
-              f"{int(df['passes_filter'].sum()):,} pass")
+        print(f"Per-yip precision cutoff [{src}] on P(debut<={dh}y): "
+              f"{int(df['passes_filter'].sum()):,} pass  {ymap}")
     else:
         df["passes_filter"] = df["p_lasso_MLB_DEBUT"] >= args.threshold
-        print(f"P(MLB_DEBUT <= {dh}y) >= {args.threshold}: "
+        print(f"Flat P(MLB_DEBUT <= {dh}y) >= {args.threshold}: "
               f"{int(df['passes_filter'].sum()):,} pass")
 
     debut_hs = sorted({int(x) for x in str(args.debut_horizons).split(",")}

@@ -130,27 +130,38 @@ def pull_outcomes(
     name_idx = _build_name_index(register)  # legacy; unused under strict mlbam
     mlbam_idx = _build_mlbam_index(register)
 
-    # v1.11: Load prospect_rankings to populate year_top_100 / year_top_25.
-    # The event triggers once: the FIRST year the player appeared on the
-    # BBC top-100 (resp. top-25).
+    # Populate year_top_100 / year_top_25 from rankings_history (the global
+    # top-100 lists; `overall_rank` is the MLB-wide rank). The event triggers
+    # once: the FIRST year the player appeared at overall_rank <= 100 (resp.
+    # <= 25). best_rank tracks the lowest overall rank ever, which feeds the
+    # event flags in label_career.
+    #
+    # NOTE: this used to read a `prospect_rankings` table that no longer exists
+    # (renamed to rankings_history in the restructure) behind a silent
+    # `except: pass`, so top_100/top_25 were always empty. Read the real table
+    # and surface failures instead of swallowing them.
     first_top100: dict[str, int] = {}
     first_top25: dict[str, int] = {}
+    best_rank: dict[str, int] = {}
     try:
         with db._connect() as conn:
-            for r in conn.execute(
-                "SELECT player_id, year, rank FROM prospect_rankings"
+            for pid, as_of, rk in conn.execute(
+                "SELECT player_id, as_of, overall_rank FROM rankings_history "
+                "WHERE overall_rank IS NOT NULL"
             ).fetchall():
-                pid, yr, rk = r[0], r[1], r[2]
-                if yr is None or rk is None:
+                if as_of is None or rk is None:
                     continue
-                if pid not in first_top100 or yr < first_top100[pid]:
-                    first_top100[pid] = int(yr)
-                if rk <= 25:
-                    if pid not in first_top25 or yr < first_top25[pid]:
-                        first_top25[pid] = int(yr)
-    except Exception:
-        # prospect_rankings table may not exist on older DBs; skip silently
-        pass
+                yr = int(str(as_of)[:4])
+                if pid not in best_rank or rk < best_rank[pid]:
+                    best_rank[pid] = int(rk)
+                if rk <= 100 and (pid not in first_top100 or yr < first_top100[pid]):
+                    first_top100[pid] = yr
+                if rk <= 25 and (pid not in first_top25 or yr < first_top25[pid]):
+                    first_top25[pid] = yr
+    except Exception as e:
+        if verbose:
+            print(f"  [outcomes] WARNING: could not read rankings_history "
+                  f"({type(e).__name__}: {e}); top_100/top_25 will be empty")
     if verbose:
         print(f"  register: {len(register)} rows; {len(name_idx)} (last,first) keys "
               f"({time.time()-t0:.1f}s)")
@@ -297,6 +308,7 @@ def pull_outcomes(
             outcome = CareerOutcome(
                 player_id=p["player_id"],
                 career_complete=True,
+                best_overall_rank=best_rank.get(p["player_id"]),
                 mlb_debut_year=None,
                 final_mlb_year=None,
             )
@@ -337,6 +349,7 @@ def pull_outcomes(
                 roy_count=roy_n,
                 is_hof_inducted=is_hof,
                 is_hof_likely=False,
+                best_overall_rank=best_rank.get(p["player_id"]),
                 mlb_debut_year=debut_int,
                 final_mlb_year=last_int,
             )

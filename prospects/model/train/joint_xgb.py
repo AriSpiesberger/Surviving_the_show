@@ -71,7 +71,13 @@ def _assemble(base: pd.DataFrame, h_max: int):
     hcol = long_df["h"].astype(float)
     Y = np.empty((len(long_df), len(EVENTS)), dtype=np.float32)
     for k, ev in enumerate(EVENTS):
-        trig = pd.to_numeric(long_df[f"trigger_{ev}"], errors="coerce")
+        col = f"trigger_{ev}"
+        if col not in long_df.columns:
+            # Event skipped upstream (no positives, e.g. HOF-trajectory) ->
+            # never realized. Keep the column slot so X/Y stay aligned.
+            Y[:, k] = 0.0
+            continue
+        trig = pd.to_numeric(long_df[col], errors="coerce")
         Y[:, k] = (trig.notna() & (trig > snap)
                    & (trig <= snap + hcol)).to_numpy(np.float32)
     return long_df, Y

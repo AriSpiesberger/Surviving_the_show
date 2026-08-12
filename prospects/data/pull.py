@@ -171,6 +171,23 @@ def _enable_permissive_ifa() -> None:
     print("[milb] permissive IFA mode ON — unknown mlbam_ids captured as IFA stubs")
 
 
+def phase_rankings(db_path: str) -> None:
+    banner("PHASE: RANKINGS (global top-100 + inter-team org_rank)")
+    # Load baseballcube rankings into rankings_history. Runs BEFORE outcomes so
+    # year_top_100 / year_top_25 labels populate; also feeds org_rank features.
+    from prospects.data.sources.rankings import load_rankings
+    load_rankings(db_path, verbose=True)
+
+
+def phase_dedup(db_path: str) -> None:
+    banner("PHASE: DEDUP (one prospect row per mlbam)")
+    # Re-drafted players get one row per draft slot (same mlbam). Pick a
+    # canonical row, reassign season_stats/outcomes/rankings FKs, delete losers
+    # -> injective mlbam. Runs LAST, after all data + labels are loaded.
+    from prospects.data.backfills.dedup_prospects import dedup
+    dedup(db_path, dry_run=False)
+
+
 def phase_ifa(db_path: str) -> None:
     banner("PHASE: IFA CLASSIFY + ENRICH")
     # Permissive milb discovery mints `ifa_<mlbam>` stubs for every non-drafted
@@ -185,13 +202,15 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--phase",
-        choices=["diagnostics", "draft", "outcomes", "milb", "mlb_seasons",
-                 "ncaa", "ifa", "all"],
+        choices=["diagnostics", "draft", "rankings", "outcomes", "milb",
+                 "mlb_seasons", "ncaa", "ifa", "dedup", "all"],
         default="all",
         help="Which pull phase to run (default: all — the full pull).",
     )
     parser.add_argument("--start", type=int, default=2005, help="Start year")
-    parser.add_argument("--end", type=int, default=2024, help="End year")
+    parser.add_argument("--end", type=int, default=datetime.now().year,
+                        help="End year (default: current year, so the pull is "
+                             "current-season by default — NOT a stale hardcode)")
     parser.add_argument("--db", default="prospects.db", help="SQLite path")
     parser.add_argument(
         "--levels", nargs="+", default=None,
@@ -215,6 +234,10 @@ def main():
 
     if args.phase == "draft":
         phase_draft(db, args.start, args.end)
+    elif args.phase == "rankings":
+        phase_rankings(args.db)
+    elif args.phase == "dedup":
+        phase_dedup(args.db)
     elif args.phase == "outcomes":
         phase_outcomes(db)
     elif args.phase == "milb":
@@ -233,6 +256,7 @@ def main():
     elif args.phase == "all":
         phase_diagnostics()
         phase_draft(db, args.start, args.end)
+        phase_rankings(args.db)           # load rankings BEFORE outcomes (top_100 labels)
         phase_outcomes(db)
         _enable_permissive_ifa()          # capture IFAs from affiliated rosters
         phase_milb(db, args.start, args.end)
@@ -245,6 +269,7 @@ def main():
         from prospects.data.backfills.mlb_lahman_seasons import pull_mlb_seasons_from_lahman
         pull_mlb_seasons_from_lahman(db, verbose=True)
         phase_ncaa(db)
+        phase_dedup(args.db)              # collapse re-draft dupes LAST (injective mlbam)
 
     banner("FINAL STATS")
     print(f"  prospects:     {db.count_prospects():>8}")

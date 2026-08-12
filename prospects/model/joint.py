@@ -178,7 +178,15 @@ def realized_by_h(df: pd.DataFrame, event: str, h: int) -> np.ndarray:
     Uses trigger_<event> (the calendar fire year) vs snap_year. Already-fired
     (trigger <= snap) -> 0, consistent with the eligibility gate. Only call on
     rows where years_fwd >= h, otherwise negatives are right-censored."""
-    trig = pd.to_numeric(df[f"trigger_{event}"], errors="coerce")
+    col = f"trigger_{event}"
+    if col not in df.columns:
+        # The event was skipped upstream because it had no positives to train
+        # its hazard (e.g. HOF-trajectory for a draft cohort too recent to have
+        # accrued 50+ WAR). Treat it as never realized -> all-zero labels, so a
+        # skipped head degrades to a ~0 predictor instead of KeyError-ing the
+        # whole joint assembly.
+        return np.zeros(len(df), dtype=np.float32)
+    trig = pd.to_numeric(df[col], errors="coerce")
     snap = df["snap_year"].astype(float)
     fired = trig.notna() & (trig > snap) & (trig <= snap + h)
     return fired.to_numpy(dtype=np.float32)

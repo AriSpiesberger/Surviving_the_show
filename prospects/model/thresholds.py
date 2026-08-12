@@ -41,6 +41,64 @@ _RUN = config.run()
 DB = str(config.model_db())
 
 
+def compute_yip_thresholds(val_long, xgb, horizon=3, target=0.70,
+                           calibrators=None, max_entry=2020, min_n=15,
+                           db=DB, verbose=True):
+    """Per-yip P(MLB_DEBUT <= horizon y) thresholds at >= `target` precision.
+
+    Ranks eligible+resolved val rows by predicted debut prob within each yip and
+    takes the lowest prob at which running precision still clears `target`. Pass
+    `calibrators` to emit thresholds in CALIBRATED probability space (so they
+    apply directly to a calibrated buy list). Returns {yip_str: threshold}.
+    """
+    ev = "MLB_DEBUT"
+    H = horizon
+    p_col = f"xp_{ev}_h{H}"
+    df = pd.read_csv(val_long) if isinstance(val_long, (str, Path)) else val_long.copy()
+    df = prep_base(df, db, max_entry=max_entry)
+    df = predict_trajectory(pickle.load(open(xgb, "rb")), df)
+    if calibrators:
+        cals = pickle.load(open(calibrators, "rb"))["calibrators"]
+        if (ev, H) in cals:
+            df[p_col] = cals[(ev, H)].predict(df[p_col].astype(float).values)
+            if verbose:
+                print(f"  thresholds in CALIBRATED space ({Path(calibrators).name})")
+
+    d = df[(df["years_fwd"] >= H) & (df.get(f"eligible_{ev}", 1) == 1)].copy()
+    d["y"] = realized_by_h(d, ev, H).astype(float)
+    d = d.dropna(subset=[p_col])
+
+    thr = {}
+    if verbose:
+        print(f"\nPer-yip P({ev} <= {H}y) threshold @ precision >= {target:.0%}")
+        print(f"{'yip':>3}{'n':>7}{'base%':>8}{'thr':>8}{'n>=thr':>8}"
+              f"{'precision':>11}{'recall':>8}")
+    for yip in range(11):
+        s = d[d["snap_offset"] == yip].sort_values(p_col, ascending=False)
+        n = len(s)
+        if n < min_n:
+            continue
+        y = s["y"].values
+        p = s[p_col].values
+        tot_pos = float(y.sum())
+        cum_prec = np.cumsum(y) / np.arange(1, n + 1)
+        ok = np.where(cum_prec >= target)[0]
+        base = y.mean()
+        if len(ok):
+            k = int(ok[-1])               # deepest rank still >= target
+            t = float(p[k])
+            prec = float(cum_prec[k])
+            rec = float(np.sum(y[:k + 1]) / tot_pos) if tot_pos > 0 else float("nan")
+            thr[str(yip)] = round(t, 4)
+            if verbose:
+                print(f"{yip:>3}{n:>7}{base*100:>7.1f}%{t:>8.3f}{k+1:>8}"
+                      f"{prec:>11.3f}{rec:>8.3f}")
+        elif verbose:
+            print(f"{yip:>3}{n:>7}{base*100:>7.1f}%{'—':>8}{'0':>8}"
+                  f"{'never':>11}{'—':>8}")
+    return thr
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--val-long", default=str(_RUN.oof_val_long))
