@@ -26,6 +26,9 @@ dev = ["pytest"]
 # The full historical data pull, packaged as one command. Defaults to the
 # `all` phase; runs draft -> outcomes -> milb -> mlb_seasons -> ncaa.
 prospects-pull = "prospects.data.pull:main"
+# The whole runbook as one command: pull -> outcomes -> snapshot -> oof ->
+# hazards -> prod -> evaluate -> buy list. Resumable via --from <step>.
+prospects-refresh = "prospects.refresh:main"
 
 [tool.setuptools.packages.find]
 # The importable package. `tools/` and `tests/` are deliberately excluded:
