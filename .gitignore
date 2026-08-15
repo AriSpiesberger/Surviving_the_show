@@ -54,11 +54,10 @@ archive/
 # =============================================================================
 # reference/ is tracked, but keep its bulk regeneration workspaces out of git.
 reference/**/milb_season_stats.csv
-# FanGraphs scouting: track the built inputs the model reads; ignore the
-# 85MB scrape/parse workspace that regenerates them.
-reference/fangraphs_board/raw/
-reference/fangraphs_board/parsed/
-reference/fangraphs_board/chadwick_register.csv
+# FanGraphs scouting: the raw board HTML is a point-in-time scrape of boards
+# that are NOT retrievable for past years — it is source data, not a workspace,
+# so it is tracked despite the size. parsed/ + chadwick_register are cheap and
+# tracked alongside it so a fresh clone can rebuild the grades without scraping.
 
 # =============================================================================
 # Legacy top-level artifact dirs (pre-runs/ layout; kept ignored so stray
@@ -113,3 +112,6 @@ Thumbs.db
 *.swo
 .claude/
 .cursor/
+
+# FanGraphs scrape debug dumps (debris, not source)
+reference/fangraphs_board/raw/**/debug_*.json

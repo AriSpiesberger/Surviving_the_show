@@ -1,0 +1,101 @@
+rank,player,pos,ht,wt,ba,th,born,place,hilvl,mlb_years,stat_years,draft_info,status,cur_org,cur_lev
+1,Daisuke Matsuzaka,p,6-0,205,R,R,1980-09-13,"Tokyo,JP",MLB,2007-2014,1999-2021,2006- UDFA -BOS,premium,premium,premium
+2,Alex Gordon,lf,6-1,220,L,R,1984-02-10,"Lincoln,NE",MLB,2007-2020,2003-2020,2005- 1- 2-KCA,premium,premium,premium
+3,Delmon Young,rf,6-3,240,R,R,1985-09-14,"Montgomery,AL",MLB,2006-2015,2004-2018,2003- 1- 1-TBA,premium,premium,premium
+4,Phil Hughes,p,6-5,240,R,R,1986-06-24,"Mission Viejo,CA",MLB,2007-2018,2004-2018,2004- 1- 23-NYA,premium,premium,premium
+5,Homer Bailey,p,6-4,223,R,R,1986-05-03,"La Grange,TX",MLB,2007-2020,2004-2021,2004- 1- 7-CIN,premium,premium,premium
+6,Cameron Maybin,lf-cf,6-3,215,R,R,1987-04-04,"Asheville,NC",MLB,2007-2021,2006-2021,2005- 1- 10-DET,premium,premium,premium
+7,Evan Longoria,3b,6-1,213,R,R,1985-10-07,"Downey,CA",MLB,2008-2023,2005-2023,2006- 1- 3-TBA,premium,premium,premium
+8,Brandon Wood,ss-3b,6-3,205,R,R,1985-03-02,"Austin,TX",MLB,2007-2011,2003-2014,2003- 1- 23-ANA,premium,premium,premium
+9,Justin Upton,dh-rf,6-1,215,R,R,1987-08-25,"Norfolk,VA",MLB,2007-2022,2006-2022,2005- 1- 1-ARI,premium,premium,premium
+10,Andrew Miller,p,6-7,200,L,L,1985-05-21,"Gainesville,FL",MLB,2006-2021,2004-2021,2006- 1- 6-DET,premium,premium,premium
+11,Tim Lincecum,p,5-11,170,L,R,1984-06-15,"Bellevue,WA",MLB,2007-2016,2004-2018,2006- 1- 10-SFN,premium,premium,premium
+12,Chris Young,cf,6-2,200,R,R,1983-09-05,"Houston,TX",MLB,2006-2018,2002-2018,2001- 16- 493-CHA,premium,premium,premium
+13,Andrew McCutchen,dh,5-10,190,R,R,1986-10-10,"Fort Meade,FL",MLB,2009-2026,2005-2026,2005- 1- 11-PIT,premium,premium,premium
+14,Jay Bruce,1b,6-3,230,L,L,1987-04-03,"Beaumont,TX",MLB,2008-2021,2005-2021,2005- 1- 12-CIN,premium,premium,premium
+15,Troy Tulowitzki,ss,6-3,205,R,R,1984-10-10,"Santa Clara,CA",MLB,2006-2019,2003-2019,2005- 1- 7-COL,premium,premium,premium
+16,Yovani Gallardo,p,6-2,205,R,R,1986-02-27,"La Pieded,MX",MLB,2007-2018,2004-2018,2004- 2- 46-MIL,premium,premium,premium
+17,Reid Brignac,ss-3b,6-2,197,L,R,1986-01-16,"St. Amant,LA",MLB,2008-2016,2004-2018,2004- 2- 45-TBA,premium,premium,premium
+18,Carlos Gonzalez,lf,6-1,220,L,L,1985-10-17,"Maracaibo,VZ",MLB,2008-2019,2003-2019,2002- UDFA -ARI,premium,premium,premium
+19,Andy LaRoche,3b,6-0,205,R,R,1983-09-13,"Fort Scott,KS",MLB,2007-2013,2003-2016,2003- 39-1171-LAN,premium,premium,premium
+20,Mike Pelfrey,p,6-7,240,R,R,1984-01-14,"Wichita,KS",MLB,2006-2017,2003-2017,2005- 1- 9-NYN,premium,premium,premium
+21,Matt Garza,p,6-4,220,R,R,1983-11-26,"Selma,CA",MLB,2006-2017,2003-2017,2005- 1- 25-MIN,premium,premium,premium
+22,Fernando Martinez,of,6-1,210,L,R,1988-10-10,"Rio San Juan,DR",MLB,2009-2013,2006-2015,2005- UDFA -NYN,premium,premium,premium
+23,Adam Miller,p,6-4,215,R,R,1984-11-26,"Plano,TX",AAA, ,2003-2015,2003- 1- 31-CLE,premium,premium,premium
+24,Clayton Kershaw,p,6-4,225,L,L,1988-03-19,"Dallas,TX",MLB,2008-2025,2006-2025,2006- 1- 7-LAN,premium,premium,premium
+25,Billy Butler,dh,6-0,260,R,R,1986-04-18,"Orange Park,FL",MLB,2007-2016,2004-2016,2004- 1- 14-KCA,premium,premium,premium
+26,Ryan Braun,lf,6-2,205,R,R,1983-11-17,"Mission Hills,CA",MLB,2007-2020,2003-2020,2005- 1- 5-MIL,premium,premium,premium
+27,Jose Tabata,rf-lf,5-11,210,R,R,1988-08-12,"Estado Anzoategui,VZ",MLB,2010-2015,2005-2021,2004- UDFA -NYA,premium,premium,premium
+28,Adam Jones,cf,6-2,215,R,R,1985-08-01,"San Diego,CA",MLB,2006-2019,2003-2021,2003- 1- 37-SEA,premium,premium,premium
+29,Colby Rasmus,cf,6-2,195,L,L,1986-08-11,"Columbus,GA",MLB,2009-2018,2005-2018,2005- 1- 28-SLN,premium,premium,premium
+30,Franklin Morales,p,6-1,210,L,L,1986-01-24,"San Juan de los Morros,VZ",MLB,2007-2016,2004-2017,2002- UDFA -COL,premium,premium,premium
+31,Scott Elbert,p,6-2,225,L,L,1985-08-13,"Joplin,MO",MLB,2008-2014,2004-2015,2004- 1- 17-LAN,premium,premium,premium
+32,Luke Hochevar,p,6-5,225,R,R,1983-09-15,"Denver,CO",MLB,2007-2016,2003-2016,2006- 1- 1-KCA,premium,premium,premium
+33,Jacoby Ellsbury,cf,6-1,195,L,L,1983-09-11,"Madras,OR",MLB,2007-2017,2003-2017,2005- 1- 23-BOS,premium,premium,premium
+34,Nick Adenhart,p,6-3,200,R,R,1986-08-24,"Silver Spring,MD",MLB,2008-2009,2005-2009,2004- 14- 413-ANA,premium,premium,premium
+35,Jeff Niemann,p,6-9,285,R,R,1983-02-28,"Houston,TX",MLB,2008-2012,2002-2012,2004- 1- 4-TBA,premium,premium,premium
+36,Jarrod Saltalamacchia,c,6-4,235,B,R,1985-05-02,"West Palm Beach,FL",MLB,2007-2018,2003-2018,2003- 1- 36-ATL,premium,premium,premium
+37,Jake McGee,p,6-4,229,L,L,1986-08-06,"San Jose,CA",MLB,2010-2022,2004-2022,2004- 5- 135-TBA,premium,premium,premium
+38,Hunter Pence,rf,6-4,216,R,R,1983-04-13,"Fort Worth,TX",MLB,2007-2020,2003-2020,2004- 2- 64-HOU,premium,premium,premium
+39,Adam Lind,1b-dh,6-2,195,L,L,1983-07-17,"Muncie,IN",MLB,2006-2017,2003-2018,2004- 3- 83-TOR,premium,premium,premium
+40,Chris Volstad,p,6-8,235,R,R,1986-09-23,"Palm Beach Gardens,FL",MLB,2008-2018,2005-2018,2005- 1- 16-MIA,premium,premium,premium
+41,Carlos Carrasco,p,6-4,224,R,R,1987-03-21,"Barquisimeto,VZ",MLB,2009-2026,2004-2026,2003- UDFA -PHI,premium,premium,premium
+42,Jason Hirsh,p,6-8,250,R,R,1982-02-20,"Burbank,CA",MLB,2006-2008,2003-2013,2003- 2- 59-HOU,premium,premium,premium
+43,Joey Votto,1b,6-2,220,L,R,1983-09-10,"Toronto,ON",MLB,2007-2023,2002-2024,2002- 2- 44-CIN,premium,premium,premium
+44,James Loney,1b,6-3,235,L,L,1984-05-07,"Houston,TX",MLB,2006-2016,2002-2019,2002- 1- 19-LAN,premium,premium,premium
+45,Josh Fields,1b,6-2,225,R,R,1982-12-14,"Ada,OK",MLB,2006-2010,2002-2015,2004- 1- 18-CHA,premium,premium,premium
+46,Ian Stewart,3b,6-3,225,L,R,1985-04-05,"Long Beach,CA",MLB,2007-2014,2003-2015,2003- 1- 10-COL,premium,premium,premium
+47,Billy Rowell,1b,6-5,205,L,R,1988-09-10,"Sewell,NJ",AA, ,2006-2011,2006- 1- 9-BAL,premium,premium,premium
+48,Dexter Fowler,rf,6-5,205,B,R,1986-03-22,"Atlanta,GA",MLB,2008-2021,2005-2022,2004- 14- 410-COL,premium,premium,premium
+49,Felix Pie,of,6-2,190,L,L,1985-02-08,"La Romana,DR",MLB,2007-2013,2002-2022,2001- UDFA -CHN,premium,premium,premium
+50,Travis Buck,of,6-2,230,L,R,1983-11-18,"Richland,WA",MLB,2007-2012,2003-2014,2005- 1- 36-OAK,premium,premium,premium
+51,Clay Buchholz,p,6-3,190,L,R,1984-08-14,"Nederland,TX",MLB,2007-2019,2004-2019,2005- 1- 42-BOS,premium,premium,premium
+52,Donnie Veal,p,6-4,235,L,L,1984-09-18,"Jackson,MS",MLB,2009-2015,2005-2015,2005- 2- 68-CHN,premium,premium,premium
+53,Travis Snider,1b-rf,6-0,230,L,L,1988-02-02,"Kirkland,WA",MLB,2008-2015,2006-2021,2006- 1- 14-TOR,premium,premium,premium
+54,Chuck Lofgren,p,6-3,190,L,L,1986-01-29,"Redwood City,CA",AAA, ,2004-2013,2004- 4- 107-CLE,premium,premium,premium
+55,Ryan Sweeney,cf-of,6-4,225,L,L,1985-02-20,"Cedar Rapids,IA",MLB,2006-2014,2003-2014,2003- 2- 52-CHA,premium,premium,premium
+56,John Danks,p,6-1,210,L,L,1985-04-15,"Austin,TX",MLB,2007-2016,2003-2016,2003- 1- 9-TEX,premium,premium,premium
+57,Humberto Sanchez,p,6-6,270,R,R,1983-05-28,"Santo Domingo,DR",MLB,2008-2008,2002-2012,2001- 31- 927-DET,premium,premium,premium
+58,Troy Patton,p,6-1,180,B,L,1985-09-03,"Spring,TX",MLB,2007-2014,2004-2015,2004- 9- 274-HOU,premium,premium,premium
+59,Jonathan Sanchez,p,6-0,200,L,L,1982-11-19,"Mayaguez,PR",MLB,2006-2013,2004-2019,2004- 27- 820-SFN,premium,premium,premium
+60,Carlos Gomez,cf,6-3,220,R,R,1985-12-04,"Santiago,DR",MLB,2007-2019,2004-2019,2002- UDFA -NYN,premium,premium,premium
+61,Erick Aybar,ss,5-10,195,B,R,1984-01-14,"Bani,DR",MLB,2006-2017,2002-2022,2002- UDFA -ANA,premium,premium,premium
+62,Jeff Clement,1b,6-1,220,L,R,1983-08-21,"Marshalltown,IA",MLB,2007-2012,2003-2013,2005- 1- 3-SEA,premium,premium,premium
+63,Miguel Montero,c,5-11,221,L,R,1983-07-09,"Caracas,VZ",MLB,2006-2018,2002-2018,2001- UDFA -ARI,premium,premium,premium
+64,Trevor Crowe,lf-of,5-10,190,B,R,1983-11-17,"Portland,OR",MLB,2009-2013,2003-2014,2005- 1- 14-CLE,premium,premium,premium
+65,Elvis Andrus,2b-ss,6-0,210,R,R,1988-08-26,"Maracay,VZ",MLB,2009-2023,2005-2023,2005- UDFA -ATL,premium,premium,premium
+66,Glen Perkins,p,6-0,205,L,L,1983-03-02,"St. Paul,MN",MLB,2006-2017,2003-2017,2004- 1- 22-MIN,premium,premium,premium
+67,Daric Barton,1b,6-0,215,L,R,1985-08-16,"Springfield,VT",MLB,2007-2014,2003-2018,2003- 1- 28-SLN,premium,premium,premium
+68,Eric Hurley,p,6-4,195,R,R,1985-09-17,"Sikeston,MO",MLB,2008-2008,2004-2012,2004- 1- 30-TEX,premium,premium,premium
+69,Brad Lincoln,p,6-0,225,L,R,1985-05-25,"Lake Jackson,TX",MLB,2010-2014,2004-2015,2006- 1- 4-PIT,premium,premium,premium
+70,Jaime Garcia,p,6-2,215,L,L,1986-07-08,"Reynosa,MX",MLB,2008-2018,2006-2018,2005- 22- 680-SLN,premium,premium,premium
+71,Kevin Slowey,p,6-3,200,R,R,1984-05-04,"Conroe,TX",MLB,2007-2014,2003-2014,2005- 2- 73-MIN,premium,premium,premium
+72,Gio Gonzalez,p,6-0,205,R,L,1985-09-19,"Hialeah,FL",MLB,2008-2020,2004-2020,2004- 1- 38-CHA,premium,premium,premium
+73,Philip Humber,p,6-3,215,R,R,1982-12-21,"Nacogdoches,TX",MLB,2006-2013,2002-2014,2004- 1- 3-NYN,premium,premium,premium
+74,Neil Walker,2b,6-2,214,B,R,1985-09-10,"Pittsburgh,PA",MLB,2009-2020,2004-2020,2004- 1- 11-PIT,premium,premium,premium
+75,Joba Chamberlain,p,6-3,245,R,R,1985-09-23,"Lincoln,NE",MLB,2007-2016,2005-2016,2006- 1- 41-NYA,premium,premium,premium
+76,Greg Reynolds,p,6-7,225,R,R,1985-07-03,"Pacifica,CA",MLB,2008-2013,2004-2016,2006- 1- 2-COL,premium,premium,premium
+77,Brett Sinkbeil,p,6-2,210,R,R,1984-12-26,"Tulsa,OK",MLB,2010-2010,2004-2011,2006- 1- 19-MIA,premium,premium,premium
+78,Brandon Erbe,p,6-4,190,R,R,1987-12-25,"Baltimore,MD",AAA, ,2005-2014,2005- 3- 93-BAL,premium,premium,premium
+79,Elijah Dukes,cf,6-1,250,R,R,1984-06-26,"Homestead,FL",MLB,2007-2009,2003-2010,2002- 3- 74-TBA,premium,premium,premium
+80,Jeff Samardzija,p,6-4,233,R,R,1985-01-23,"Merrillville,IN",MLB,2008-2020,2004-2020,2006- 5- 149-CHN,premium,premium,premium
+81,Daniel Bard,p,6-4,215,R,R,1985-06-25,"Houston,TX",MLB,2009-2023,2004-2025,2006- 1- 28-BOS,premium,premium,premium
+82,Alberto Callaspo,3b,5-8,210,B,R,1983-04-19,"Maracay,VZ",MLB,2006-2015,2002-2022,2001- UDFA -ANA,premium,premium,premium
+83,Michael Bowden,p,6-3,215,R,R,1986-09-09,"Winfield,IL",MLB,2008-2013,2005-2021,2005- 1- 47-BOS,premium,premium,premium
+84,Ubaldo Jimenez,p,6-5,221,R,R,1984-01-22,"Nagua,DR",MLB,2006-2017,2002-2017,2001- UDFA -COL,premium,premium,premium
+85,Matt Albers,p,6-1,225,L,R,1983-01-20,"Houston,TX",MLB,2006-2019,2002-2019,2001- 23- 686-HOU,premium,premium,premium
+86,Brian Barton,rf,6-3,190,R,R,1982-04-25,"Los Angeles,CA",MLB,2008-2008,2001-2014,2000- 38-1137-LAN,premium,premium,premium
+87,Brandon Morrow,p,6-3,207,R,R,1984-07-26,"Santa Rosa,CA",MLB,2007-2018,2004-2018,2006- 1- 5-SEA,premium,premium,premium
+88,Drew Stubbs,rf,6-4,205,R,R,1984-10-04,"Atlanta,TX",MLB,2009-2017,2004-2017,2006- 1- 8-CIN,premium,premium,premium
+89,Kurt Suzuki,c,5-11,210,R,R,1983-10-04,"Wailuku,HI",MLB,2007-2022,2002-2022,2004- 2- 67-OAK,premium,premium,premium
+90,Matt Harrison,p,6-4,240,L,L,1985-09-16,"Durham,NC",MLB,2008-2015,2003-2015,2003- 3- 97-ATL,premium,premium,premium
+91,Will Inman,p,6-1,220,R,R,1987-02-06,"Danville,VA",AAA, ,2005-2013,2005- 3- 85-MIL,premium,premium,premium
+92,Chris Iannetta,c,6-0,230,R,R,1983-04-08,"Providence,RI",MLB,2006-2019,2002-2019,2004- 4- 110-COL,premium,premium,premium
+93,Brent Lillibridge,3b-2b,5-11,185,R,R,1983-09-18,"Everett,WA",MLB,2008-2013,2003-2014,2005- 4- 121-PIT,premium,premium,premium
+94,Chris Parmelee,rf-1b,6-1,220,L,L,1988-02-24,"Long Beach,CA",MLB,2011-2016,2006-2019,2006- 1- 20-MIN,premium,premium,premium
+95,Collin Balester,p,6-4,190,R,R,1986-06-06,"Huntington Beach,CA",MLB,2008-2015,2004-2017,2004- 4- 114-MON,premium,premium,premium
+96,Sean West,p,6-8,275,R,L,1986-06-15,"Houston,TX",MLB,2009-2010,2005-2011,2005- 1- 44-MIA,premium,premium,premium
+97,Wade Davis,p,6-5,225,R,R,1985-09-07,"Lake Wales,FL",MLB,2009-2021,2004-2021,2004- 3- 75-TBA,premium,premium,premium
+98,Micah Owings,of,6-5,220,R,R,1982-09-28,"Gainesville,GA",MLB,2007-2012,2003-2016,2005- 3- 83-ARI,premium,premium,premium
+99,Pedro Beato,p,6-6,230,R,R,1986-10-27,"Santo Domingo,DR",MLB,2011-2017,2006-2019,2006- 1- 32-BAL,premium,premium,premium
+100,Dellin Betances,p,6-8,265,R,R,1988-03-23,"New York,NY",MLB,2011-2021,2006-2022,2006- 8- 254-NYA,premium,premium,premium

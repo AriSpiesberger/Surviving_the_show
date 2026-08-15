@@ -1,0 +1,102 @@
+rank,player,pos,ht,wt,ba,th,born,place,hilvl,mlb_years,stat_years,draft_info,status,cur_org,cur_lev
+1,Adley Rutschman,c-dh,6-2,230,B,R,1998-02-06,"Portland,OR",MLB,2022-2026,2017-2026,2019- 1- 1-BAL,premium,premium,premium
+2,Julio Rodriguez,cf,6-3,228,R,R,2000-12-29,"Loma de Cabrera,DR",MLB,2022-2026,2018-2026,2017- UDFA -SEA,premium,premium,premium
+3,Bobby Witt,ss-3b,6-1,200,R,R,2000-06-14,"Colleyville,TX",MLB,2022-2026,2019-2026,2019- 1- 2-KCA,premium,premium,premium
+4,Riley Greene,lf-dh,6-2,200,L,L,2000-09-28,"Orlando,FL",MLB,2022-2026,2019-2026,2019- 1- 5-DET,premium,premium,premium
+5,Spencer Torkelson,1b,6-1,220,R,R,1999-08-26,"Petaluma,CA",MLB,2022-2026,2018-2026,2020- 1- 1-DET,premium,premium,premium
+6,Grayson Rodriguez,p,6-5,230,L,R,1999-11-16,"Houston,TX",MLB,2023-2024,2018-2026,2018- 1- 11-BAL,premium,premium,premium
+7,Gabriel Moreno,c,5-9,195,R,R,2000-02-14,"Barquisimeto,VZ",MLB,2022-2026,2017-2026,2016- UDFA -TOR,premium,premium,premium
+8,Shane Baz,p,6-3,200,R,R,1999-06-17,"Houston,TX",MLB,2021-2026,2017-2026,2017- 1- 12-PIT,premium,premium,premium
+9,CJ Abrams,ss,6-0,191,L,R,2000-10-03,"Alpharetta,GA",MLB,2022-2026,2019-2026,2019- 1- 6-SDN,premium,premium,premium
+10,Anthony Volpe,ss,5-10,197,R,R,2001-04-28,"New York,NY",MLB,2023-2026,2019-2026,2019- 1- 30-NYA,premium,premium,premium
+11,Keibert Ruiz,c,6-0,238,B,R,1998-07-20,"Valencia,VZ",MLB,2020-2026,2015-2026,2014- UDFA -LAN,premium,premium,premium
+12,George Kirby,p,6-4,215,R,R,1998-02-04,"Rye,NY",MLB,2022-2026,2017-2026,2019- 1- 20-SEA,premium,premium,premium
+13,Francisco Alvarez,c,5-10,233,R,R,2001-11-19,"Guatire,VZ",MLB,2022-2026,2019-2026,2018- UDFA -NYN,premium,premium,premium
+14,Oneil Cruz,ss-cf,6-7,240,L,R,1998-10-04,"Nizao,DR",MLB,2021-2026,2016-2026,2015- UDFA -LAN,premium,premium,premium
+15,Marcelo Mayer,ss,6-3,188,L,R,2002-12-12,"Chula Vista,CA",MLB,2025-2026,2021-2026,2021- 1- 4-BOS,premium,premium,premium
+16,Brennen Davis,lf-rf,6-2,210,R,R,1999-11-02,"Chandler,AZ",AAA, ,2018-2026,2018- 2- 62-CHN,premium,premium,premium
+17,Marco Luciano,ss-2b,6-1,215,R,R,2001-09-10,"San Francisco de Macoris,DR",MLB,2023-2024,2019-2026,2018- UDFA -SFN,premium,premium,premium
+18,Noelvi Marte,3b,6-2,216,R,R,2001-10-16,"Cotui,DR",MLB,2023-2026,2019-2026,2018- UDFA -SEA,premium,premium,premium
+19,Triston Casas,1b,6-4,244,L,R,2000-01-15,"Miami,FL",MLB,2022-2025,2018-2025,2018- 1- 26-BOS,premium,premium,premium
+20,Corbin Carroll,cf-lf,5-10,165,L,L,2000-08-21,"Seattle,WA",MLB,2022-2026,2019-2026,2019- 1- 16-ARI,premium,premium,premium
+21,Tyler Soderstrom,c-1b,6-2,200,L,R,2001-11-24,"Turlock,CA",MLB,2023-2026,2021-2026,2020- 1- 26-OAK,premium,premium,premium
+22,Zac Veen,lf-rf,6-3,190,L,R,2001-12-12,"Port Orange,FL",MLB,2025-2025,2021-2026,2020- 1- 9-COL,premium,premium,premium
+23,Diego Cartaya,c,6-1,219,R,R,2001-09-07,"Maracay,VZ",AAA, ,2019-2026,2018- UDFA -LAN,premium,premium,premium
+24,Jordan Walker,rf,6-6,250,R,R,2002-05-22,"Stone Mountain,GA",MLB,2023-2026,2021-2026,2020- 1- 21-SLN,premium,premium,premium
+25,Jack Leiter,p,6-1,205,R,R,2000-04-21,"Plantation,FL",MLB,2024-2026,2020-2026,2021- 1- 2-TEX,premium,premium,premium
+26,Josh Jung,3b,6-1,214,R,R,1998-02-12,"San Antonio,TX",MLB,2022-2026,2017-2026,2019- 1- 8-TEX,premium,premium,premium
+27,Cade Cavalli,p,6-4,223,R,R,1998-08-14,"Tulsa,OK",MLB,2022-2026,2018-2026,2020- 1- 22-WAS,premium,premium,premium
+28,Reid Detmers,p,6-2,210,L,L,1999-07-08,"Nokomis,IL",MLB,2021-2026,2018-2026,2020- 1- 10-ANA,premium,premium,premium
+29,Jordan Lawlar,ss-3b,6-0,190,R,R,2002-07-17,"Carrollton,TX",MLB,2023-2026,2021-2026,2021- 1- 6-ARI,premium,premium,premium
+30,Robert Hassell,cf-rf,6-1,186,L,L,2001-08-15,"Franklin,TN",MLB,2025-2025,2021-2026,2020- 1- 8-SDN,premium,premium,premium
+31,Nick Yorke,2b-lf,6-0,210,R,R,2002-04-02,"Newport Beach,CA",MLB,2024-2026,2021-2026,2020- 1- 17-BOS,premium,premium,premium
+32,Alek Thomas,cf,5-9,175,L,L,2000-04-28,"Chicago,IL",MLB,2022-2026,2018-2026,2018- 2- 63-ARI,premium,premium,premium
+33,Jose Barrero,ss-cf,6-4,211,R,R,1998-04-05,"Havana,CU",MLB,2020-2025,2018-2026,2017- UDFA -CIN,premium,premium,premium
+34,Nolan Gorman,2b,6-0,225,L,R,2000-05-10,"Phoenix,AZ",MLB,2022-2026,2018-2026,2018- 1- 19-SLN,premium,premium,premium
+35,Hunter Greene,p,6-5,242,R,R,1999-08-06,"Los Angeles,CA",MLB,2022-2025,2017-2025,2017- 1- 2-CIN,premium,premium,premium
+36,Nick Lodolo,p,6-6,216,L,L,1998-02-05,"La Verne,CA",MLB,2022-2026,2017-2026,2019- 1- 7-CIN,premium,premium,premium
+37,Aaron Ashby,p,6-0,188,R,L,1998-05-24,"Kansas City,MO",MLB,2021-2026,2017-2026,2018- 4- 125-MIL,premium,premium,premium
+38,Bobby Miller,p,6-5,220,L,R,1999-04-05,"Elk Grove Village,IL",MLB,2023-2025,2018-2025,2020- 1- 29-LAN,premium,premium,premium
+39,Brett Baty,3b-2b,6-3,210,L,R,1999-11-13,"Round Rock,TX",MLB,2022-2026,2019-2026,2019- 1- 12-NYN,premium,premium,premium
+40,Miguel Vargas,lf-3b,6-2,225,R,R,1999-11-17,"Havana,CU",MLB,2022-2026,2018-2026,2017- UDFA -LAN,premium,premium,premium
+41,Henry Davis,c,6-0,225,R,R,1999-09-21,"Bedford,NY",MLB,2023-2026,2019-2026,2021- 1- 1-PIT,premium,premium,premium
+42,MJ Melendez,c-lf,6-1,190,L,R,1998-11-29,"Daytona Beach,FL",MLB,2022-2026,2017-2026,2017- 2- 52-KCA,premium,premium,premium
+43,Nick Pratto,1b-lf,6-1,225,L,L,1998-10-06,"Huntington Beach,CA",MLB,2022-2024,2017-2026,2017- 1- 14-KCA,premium,premium,premium
+44,Josh Lowe,rf,6-4,220,L,R,1998-02-02,"Chesapeake,VA",MLB,2021-2026,2016-2026,2016- 1- 13-TBA,premium,premium,premium
+45,Matt Brash,p,6-1,173,R,R,1998-05-12,"Kingston,ON",MLB,2022-2026,2017-2026,2019- 4- 113-SDN,premium,premium,premium
+46,Michael Harris,cf,6-0,195,L,L,2001-03-07,"DeKalb,GA",MLB,2022-2026,2019-2026,2019- 3- 98-ATL,premium,premium,premium
+47,Austin Martin,2b-lf,5-11,185,R,R,1999-03-23,"DeLand,FL",MLB,2024-2026,2018-2026,2020- 1- 5-TOR,premium,premium,premium
+48,Eury Perez,p,6-8,220,R,R,2003-04-15,"Santiago,DR",MLB,2023-2026,2021-2026,2019- UDFA -MIA,premium,premium,premium
+49,Nick Gonzales,2b-ss,5-9,200,R,R,1999-05-27,"Tucson,AZ",MLB,2023-2026,2018-2026,2020- 1- 7-PIT,premium,premium,premium
+50,Matthew Liberatore,p,6-4,215,L,L,1999-11-06,"Peoria,AZ",MLB,2022-2026,2018-2026,2018- 1- 16-TBA,premium,premium,premium
+51,Mick Abel,p,6-5,190,R,R,2001-08-18,"Portland,OR",MLB,2025-2026,2021-2026,2020- 1- 15-PHI,premium,premium,premium
+52,DL Hall,p,6-1,204,L,L,1998-09-19,"Valdosta,GA",MLB,2022-2026,2017-2026,2017- 1- 21-BAL,premium,premium,premium
+53,Luis Campusano,c,5-10,232,R,R,1998-09-29,"Augusta,GA",MLB,2020-2026,2017-2026,2017- 2- 39-SDN,premium,premium,premium
+54,Shea Langeliers,c-dh,6-0,205,R,R,1997-11-18,"Portland,OR",MLB,2022-2026,2017-2026,2019- 1- 9-ATL,premium,premium,premium
+55,Oswald Peraza,ss-3b,5-11,200,R,R,2000-06-15,"Barquisimeto,VZ",MLB,2022-2026,2017-2026,2016- UDFA -NYA,premium,premium,premium
+56,Vidal Brujan,2b-ss,5-9,180,B,R,1998-02-09,"San Pedro De Macoris,DR",MLB,2021-2026,2015-2026,2014- UDFA -TBA,premium,premium,premium
+57,Gunnar Henderson,3b-ss,6-3,220,L,R,2001-06-29,"Montgomery,AL",MLB,2022-2026,2019-2026,2019- 2- 42-BAL,premium,premium,premium
+58,Taj Bradley,p,6-2,220,R,R,2001-03-20,"Los Angeles,CA",MLB,2023-2026,2018-2026,2018- 5- 150-TBA,premium,premium,premium
+59,Brady House,3b,6-4,208,R,R,2003-06-04,"Winder,GA",MLB,2025-2026,2021-2026,2021- 1- 11-WAS,premium,premium,premium
+60,Kahlil Watson,ss-2b,5-9,178,L,R,2003-04-16,"Chase City,VA",AAA, ,2021-2026,2021- 1- 16-MIA,premium,premium,premium
+61,Cole Winn,p,6-2,190,R,R,1999-11-25,"Longmont,CO",MLB,2024-2026,2019-2026,2018- 1- 15-TEX,premium,premium,premium
+62,Nate Pearson,p,6-6,255,R,R,1996-08-20,"Odessa,FL",MLB,2020-2025,2016-2026,2017- 1- 28-TOR,premium,premium,premium
+63,Tyler Freeman,cf,5-11,190,R,R,1999-05-21,"Rancho Cucamonga,CA",MLB,2022-2026,2017-2026,2017- 2- 71-CLE,premium,premium,premium
+64,Sixto Sanchez,p,6-0,234,R,R,1998-07-29,"San Cristobal,DR",MLB,2020-2024,2015-2024,2015- UDFA -PHI,premium,premium,premium
+65,Daniel Espino,p,6-2,225,R,R,2001-01-05,"Panama City,PN",AAA, ,2019-2026,2019- 1- 24-CLE,premium,premium,premium
+66,Brayan Rocchio,ss,5-9,170,B,R,2001-01-13,"Caracas,VZ",MLB,2023-2026,2018-2026,2017- UDFA -CLE,premium,premium,premium
+67,Bryson Stott,2b,6-1,200,L,R,1997-10-06,"Las Vegas,NV",MLB,2022-2026,2017-2026,2019- 1- 14-PHI,premium,premium,premium
+68,George Valera,rf-lf,5-10,195,L,L,2000-11-13,"Queens,NY",MLB,2025-2026,2018-2026,2017- UDFA -CLE,premium,premium,premium
+69,Edward Cabrera,p,6-5,217,R,R,1998-04-13,"Santiago,DR",MLB,2021-2026,2016-2026,2015- UDFA -MIA,premium,premium,premium
+70,Korey Lee,c,6-0,225,R,R,1998-07-25,"Escondido,CA",MLB,2022-2025,2017-2026,2019- 1- 32-HOU,premium,premium,premium
+71,Joey Bart,c,6-3,235,R,R,1996-12-15,"Buford,GA",MLB,2020-2026,2016-2026,2018- 1- 2-SFN,premium,premium,premium
+72,Jeremy Pena,ss,6-1,202,R,R,1997-09-22,"Santo Domingo,DR",MLB,2022-2026,2016-2026,2018- 3- 102-HOU,premium,premium,premium
+73,Luis Matos,rf-cf,5-11,207,R,R,2002-01-28,"Valera,VZ",MLB,2023-2026,2019-2026,2018- UDFA -SFN,premium,premium,premium
+74,Max Meyer,p,6-0,196,L,R,1999-03-12,"Woodbury,MN",MLB,2022-2026,2018-2026,2020- 1- 3-MIA,premium,premium,premium
+75,Orelvis Martinez,ss-3b,5-11,200,R,R,2001-11-19,"Santo Domingo,DR",MLB,2024-2024,2019-2025,2018- UDFA -TOR,premium,premium,premium
+76,Michael Busch,1b,6-0,210,L,R,1997-11-09,"Inver Grove Heights,MN",MLB,2023-2026,2017-2026,2019- 1- 31-LAN,premium,premium,premium
+77,Elly De La Cruz,ss-3b,6-5,200,B,R,2002-01-11,"Sabana Grande De Boya,DR",MLB,2023-2026,2019-2026,2018- UDFA -CIN,premium,premium,premium
+78,Liover Peguero,ss-2b,6-1,200,R,R,2000-12-31,"Higuey,DR",MLB,2022-2025,2018-2026,2017- UDFA -ARI,premium,premium,premium
+79,Jackson Jobe,p,6-2,190,R,R,2002-07-30,"Irving,TX",MLB,2024-2025,2022-2025,2021- 1- 3-DET,premium,premium,premium
+80,Roansy Contreras,p,6-1,205,R,R,1999-11-07,"Peralvillo,DR",MLB,2021-2025,2017-2025,2016- UDFA -NYA,premium,premium,premium
+81,Cristian Hernandez,ss-2b,6-2,175,R,R,2003-12-13,"Santo Domingo,DR",AA, ,2021-2026,2021- UDFA -CHN,premium,premium,premium
+82,Royce Lewis,3b-dh,6-0,200,R,R,1999-06-05,"Aliso Viejo,CA",MLB,2022-2026,2017-2026,2017- 1- 1-MIN,premium,premium,premium
+83,Brandon Williamson,p,6-6,210,R,L,1998-04-02,"Fairmont,MN",MLB,2023-2026,2017-2026,2019- 2- 59-SEA,premium,premium,premium
+84,Cristian Pache,cf-lf,6-1,215,R,R,1998-11-19,"Santo Domingo Centro,DR",MLB,2020-2024,2016-2026,2015- UDFA -ATL,premium,premium,premium
+85,Jordan Balazovic,p,6-5,215,R,R,1998-09-17,"Mississauga,ON",MLB,2023-2023,2016-2025,2016- 5- 153-MIN,premium,premium,premium
+86,Joe Ryan,p,6-2,205,R,R,1996-06-05,"San Francisco,CA",MLB,2021-2026,2015-2026,2018- 7- 210-TBA,premium,premium,premium
+87,Jasson Dominguez,cf-lf,5-9,218,B,R,2003-02-07,"Esperanza,DR",MLB,2023-2026,2021-2026,2019- UDFA -NYA,premium,premium,premium
+88,Quinn Priester,p,6-3,210,R,R,2000-09-16,"Glendale Heights,IL",MLB,2023-2025,2019-2026,2019- 1- 18-PIT,premium,premium,premium
+89,Geraldo Perdomo,ss,6-2,203,B,R,1999-10-22,"Santo Domingo,DR",MLB,2021-2026,2017-2026,2016- UDFA -ARI,premium,premium,premium
+90,Jose Miranda,3b-dh,6-1,210,R,R,1998-06-29,"Manati,PR",MLB,2022-2025,2016-2026,2016- 2- 73-MIN,premium,premium,premium
+91,Jarren Duran,cf-lf,6-1,205,L,R,1996-09-05,"Corona,CA",MLB,2021-2026,2016-2026,2018- 7- 220-BOS,premium,premium,premium
+92,Ronny Mauricio,2b-ss,6-4,166,B,R,2001-04-04,"San Pedro De Macoris,DR",MLB,2023-2026,2018-2026,2017- UDFA -NYN,premium,premium,premium
+93,Blake Walston,p,6-5,175,L,L,2001-06-28,"Wilmington,NC",MLB,2024-2024,2019-2024,2019- 1- 26-ARI,premium,premium,premium
+94,Heliot Ramos,lf-cf,5-11,230,R,R,1999-09-07,"Humacao,PR",MLB,2022-2026,2017-2026,2017- 1- 19-SFN,premium,premium,premium
+95,Kyle Harrison,p,6-2,209,R,L,2001-08-12,"San Jose,CA",MLB,2023-2026,2021-2026,2020- 3- 85-SFN,premium,premium,premium
+96,Ryne Nelson,p,6-3,184,R,R,1998-02-01,"Henderson,NV",MLB,2022-2026,2017-2026,2019- 2- 56-ARI,premium,premium,premium
+97,Curtis Mead,3b-2b,6-1,225,R,R,2000-10-26,"Adelaide,AU",MLB,2023-2026,2018-2026,2018- UDFA -PHI,premium,premium,premium
+98,Colton Cowser,lf-cf,6-3,220,L,R,2000-03-20,"Houston,TX",MLB,2023-2026,2019-2026,2021- 1- 5-BAL,premium,premium,premium
+99,Ryan Pepiot,p,6-3,210,R,R,1997-08-21,"Indianapolis,IN",MLB,2022-2025,2017-2025,2019- 3- 102-LAN,premium,premium,premium
+100,Gabriel Arias,ss-3b,6-1,217,R,R,2000-02-27,"La Victoria,VZ",MLB,2022-2026,2017-2026,2016- UDFA -SDN,premium,premium,premium
+THE BASEBALL CUBE

@@ -1,0 +1,47 @@
+{
+  "year": 2023,
+  "tried": [
+    {
+      "statgroup": "fielders",
+      "name": "scouting-grades",
+      "url": "https://www.fangraphs.com/api/prospects/board/data?statgroup=fielders&stattype=grades&type=0&pos=all&team=0&pageitems=100000&season=2023&seasonend=2023&hand=all&rookieyearstart=&rookieyearend=&signed=all&active=&minip=&minpa=",
+      "status": 404,
+      "length": 298
+    },
+    {
+      "statgroup": "fielders",
+      "name": "scouting-stats",
+      "url": "https://www.fangraphs.com/api/prospects/board/data?statgroup=fielders&stattype=stat&type=0&pos=all&team=0&pageitems=100000&season=2023&seasonend=2023",
+      "status": 404,
+      "length": 222
+    },
+    {
+      "statgroup": "fielders",
+      "name": "scouting-summary-legacy",
+      "url": "https://www.fangraphs.com/prospects/the-board/json?year=2023&group=fielders",
+      "status": 200,
+      "length": 3775727
+    },
+    {
+      "statgroup": "pitchers",
+      "name": "scouting-grades",
+      "url": "https://www.fangraphs.com/api/prospects/board/data?statgroup=pitchers&stattype=grades&type=0&pos=all&team=0&pageitems=100000&season=2023&seasonend=2023&hand=all&rookieyearstart=&rookieyearend=&signed=all&active=&minip=&minpa=",
+      "status": 404,
+      "length": 298
+    },
+    {
+      "statgroup": "pitchers",
+      "name": "scouting-stats",
+      "url": "https://www.fangraphs.com/api/prospects/board/data?statgroup=pitchers&stattype=stat&type=0&pos=all&team=0&pageitems=100000&season=2023&seasonend=2023",
+      "status": 404,
+      "length": 222
+    },
+    {
+      "statgroup": "pitchers",
+      "name": "scouting-summary-legacy",
+      "url": "https://www.fangraphs.com/prospects/the-board/json?year=2023&group=pitchers",
+      "status": 200,
+      "length": 3775727
+    }
+  ]
+}
