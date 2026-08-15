@@ -118,8 +118,310 @@ class SeasonStats:
     hr9: Optional[float] = None
     velo_avg: Optional[float] = None
 
+    # ---- Hitter raw counting stats -------------------------------------
+    # Stored raw (not as rates) so any rate — including era-specific wOBA
+    # weights — can be recomputed later without a re-pull. All available
+    # from the MLB Stats API stitch endpoint for MLB *and* every MiLB level
+    # back to 2005.
+    ab: Optional[int] = None
+    hits: Optional[int] = None
+    doubles: Optional[int] = None
+    triples: Optional[int] = None
+    bb: Optional[int] = None
+    ibb: Optional[int] = None
+    hbp: Optional[int] = None
+    sf: Optional[int] = None
+    sac_bunts: Optional[int] = None
+    so: Optional[int] = None
+    total_bases: Optional[int] = None
+    runs: Optional[int] = None
+    rbi: Optional[int] = None
+    caught_stealing: Optional[int] = None
+    gidp: Optional[int] = None
+    gidp_opp: Optional[int] = None
+    left_on_base: Optional[int] = None
+    reached_on_error: Optional[int] = None
+
+    # Hitter batted-ball profile (out + hit components by trajectory)
+    ground_outs: Optional[int] = None
+    air_outs: Optional[int] = None
+    fly_outs: Optional[int] = None
+    line_outs: Optional[int] = None
+    pop_outs: Optional[int] = None
+    ground_hits: Optional[int] = None
+    fly_hits: Optional[int] = None
+    line_hits: Optional[int] = None
+    pop_hits: Optional[int] = None
+    balls_in_play: Optional[int] = None
+
+    # Hitter plate discipline (pitch-level aggregates)
+    pitches_seen: Optional[int] = None
+    total_swings: Optional[int] = None
+    swings_and_misses: Optional[int] = None
+
+    # ---- Pitcher raw counting stats ------------------------------------
+    p_batters_faced: Optional[int] = None
+    p_ab: Optional[int] = None
+    p_hits: Optional[int] = None
+    p_doubles: Optional[int] = None
+    p_triples: Optional[int] = None
+    p_hr: Optional[int] = None
+    p_bb: Optional[int] = None
+    p_ibb: Optional[int] = None
+    p_hbp: Optional[int] = None
+    p_so: Optional[int] = None
+    p_sf: Optional[int] = None
+    p_sac_bunts: Optional[int] = None
+    p_earned_runs: Optional[int] = None
+    p_runs: Optional[int] = None
+    p_total_bases: Optional[int] = None
+    p_gidp: Optional[int] = None
+    p_gidp_opp: Optional[int] = None
+    p_balks: Optional[int] = None
+    p_wild_pitches: Optional[int] = None
+    p_pickoffs: Optional[int] = None
+    p_outs: Optional[int] = None
+
+    # Pitcher batted-ball profile
+    p_ground_outs: Optional[int] = None
+    p_air_outs: Optional[int] = None
+    p_fly_outs: Optional[int] = None
+    p_line_outs: Optional[int] = None
+    p_pop_outs: Optional[int] = None
+    p_ground_hits: Optional[int] = None
+    p_fly_hits: Optional[int] = None
+    p_line_hits: Optional[int] = None
+    p_pop_hits: Optional[int] = None
+    p_balls_in_play: Optional[int] = None
+
+    # Pitcher pitch-level / discipline induced
+    p_pitches: Optional[int] = None
+    p_strikes: Optional[int] = None
+    p_total_swings: Optional[int] = None
+    p_swings_and_misses: Optional[int] = None
+
+    # Pitcher role / usage
+    p_games: Optional[int] = None
+    p_games_started: Optional[int] = None
+    p_complete_games: Optional[int] = None
+    p_saves: Optional[int] = None
+    p_holds: Optional[int] = None
+    p_babip_allowed: Optional[float] = None
+    p_avg_against: Optional[float] = None
+    p_obp_against: Optional[float] = None
+    p_slg_against: Optional[float] = None
+
     # Defense/positional context
     primary_position: Optional[str] = None
+
+
+# ============================================================================
+# PLATOON SPLITS — one row per player-season-level-side
+# ============================================================================
+
+@dataclass
+class PlatoonSplit:
+    """A player's line against one handedness of opposing pitcher (or batter,
+    for pitcher rows). `side` is "L" or "R" (the *opponent's* handedness).
+
+    Available for MLB and every MiLB level via the statsapi statSplits
+    endpoint with sitCodes=vl,vr.
+    """
+    player_id: str
+    season_year: int
+    level: str
+    side: str                 # "L" or "R"
+    is_pitcher: bool = False
+
+    pa: int = 0
+    ab: Optional[int] = None
+    hits: Optional[int] = None
+    doubles: Optional[int] = None
+    triples: Optional[int] = None
+    home_runs: Optional[int] = None
+    bb: Optional[int] = None
+    ibb: Optional[int] = None
+    hbp: Optional[int] = None
+    sf: Optional[int] = None
+    so: Optional[int] = None
+    avg: Optional[float] = None
+    obp: Optional[float] = None
+    slg: Optional[float] = None
+    ops: Optional[float] = None
+    babip: Optional[float] = None
+    ground_outs: Optional[int] = None
+    air_outs: Optional[int] = None
+
+
+# ============================================================================
+# FIELDING — one row per player-season-level-position
+# ============================================================================
+
+@dataclass
+class FieldingStats:
+    """Defensive workload and rate stats at one position.
+
+    The MLB Stats API exposes no advanced defensive metric (no DRS/UZR/OAA)
+    for MiLB, so this captures workload (innings by position), reliability
+    (errors/chances) and range (range factor). Position *scarcity* — how
+    premium the spots a player can hold are — is the real signal here.
+    """
+    player_id: str
+    season_year: int
+    level: str
+    position: str             # "C", "SS", "CF", ...
+
+    games: Optional[int] = None
+    games_started: Optional[int] = None
+    innings: Optional[float] = None
+    chances: Optional[int] = None
+    putouts: Optional[int] = None
+    assists: Optional[int] = None
+    errors: Optional[int] = None
+    throwing_errors: Optional[int] = None
+    double_plays: Optional[int] = None
+    fielding_pct: Optional[float] = None
+    range_factor_per9: Optional[float] = None
+
+
+# ============================================================================
+# PARK FACTORS — one row per team-season-level
+# ============================================================================
+
+@dataclass
+class ParkFactor:
+    """Multiplicative run/HR environment for one team's home park.
+
+    Computed from the team's own home-vs-road splits (the standard
+    "halved" park factor), regressed toward 1.0 by sample size. 1.00 is
+    neutral; 1.15 means the park inflates the stat by 15%.
+    """
+    team_id: str
+    season_year: int
+    level: str
+    org: Optional[str] = None
+
+    pf_runs: Optional[float] = None
+    pf_hr: Optional[float] = None
+    pf_hits: Optional[float] = None
+    pf_doubles: Optional[float] = None
+    pf_triples: Optional[float] = None
+    pf_so: Optional[float] = None
+    pf_bb: Optional[float] = None
+    home_games: Optional[int] = None
+    road_games: Optional[int] = None
+
+
+# ============================================================================
+# STATCAST — MLB only, 2015+ (batted-ball tracking and pitch characteristics)
+# ============================================================================
+
+@dataclass
+class StatcastBatting:
+    """Statcast batted-ball and plate-discipline profile. MLB only."""
+    player_id: str
+    season_year: int
+
+    batted_balls: Optional[int] = None
+    avg_exit_velo: Optional[float] = None
+    max_exit_velo: Optional[float] = None
+    avg_launch_angle: Optional[float] = None
+    barrel_pct: Optional[float] = None
+    hard_hit_pct: Optional[float] = None
+    sweet_spot_pct: Optional[float] = None
+    xba: Optional[float] = None
+    xslg: Optional[float] = None
+    xwoba: Optional[float] = None
+    xwobacon: Optional[float] = None
+    # Plate discipline (zone-aware — the piece season stats cannot give)
+    o_swing_pct: Optional[float] = None     # chase rate
+    z_swing_pct: Optional[float] = None
+    swing_pct: Optional[float] = None
+    o_contact_pct: Optional[float] = None
+    z_contact_pct: Optional[float] = None
+    contact_pct: Optional[float] = None
+    zone_pct: Optional[float] = None
+    whiff_pct: Optional[float] = None
+    # Batted-ball direction
+    pull_pct: Optional[float] = None
+    center_pct: Optional[float] = None
+    oppo_pct: Optional[float] = None
+    gb_pct: Optional[float] = None
+    fb_pct: Optional[float] = None
+    ld_pct: Optional[float] = None
+    iffb_pct: Optional[float] = None
+    hr_per_fb: Optional[float] = None
+    # Value / context
+    wrc_plus: Optional[float] = None
+    woba_fg: Optional[float] = None
+    war: Optional[float] = None
+    def_runs: Optional[float] = None
+    bsr: Optional[float] = None
+    sprint_speed: Optional[float] = None
+
+
+@dataclass
+class StatcastPitching:
+    """Statcast pitch characteristics and arsenal. MLB only."""
+    player_id: str
+    season_year: int
+
+    avg_exit_velo_against: Optional[float] = None
+    barrel_pct_against: Optional[float] = None
+    hard_hit_pct_against: Optional[float] = None
+    xera: Optional[float] = None
+    xwoba_against: Optional[float] = None
+    # Overall velocity / movement
+    fb_velo: Optional[float] = None         # four-seam average velocity
+    fb_spin: Optional[float] = None
+    avg_velo: Optional[float] = None        # all pitches
+    # Discipline induced
+    o_swing_pct: Optional[float] = None
+    z_contact_pct: Optional[float] = None
+    contact_pct: Optional[float] = None
+    swstr_pct: Optional[float] = None
+    zone_pct: Optional[float] = None
+    first_strike_pct: Optional[float] = None
+    # Batted ball allowed
+    gb_pct: Optional[float] = None
+    fb_pct: Optional[float] = None
+    ld_pct: Optional[float] = None
+    hr_per_fb: Optional[float] = None
+    # Value
+    fip_fg: Optional[float] = None
+    xfip: Optional[float] = None
+    siera: Optional[float] = None
+    war: Optional[float] = None
+
+
+@dataclass
+class PitchArsenal:
+    """One pitch type in a pitcher's arsenal for one season. MLB only."""
+    player_id: str
+    season_year: int
+    pitch_type: str           # "FF", "SL", "CH", ...
+
+    usage_pct: Optional[float] = None
+    avg_velo: Optional[float] = None
+    avg_spin: Optional[float] = None
+    whiff_pct: Optional[float] = None
+    put_away_pct: Optional[float] = None
+    run_value_per_100: Optional[float] = None
+    xwoba_against: Optional[float] = None
+
+
+@dataclass
+class CatcherDefense:
+    """Framing / throwing metrics for catchers. MLB only."""
+    player_id: str
+    season_year: int
+
+    framing_runs: Optional[float] = None
+    strike_rate: Optional[float] = None
+    called_pitches: Optional[int] = None
+    pop_time: Optional[float] = None
+    arm_strength: Optional[float] = None
+    exchange_time: Optional[float] = None
 
 
 # ============================================================================

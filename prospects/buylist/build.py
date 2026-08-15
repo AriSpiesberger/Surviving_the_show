@@ -211,16 +211,21 @@ def main():
                          "p_MLB_DEBUT_<h>y columns (the trajectory, not one "
                          "number). The --debut-horizon thesis and 6y are always "
                          "included. Default 2,3,4,6.")
-    ap.add_argument("--max-yip", type=int, default=None,
+    ap.add_argument("--max-yip", type=int, default=3,
                     help="Drop players with > this many years of service "
-                         "(snap_offset). e.g. 4 = only <=4 yrs in pro.")
+                         "(snap_offset). Default 3 — we only buy through yip 3. "
+                         "Pass -1 to disable the cap.")
     ap.add_argument("--include-ifa", action="store_true",
                     help="Keep IFA (ifa_*) prospects in the buy list. Off by "
                          "default: IFAs aren't in the draft-keyed training "
                          "panel, so their scores are untrustworthy extrapolation.")
     ap.add_argument("--yip-thresholds", default=None,
                     help="JSON file {yip: P(debut) threshold} for per-yip "
-                         "precision-calibrated cutoffs (overrides --threshold).")
+                         "precision-calibrated cutoffs. This is the proper "
+                         "production filter — each yip cohort held to ~the "
+                         "target precision rather than a flat cutoff. If "
+                         "omitted, thresholds are computed fresh from "
+                         "--precision on the current model.")
     ap.add_argument("--sort-by", default="p_MLB_DEBUT")
     ap.add_argument("--events", nargs="+",
                     default=["TOP_100_PROSPECT", "MLB_DEBUT",
@@ -333,7 +338,8 @@ def main():
     df = df[df["cur_level_2026"] != "MLB"].copy()
     print(f"Drop currently-MLB: {n2:,} -> {len(df):,}  "
           f"({n2-len(df):,} removed)")
-    if args.max_yip is not None and "snap_offset" in df.columns:
+    if args.max_yip is not None and args.max_yip >= 0 \
+            and "snap_offset" in df.columns:
         n3 = len(df)
         df = df[df["snap_offset"] <= args.max_yip].copy()
         print(f"Drop >{args.max_yip} yrs service (snap_offset): "

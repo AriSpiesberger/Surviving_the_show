@@ -413,6 +413,45 @@ def _parse_player_stats(
             k_pct=_safe_div(player.get("strikeOuts"), player.get("plateAppearances")),
             bb_pct=_safe_div(player.get("baseOnBalls"), player.get("plateAppearances")),
             iso=_compute_iso(player),
+
+            # ---- Raw counting stats ----
+            # Kept raw so wOBA/wRC+/xFIP can be recomputed with era-correct
+            # weights without re-pulling. Present at every level back to 2005.
+            ab=_to_int(player.get("atBats")),
+            hits=_to_int(player.get("hits")),
+            doubles=_to_int(player.get("doubles")),
+            triples=_to_int(player.get("triples")),
+            bb=_to_int(player.get("baseOnBalls")),
+            ibb=_to_int(player.get("intentionalWalks")),
+            hbp=_to_int(player.get("hitByPitch")),
+            sf=_to_int(player.get("sacFlies")),
+            sac_bunts=_to_int(player.get("sacBunts")),
+            so=_to_int(player.get("strikeOuts")),
+            total_bases=_to_int(player.get("totalBases")),
+            runs=_to_int(player.get("runs")),
+            rbi=_to_int(player.get("rbi")),
+            caught_stealing=_to_int(player.get("caughtStealing")),
+            gidp=_to_int(player.get("groundIntoDoublePlay")),
+            gidp_opp=_to_int(player.get("gidpOpp")),
+            left_on_base=_to_int(player.get("leftOnBase")),
+            reached_on_error=_to_int(player.get("reachedOnError")),
+
+            # ---- Batted-ball profile ----
+            ground_outs=_to_int(player.get("groundOuts")),
+            air_outs=_to_int(player.get("airOuts")),
+            fly_outs=_to_int(player.get("flyOuts")),
+            line_outs=_to_int(player.get("lineOuts")),
+            pop_outs=_to_int(player.get("popOuts")),
+            ground_hits=_to_int(player.get("groundHits")),
+            fly_hits=_to_int(player.get("flyHits")),
+            line_hits=_to_int(player.get("lineHits")),
+            pop_hits=_to_int(player.get("popHits")),
+            balls_in_play=_to_int(player.get("ballsInPlay")),
+
+            # ---- Plate discipline ----
+            pitches_seen=_to_int(player.get("numberOfPitches")),
+            total_swings=_to_int(player.get("totalSwings")),
+            swings_and_misses=_to_int(player.get("swingAndMisses")),
         )
     else:  # pitching
         ip_value = _parse_ip(player.get("inningsPitched"))
@@ -428,7 +467,69 @@ def _parse_player_stats(
             k9=_compute_per_9(player.get("strikeOuts"), ip_value),
             bb9=_compute_per_9(player.get("baseOnBalls"), ip_value),
             hr9=_compute_per_9(player.get("homeRuns"), ip_value),
+
+            # ---- Raw counting stats ----
+            p_batters_faced=_to_int(player.get("battersFaced")),
+            p_ab=_to_int(player.get("atBats")),
+            p_hits=_to_int(player.get("hits")),
+            p_doubles=_to_int(player.get("doubles")),
+            p_triples=_to_int(player.get("triples")),
+            p_hr=_to_int(player.get("homeRuns")),
+            p_bb=_to_int(player.get("baseOnBalls")),
+            p_ibb=_to_int(player.get("intentionalWalks")),
+            p_hbp=_to_int(player.get("hitBatsmen")),
+            p_so=_to_int(player.get("strikeOuts")),
+            p_sf=_to_int(player.get("sacFlies")),
+            p_sac_bunts=_to_int(player.get("sacBunts")),
+            p_earned_runs=_to_int(player.get("earnedRuns")),
+            p_runs=_to_int(player.get("runs")),
+            p_total_bases=_to_int(player.get("totalBases")),
+            p_gidp=_to_int(player.get("groundIntoDoublePlay")),
+            p_gidp_opp=_to_int(player.get("gidpOpp")),
+            p_balks=_to_int(player.get("balks")),
+            p_wild_pitches=_to_int(player.get("wildPitches")),
+            p_pickoffs=_to_int(player.get("pickoffs")),
+            p_outs=_to_int(player.get("outs")),
+
+            # ---- Batted-ball profile allowed ----
+            p_ground_outs=_to_int(player.get("groundOuts")),
+            p_air_outs=_to_int(player.get("airOuts")),
+            p_fly_outs=_to_int(player.get("flyOuts")),
+            p_line_outs=_to_int(player.get("lineOuts")),
+            p_pop_outs=_to_int(player.get("popOuts")),
+            p_ground_hits=_to_int(player.get("groundHits")),
+            p_fly_hits=_to_int(player.get("flyHits")),
+            p_line_hits=_to_int(player.get("lineHits")),
+            p_pop_hits=_to_int(player.get("popHits")),
+            p_balls_in_play=_to_int(player.get("ballsInPlay")),
+
+            # ---- Pitch-level ----
+            p_pitches=_to_int(player.get("numberOfPitches")),
+            p_strikes=_to_int(player.get("strikes")),
+            p_total_swings=_to_int(player.get("totalSwings")),
+            p_swings_and_misses=_to_int(player.get("swingAndMisses")),
+
+            # ---- Role / usage ----
+            p_games=_to_int(player.get("gamesPitched")),
+            p_games_started=_to_int(player.get("gamesStarted")),
+            p_complete_games=_to_int(player.get("completeGames")),
+            p_saves=_to_int(player.get("saves")),
+            p_holds=_to_int(player.get("holds")),
+            p_babip_allowed=_to_float(player.get("babip")),
+            p_avg_against=_to_float(player.get("avg")),
+            p_obp_against=_to_float(player.get("obp")),
+            p_slg_against=_to_float(player.get("slg")),
         )
+
+
+def _to_int(v) -> Optional[int]:
+    """Int or None. The API sends "-" / "" / ".---" for absent values."""
+    if v is None or v == "" or v == "-" or v == ".---":
+        return None
+    try:
+        return int(float(v))
+    except (ValueError, TypeError):
+        return None
 
 
 def _to_float(v) -> Optional[float]:

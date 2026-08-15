@@ -18,19 +18,27 @@ from __future__ import annotations
 import json
 import sqlite3
 from contextlib import contextmanager
+from dataclasses import fields as dataclass_fields
 from datetime import date, datetime
 from pathlib import Path
-from typing import Optional
+from typing import Iterable, Optional
 
 from prospects.core.schema import (
     CareerEvent,
     CareerOutcome,
+    CatcherDefense,
     EventMultiplier,
     EventProbability,
+    FieldingStats,
+    ParkFactor,
+    PitchArsenal,
+    PlatoonSplit,
     Prospect,
     ProspectPrediction,
     RankingSnapshot,
     SeasonStats,
+    StatcastBatting,
+    StatcastPitching,
 )
 
 
@@ -160,7 +168,149 @@ CREATE TABLE IF NOT EXISTS event_multipliers (
     updated_at TEXT NOT NULL,
     PRIMARY KEY (event_id, product_family, parallel_tier)
 );
+
+CREATE TABLE IF NOT EXISTS platoon_splits (
+    player_id TEXT NOT NULL,
+    season_year INTEGER NOT NULL,
+    level TEXT NOT NULL,
+    side TEXT NOT NULL,
+    is_pitcher INTEGER DEFAULT 0,
+    PRIMARY KEY (player_id, season_year, level, side, is_pitcher)
+);
+
+CREATE TABLE IF NOT EXISTS fielding_stats (
+    player_id TEXT NOT NULL,
+    season_year INTEGER NOT NULL,
+    level TEXT NOT NULL,
+    position TEXT NOT NULL,
+    PRIMARY KEY (player_id, season_year, level, position)
+);
+
+CREATE TABLE IF NOT EXISTS park_factors (
+    team_id TEXT NOT NULL,
+    season_year INTEGER NOT NULL,
+    level TEXT NOT NULL,
+    PRIMARY KEY (team_id, season_year, level)
+);
+
+CREATE TABLE IF NOT EXISTS statcast_batting (
+    player_id TEXT NOT NULL,
+    season_year INTEGER NOT NULL,
+    PRIMARY KEY (player_id, season_year)
+);
+
+CREATE TABLE IF NOT EXISTS statcast_pitching (
+    player_id TEXT NOT NULL,
+    season_year INTEGER NOT NULL,
+    PRIMARY KEY (player_id, season_year)
+);
+
+CREATE TABLE IF NOT EXISTS pitch_arsenal (
+    player_id TEXT NOT NULL,
+    season_year INTEGER NOT NULL,
+    pitch_type TEXT NOT NULL,
+    PRIMARY KEY (player_id, season_year, pitch_type)
+);
+
+CREATE TABLE IF NOT EXISTS catcher_defense (
+    player_id TEXT NOT NULL,
+    season_year INTEGER NOT NULL,
+    PRIMARY KEY (player_id, season_year)
+);
+
+CREATE INDEX IF NOT EXISTS idx_platoon_player ON platoon_splits(player_id);
+CREATE INDEX IF NOT EXISTS idx_fielding_player ON fielding_stats(player_id);
+CREATE INDEX IF NOT EXISTS idx_park_season ON park_factors(season_year, level);
+CREATE INDEX IF NOT EXISTS idx_sc_bat_player ON statcast_batting(player_id);
+CREATE INDEX IF NOT EXISTS idx_sc_pit_player ON statcast_pitching(player_id);
+CREATE INDEX IF NOT EXISTS idx_arsenal_player ON pitch_arsenal(player_id);
 """
+
+
+# ============================================================================
+# Dataclass -> SQL helpers
+#
+# season_stats and the advanced-stat tables carry ~90 and ~40 columns each.
+# Hand-writing those INSERT statements is how columns silently go missing, so
+# the column list, the CREATE, and the upsert are all derived from the
+# dataclass definition instead.
+# ============================================================================
+
+def _sql_type(py_type) -> str:
+    """Map a dataclass annotation to a SQLite column type."""
+    t = str(py_type)
+    if "int" in t and "float" not in t:
+        return "INTEGER"
+    if "float" in t:
+        return "REAL"
+    if "bool" in t:
+        return "INTEGER"
+    return "TEXT"
+
+
+def _dc_columns(dc) -> list[tuple[str, str]]:
+    return [(f.name, _sql_type(f.type)) for f in dataclass_fields(dc)]
+
+
+# Tables whose columns are managed from a dataclass, with their PK columns.
+_MANAGED_TABLES: dict[str, tuple] = {
+    "season_stats": (SeasonStats,
+                     ("player_id", "season_year", "level")),
+    "platoon_splits": (PlatoonSplit,
+                       ("player_id", "season_year", "level", "side", "is_pitcher")),
+    "fielding_stats": (FieldingStats,
+                       ("player_id", "season_year", "level", "position")),
+    "park_factors": (ParkFactor,
+                     ("team_id", "season_year", "level")),
+    "statcast_batting": (StatcastBatting, ("player_id", "season_year")),
+    "statcast_pitching": (StatcastPitching, ("player_id", "season_year")),
+    "pitch_arsenal": (PitchArsenal, ("player_id", "season_year", "pitch_type")),
+    "catcher_defense": (CatcherDefense, ("player_id", "season_year")),
+}
+
+# Columns that must not be clobbered by a NULL/zero from the other stat group.
+# A player_id/season/level row is shared by his batting and pitching pulls, so
+# the pitching write must not zero out the batting counting stats (two-way
+# players, and pitchers who take PAs).
+_NEVER_ZERO = {"pa", "ip"}
+
+_UPSERT_CACHE: dict[str, tuple[str, list[str]]] = {}
+
+
+def _upsert_sql(table: str) -> tuple[str, list[str]]:
+    """Build (sql, ordered_column_names) for a managed table.
+
+    Uses COALESCE so an incoming NULL never erases a value already stored —
+    each source fills the columns it knows about and leaves the rest alone.
+    """
+    if table in _UPSERT_CACHE:
+        return _UPSERT_CACHE[table]
+    dc, pk = _MANAGED_TABLES[table]
+    cols = [name for name, _ in _dc_columns(dc)]
+    placeholders = ", ".join("?" for _ in cols)
+    sets = []
+    for c in cols:
+        if c in pk:
+            continue
+        if c in _NEVER_ZERO:
+            # Keep the larger of stored vs incoming, so a 0 from the other
+            # stat group cannot wipe a real total.
+            sets.append(
+                f"{c}=CASE WHEN COALESCE(excluded.{c}, 0) > "
+                f"COALESCE({table}.{c}, 0) THEN excluded.{c} ELSE {table}.{c} END"
+            )
+        else:
+            sets.append(f"{c}=COALESCE(excluded.{c}, {table}.{c})")
+    sql = (
+        f"INSERT INTO {table} ({', '.join(cols)}) VALUES ({placeholders}) "
+        f"ON CONFLICT({', '.join(pk)}) DO UPDATE SET {', '.join(sets)}"
+    )
+    _UPSERT_CACHE[table] = (sql, cols)
+    return sql, cols
+
+
+def _season_stats_upsert_sql() -> tuple[str, list[str]]:
+    return _upsert_sql("season_stats")
 
 
 class ProspectDB:
@@ -205,6 +355,17 @@ class ProspectDB:
                 conn.execute("ALTER TABLE season_stats ADD COLUMN season_complete INTEGER")
             if "injury_suspected" not in scols:
                 conn.execute("ALTER TABLE season_stats ADD COLUMN injury_suspected INTEGER")
+
+            # Generic forward migration: every column declared on a managed
+            # dataclass but absent from its table gets added. This is what
+            # carries the advanced-stat columns onto existing databases.
+            for table, (dc, _pk) in _MANAGED_TABLES.items():
+                have = {r["name"] for r in conn.execute(
+                    f"PRAGMA table_info({table})").fetchall()}
+                for name, sqltype in _dc_columns(dc):
+                    if name not in have:
+                        conn.execute(
+                            f"ALTER TABLE {table} ADD COLUMN {name} {sqltype}")
 
     @contextmanager
     def _connect(self):
@@ -321,41 +482,19 @@ class ProspectDB:
     # ========================================================================
 
     def upsert_season_stats(self, s: SeasonStats) -> None:
+        sql, cols = _season_stats_upsert_sql()
         with self._connect() as conn:
-            conn.execute(
-                """
-                INSERT INTO season_stats (
-                    player_id, season_year, level, org, age_during_season,
-                    pa, avg, obp, slg, woba, iso,
-                    k_pct, bb_pct, babip, home_runs, stolen_bases,
-                    ip, era, fip, whip,
-                    k9, bb9, hr9, velo_avg,
-                    primary_position
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                          ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(player_id, season_year, level) DO UPDATE SET
-                    org=excluded.org,
-                    age_during_season=excluded.age_during_season,
-                    pa=excluded.pa,
-                    avg=excluded.avg, obp=excluded.obp, slg=excluded.slg,
-                    woba=excluded.woba, iso=excluded.iso,
-                    k_pct=excluded.k_pct, bb_pct=excluded.bb_pct, babip=excluded.babip,
-                    home_runs=excluded.home_runs, stolen_bases=excluded.stolen_bases,
-                    ip=excluded.ip, era=excluded.era, fip=excluded.fip,
-                    whip=excluded.whip,
-                    k9=excluded.k9, bb9=excluded.bb9, hr9=excluded.hr9,
-                    velo_avg=excluded.velo_avg,
-                    primary_position=excluded.primary_position
-                """,
-                (
-                    s.player_id, s.season_year, s.level, s.org, s.age_during_season,
-                    s.pa, s.avg, s.obp, s.slg, s.woba, s.iso,
-                    s.k_pct, s.bb_pct, s.babip, s.home_runs, s.stolen_bases,
-                    s.ip, s.era, s.fip, s.whip,
-                    s.k9, s.bb9, s.hr9, s.velo_avg,
-                    s.primary_position,
-                ),
-            )
+            conn.execute(sql, tuple(getattr(s, c) for c in cols))
+
+    def upsert_season_stats_many(self, rows: Iterable[SeasonStats]) -> int:
+        """Batch version — one transaction for the whole iterable."""
+        sql, cols = _season_stats_upsert_sql()
+        payload = [tuple(getattr(s, c) for c in cols) for s in rows]
+        if not payload:
+            return 0
+        with self._connect() as conn:
+            conn.executemany(sql, payload)
+        return len(payload)
 
     def get_season_stats(self, player_id: str) -> list[dict]:
         with self._connect() as conn:
@@ -368,6 +507,78 @@ class ProspectDB:
     def count_season_stats(self) -> int:
         with self._connect() as conn:
             return conn.execute("SELECT COUNT(*) FROM season_stats").fetchone()[0]
+
+    # ========================================================================
+    # ADVANCED STAT TABLES
+    #
+    # All share one field-driven upsert path; `table` selects which managed
+    # dataclass is being written.
+    # ========================================================================
+
+    def _upsert_managed(self, table: str, records: Iterable) -> int:
+        sql, cols = _upsert_sql(table)
+        payload = [tuple(getattr(r, c) for c in cols) for r in records]
+        if not payload:
+            return 0
+        with self._connect() as conn:
+            conn.executemany(sql, payload)
+        return len(payload)
+
+    def upsert_platoon_splits(self, records: Iterable[PlatoonSplit]) -> int:
+        return self._upsert_managed("platoon_splits", records)
+
+    def upsert_fielding_stats(self, records: Iterable[FieldingStats]) -> int:
+        return self._upsert_managed("fielding_stats", records)
+
+    def upsert_park_factors(self, records: Iterable[ParkFactor]) -> int:
+        return self._upsert_managed("park_factors", records)
+
+    def upsert_statcast_batting(self, records: Iterable[StatcastBatting]) -> int:
+        return self._upsert_managed("statcast_batting", records)
+
+    def upsert_statcast_pitching(self, records: Iterable[StatcastPitching]) -> int:
+        return self._upsert_managed("statcast_pitching", records)
+
+    def upsert_pitch_arsenal(self, records: Iterable[PitchArsenal]) -> int:
+        return self._upsert_managed("pitch_arsenal", records)
+
+    def upsert_catcher_defense(self, records: Iterable[CatcherDefense]) -> int:
+        return self._upsert_managed("catcher_defense", records)
+
+    def get_platoon_splits(self, player_id: str) -> list[dict]:
+        return self._fetch_by_player("platoon_splits", player_id)
+
+    def get_fielding_stats(self, player_id: str) -> list[dict]:
+        return self._fetch_by_player("fielding_stats", player_id)
+
+    def get_statcast_batting(self, player_id: str) -> list[dict]:
+        return self._fetch_by_player("statcast_batting", player_id)
+
+    def get_statcast_pitching(self, player_id: str) -> list[dict]:
+        return self._fetch_by_player("statcast_pitching", player_id)
+
+    def get_pitch_arsenal(self, player_id: str) -> list[dict]:
+        return self._fetch_by_player("pitch_arsenal", player_id)
+
+    def get_catcher_defense(self, player_id: str) -> list[dict]:
+        return self._fetch_by_player("catcher_defense", player_id)
+
+    def _fetch_by_player(self, table: str, player_id: str) -> list[dict]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                f"SELECT * FROM {table} WHERE player_id = ? ORDER BY season_year",
+                (player_id,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_park_factors(self, season_year: int, level: str) -> dict[str, dict]:
+        """team_id -> park factor row, for one season/level."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM park_factors WHERE season_year = ? AND level = ?",
+                (season_year, level),
+            ).fetchall()
+        return {r["team_id"]: dict(r) for r in rows}
 
     # ========================================================================
     # RANKINGS
