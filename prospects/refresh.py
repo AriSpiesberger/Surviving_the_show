@@ -2,7 +2,7 @@
 
 This is the runbook in docs/runbook.md, executed. Everything it does can be
 done by hand; the point is that the order is load-bearing and easy to get
-wrong. Three ordering traps it removes:
+wrong. Four ordering traps it removes:
 
   * prospects.db's `dedup` phase runs LAST inside `pull --phase all`, so
     career_outcomes is stale w.r.t. the collapsed player_ids until
@@ -13,6 +13,10 @@ wrong. Three ordering traps it removes:
     separate hand-run step that is easy to skip and silently scores stale.
   * a bare `prospects.buylist.build` defaults to joint_xgb.pkl (the OOF
     model). The production list wants joint_xgb_prod.pkl and must say so.
+  * calibrators.pkl is fit against a SPECIFIC joint_xgb.pkl. Retraining the
+    XGB without refitting them leaves last run's raw-score -> probability map
+    in place, which mis-scales every calibrated number downstream without
+    erroring. So calibrators refits after prod, before the buy list.
 
 Usage:
     python -m prospects.refresh --season 2026            # the whole thing
@@ -28,9 +32,11 @@ Steps, in order:
     pull      prospects.data.pull --phase all (FULL, never current-season-only)
     outcomes  post_repull_chain — rebuild career_outcomes after dedup + verify
     snapshot  copy prospects.db -> prospects_snapshot.db (what modeling reads)
+    split     regenerate the fit/val split over the current universe
     oof       OOF folds + hazards + joint_xgb.pkl
     hazards   full-panel production hazards -> models/hazards.pkl
     prod      prod joint XGB + snap scoring + buy list
+    calibrators  refit isotonic/Platt calibrators on THIS run's OOF val
     evaluate  held-out metrics + evaluation/README.md  (non-blocking)
     buylist   explicit rebuild against joint_xgb_prod.pkl
 
@@ -56,8 +62,8 @@ from prospects.config import REPO_ROOT
 NON_BLOCKING = {"evaluate"}
 
 # Ordered step names. Also the vocabulary for --from / --only / --skip.
-STEP_ORDER = ["tests", "backup", "pull", "outcomes", "snapshot",
-              "oof", "hazards", "prod", "evaluate", "buylist"]
+STEP_ORDER = ["tests", "backup", "pull", "outcomes", "snapshot", "split",
+              "oof", "hazards", "prod", "calibrators", "evaluate", "buylist"]
 
 
 def _banner(text: str) -> None:
@@ -138,6 +144,8 @@ def build_plan(args) -> list[tuple[str, str, object]]:
         ("outcomes", "rebuild career_outcomes post-dedup + verify",
          _py("prospects.data.backfills.post_repull_chain")),
         ("snapshot", "refresh prospects_snapshot.db", step_snapshot),
+        ("split", "regenerate the fit/val split over the current universe",
+         _py("prospects.model.train.make_split", *tag_args)),
         ("oof", "OOF folds + hazards + joint_xgb.pkl",
          _py("prospects.model.pipelines.oof", *tag_args)),
         ("hazards", "full-panel production hazards",
@@ -145,6 +153,11 @@ def build_plan(args) -> list[tuple[str, str, object]]:
         ("prod", f"prod XGB + score snap={args.season} + buy list",
          _py("prospects.model.pipelines.prod",
              "--snap-year", str(args.season), *tag_args)),
+        ("calibrators", "refit probability calibrators on THIS run's OOF val",
+         _py("prospects.model.train.calibrators",
+             "--val-long", str(run.oof_val_long),
+             "--xgb", str(run.joint_xgb),
+             "--out", str(run.calibrators))),
         ("evaluate", "held-out metrics + report",
          _py("prospects.evaluation.run", *tag_args)),
         ("buylist", "buy list against joint_xgb_prod.pkl",
