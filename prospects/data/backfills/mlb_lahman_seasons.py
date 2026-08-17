@@ -46,6 +46,17 @@ def _safe_div(num, den):
     return n / d if d > 0 else None
 
 
+def _int_or_none(v) -> Optional[int]:
+    """Lahman leaves a stat NaN for seasons before it was recorded (IBB and
+    SF pre-1954, GIDP pre-1933). NaN must land as NULL, not 0 — a real zero
+    and 'not tracked that year' are different facts downstream."""
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    return None if np.isnan(f) else int(f)
+
+
 def _normalize_name(s) -> str:
     if s is None or (isinstance(s, float) and np.isnan(s)):
         return ""
@@ -112,6 +123,9 @@ def pull_mlb_seasons_from_lahman(
         "SO": "sum" if "SO" in bat.columns else "sum",
         "SF": "sum" if "SF" in bat.columns else "sum",
         "SB": "sum",
+        # Needed for wOBA (unintentional walks) and the rate stats derived in
+        # features/advanced.py. Absent in early Lahman years -> NaN -> None.
+        "IBB": "sum", "CS": "sum", "GIDP": "sum",
     })
     pit_grp = pit.groupby(["playerID", "yearID"], as_index=False).agg({
         "IPouts": "sum", "ER": "sum", "BB": "sum", "SO": "sum",
@@ -174,6 +188,7 @@ def pull_mlb_seasons_from_lahman(
             pa = 0
             avg = obp = slg = iso = k_pct = bb_pct = None
             hr = sb = None
+            raw_bat: dict = {}
             if br is not None:
                 AB = float(br.get("AB", 0) or 0)
                 H = float(br.get("H", 0) or 0)
@@ -196,8 +211,29 @@ def pull_mlb_seasons_from_lahman(
                 k_pct = _safe_div(SO, pa)
                 hr = int(HR)
                 sb = int(SBv)
+                # Carry the counts themselves, not just the rates derived from
+                # them. features/advanced.py recomputes wOBA from these, so an
+                # MLB row and a MiLB row go through the identical formula —
+                # without this, MLB rows have no wOBA and windowed.py silently
+                # falls back to obp+0.5*iso for exactly the players who reached
+                # the majors.
+                raw_bat = {
+                    "ab": _int_or_none(br.get("AB")),
+                    "hits": _int_or_none(br.get("H")),
+                    "doubles": _int_or_none(br.get("2B")),
+                    "triples": _int_or_none(br.get("3B")),
+                    "bb": _int_or_none(br.get("BB")),
+                    "ibb": _int_or_none(br.get("IBB")),
+                    "hbp": _int_or_none(br.get("HBP")),
+                    "sf": _int_or_none(br.get("SF")),
+                    "so": _int_or_none(br.get("SO")),
+                    "total_bases": int(TB),
+                    "caught_stealing": _int_or_none(br.get("CS")),
+                    "gidp": _int_or_none(br.get("GIDP")),
+                }
 
             ip = 0.0; era = whip = k9 = bb9 = hr9 = None
+            raw_pit: dict = {}
             if pr is not None:
                 IPouts = float(pr.get("IPouts", 0) or 0)
                 ip = IPouts / 3.0
@@ -211,6 +247,14 @@ def pull_mlb_seasons_from_lahman(
                 k9 = _safe_div(9 * SO_p, ip)
                 bb9 = _safe_div(9 * BB_p, ip)
                 hr9 = _safe_div(9 * HR_p, ip)
+                raw_pit = {
+                    "p_outs": _int_or_none(pr.get("IPouts")),
+                    "p_earned_runs": _int_or_none(pr.get("ER")),
+                    "p_bb": _int_or_none(pr.get("BB")),
+                    "p_so": _int_or_none(pr.get("SO")),
+                    "p_hits": _int_or_none(pr.get("H")),
+                    "p_hr": _int_or_none(pr.get("HR")),
+                }
 
             s = SeasonStats(
                 player_id=p["player_id"],
@@ -223,6 +267,7 @@ def pull_mlb_seasons_from_lahman(
                 ip=ip, era=era, whip=whip,
                 k9=k9, bb9=bb9, hr9=hr9,
                 primary_position=p.get("primary_position"),
+                **raw_bat, **raw_pit,
             )
             db.upsert_season_stats(s)
             if csv_writer is not None:

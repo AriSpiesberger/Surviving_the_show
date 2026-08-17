@@ -119,16 +119,24 @@ N_FEATURES = len(FEATURE_NAMES)
 
 
 def _woba_proxy(row: dict) -> Optional[float]:
-    """Simple wOBA-ish proxy that exists for both MLB and MiLB rows.
-    Falls back to OBP + 0.5*ISO if wOBA absent."""
+    """Real wOBA for the row, or missing. Deliberately does NOT fall back.
+
+    The old fallback was OBP + 0.5*ISO, which is not on wOBA's scale — it runs
+    about +.081 high (mean .400 vs .319 across 40k MiLB seasons, ~1.65 sd of
+    the wOBA distribution). That was harmless while `woba` was empty for every
+    row, because every row got the same treatment. Once woba_backfill fills it
+    for ~91% of PA, a fallback silently mixes two different metrics: the caller
+    PA-weights this across levels within a season, so one feature value could
+    blend a real .319 with a proxy .400 and land somewhere meaningless.
+
+    Worse, the rows that lack it are not a random sample — they skew toward
+    players who never debuted — so the offset would have carried label signal.
+    Returning None keeps one consistent metric; the caller encodes absence as
+    the MISSING sentinel, which sits outside wOBA's observed range (~.15-.55)
+    and so is cleanly separable rather than being read as a real low value.
+    """
     woba = row.get("woba")
-    if woba is not None:
-        return float(woba)
-    obp = row.get("obp")
-    iso = row.get("iso")
-    if obp is None and iso is None:
-        return None
-    return float((obp or 0)) + 0.5 * float((iso or 0))
+    return float(woba) if woba is not None else None
 
 
 def _fip_proxy(row: dict) -> Optional[float]:
