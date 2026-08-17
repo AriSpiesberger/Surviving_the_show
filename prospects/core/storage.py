@@ -369,7 +369,12 @@ class ProspectDB:
 
     @contextmanager
     def _connect(self):
-        conn = sqlite3.connect(str(self.db_path))
+        # Wait for a competing writer instead of failing instantly. A long
+        # analytical read holds a lock long enough to kill an hours-long pull
+        # on commit, and losing that work to a transient lock is far worse
+        # than blocking for a few seconds.
+        conn = sqlite3.connect(str(self.db_path), timeout=60.0)
+        conn.execute("PRAGMA busy_timeout = 60000")
         conn.row_factory = sqlite3.Row
         try:
             yield conn

@@ -40,6 +40,7 @@ import argparse
 import gc
 import hashlib
 import pickle
+import sqlite3
 import subprocess
 import sys
 import time
@@ -130,16 +131,34 @@ def _entry_year(player: dict, stats_by_pid: dict) -> int | None:
     return int(dy) if dy is not None else None
 
 
-def _feature_sig() -> str:
-    """Identity of the feature definition the cached panel was built under.
+def _feature_sig(db_path: str | None = None) -> str:
+    """Identity of the panel: the feature definition AND the data behind it.
 
-    Hashes the ordered feature names, so both a count change and a reordering
-    invalidate — a reordering leaves the width identical while silently
-    remapping every column.
+    Two halves, because there are two ways a cached panel goes wrong.
+
+    Features — hashes the ordered names, so both a count change and a
+    reordering invalidate. A reordering leaves the width identical while
+    silently remapping every column.
+
+    Data — a repair pull or a derived-column backfill changes what the same
+    feature definition computes to. A features-only signature matches happily
+    and reuses a panel built before the data was fixed, which is the same
+    silent-staleness failure one level down. Counting the populated derived
+    columns is cheap and moves whenever a backfill or repull lands.
     """
     from prospects.features.windowed import FEATURE_NAMES
-    return (f"{len(FEATURE_NAMES)}:"
-            f"{hashlib.sha1(chr(0).join(FEATURE_NAMES).encode()).hexdigest()[:12]}")
+    sig = (f"{len(FEATURE_NAMES)}:"
+           f"{hashlib.sha1(chr(0).join(FEATURE_NAMES).encode()).hexdigest()[:12]}")
+    if db_path is None:
+        return sig
+    try:
+        with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as conn:
+            n, woba, ab, pct = conn.execute(
+                "SELECT COUNT(*), COUNT(woba), COUNT(ab), COUNT(pct_woba) "
+                "FROM season_stats").fetchone()
+    except sqlite3.Error:
+        return f"{sig}:db?"
+    return f"{sig}:{n}-{woba}-{ab}-{pct}"
 
 
 # ---- Stage 1: panel build with tqdm ----
@@ -154,9 +173,9 @@ def stage_panel(db_path: str, max_draft_year: int,
         # it never saw. Rebuild whenever the signature moves, and treat a
         # cache written before signatures existed as unusable.
         sig = meta.get("feature_sig")
-        if sig != _feature_sig():
+        if sig != _feature_sig(db_path):
             print(f"[Stage 1] panel cache STALE "
-                  f"(cached {sig or 'unsigned'} != current {_feature_sig()}) "
+                  f"(cached {sig or 'unsigned'} != current {_feature_sig(db_path)}) "
                   f"— rebuilding")
         else:
             print(f"[Stage 1] loading panel cache {PANEL_NPZ.name}")
@@ -291,7 +310,7 @@ def stage_panel(db_path: str, max_draft_year: int,
     with tmp.open("wb") as fh:
         pickle.dump({"prospects": prospects_list,
                      "stats_by_pid": stats_by_pid,
-                     "feature_sig": _feature_sig()},
+                     "feature_sig": _feature_sig(db_path)},
                     fh, protocol=pickle.HIGHEST_PROTOCOL)
     tmp.replace(PANEL_META)
     print(f"           {PANEL_NPZ.name}: "
