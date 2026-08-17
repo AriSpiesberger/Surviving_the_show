@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import argparse
 import gc
+import hashlib
 import pickle
 import subprocess
 import sys
@@ -129,24 +130,47 @@ def _entry_year(player: dict, stats_by_pid: dict) -> int | None:
     return int(dy) if dy is not None else None
 
 
+def _feature_sig() -> str:
+    """Identity of the feature definition the cached panel was built under.
+
+    Hashes the ordered feature names, so both a count change and a reordering
+    invalidate — a reordering leaves the width identical while silently
+    remapping every column.
+    """
+    from prospects.features.windowed import FEATURE_NAMES
+    return (f"{len(FEATURE_NAMES)}:"
+            f"{hashlib.sha1(chr(0).join(FEATURE_NAMES).encode()).hexdigest()[:12]}")
+
+
 # ---- Stage 1: panel build with tqdm ----
 def stage_panel(db_path: str, max_draft_year: int,
                 partial_seed: int | None = None) -> tuple:
     if PANEL_NPZ.exists() and PANEL_META.exists():
-        print(f"[Stage 1] loading panel cache {PANEL_NPZ.name}")
-        npz = np.load(PANEL_NPZ, allow_pickle=True)
-        X_lm = npz["X_lm"]
-        pids = npz["pids"].tolist()
-        S_yrs = npz["S_yrs"].tolist()
-        joined_idx = npz["joined_idx"]
         with PANEL_META.open("rb") as fh:
             meta = pickle.load(fh)
-        prospects_list = meta["prospects"]
-        stats_by_pid = meta["stats_by_pid"]
-        joined = [prospects_list[i] for i in joined_idx]
-        print(f"           X_lm={X_lm.shape}  prospects="
-              f"{len(prospects_list):,}")
-        return X_lm, pids, S_yrs, joined, stats_by_pid
+        # The cache was keyed on existence alone, so editing the feature
+        # definition silently retrained on the old panel — the run looks
+        # clean, finishes suspiciously fast, and reports metrics for features
+        # it never saw. Rebuild whenever the signature moves, and treat a
+        # cache written before signatures existed as unusable.
+        sig = meta.get("feature_sig")
+        if sig != _feature_sig():
+            print(f"[Stage 1] panel cache STALE "
+                  f"(cached {sig or 'unsigned'} != current {_feature_sig()}) "
+                  f"— rebuilding")
+        else:
+            print(f"[Stage 1] loading panel cache {PANEL_NPZ.name}")
+            npz = np.load(PANEL_NPZ, allow_pickle=True)
+            X_lm = npz["X_lm"]
+            pids = npz["pids"].tolist()
+            S_yrs = npz["S_yrs"].tolist()
+            joined_idx = npz["joined_idx"]
+            prospects_list = meta["prospects"]
+            stats_by_pid = meta["stats_by_pid"]
+            joined = [prospects_list[i] for i in joined_idx]
+            print(f"           X_lm={X_lm.shape}  prospects="
+                  f"{len(prospects_list):,}")
+            return X_lm, pids, S_yrs, joined, stats_by_pid
 
     print(f"[Stage 1] building landmark panel (max_draft_year={max_draft_year})")
     db = ProspectDB(db_path)
@@ -266,7 +290,8 @@ def stage_panel(db_path: str, max_draft_year: int,
     tmp = PANEL_META.with_suffix(".pkl.tmp")
     with tmp.open("wb") as fh:
         pickle.dump({"prospects": prospects_list,
-                     "stats_by_pid": stats_by_pid},
+                     "stats_by_pid": stats_by_pid,
+                     "feature_sig": _feature_sig()},
                     fh, protocol=pickle.HIGHEST_PROTOCOL)
     tmp.replace(PANEL_META)
     print(f"           {PANEL_NPZ.name}: "

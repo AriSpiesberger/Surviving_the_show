@@ -33,10 +33,18 @@ direction flipping for stats where lower is better (K% for a hitter, ERA for
 a pitcher). Trees are indifferent to monotone direction, and flipping some
 metrics and not others is an easy thing to get subtly wrong.
 
-These are computed in memory at panel-build time from the same bulk row load
-the panel already does, deliberately not stored on season_stats. A stored
-percentile silently goes stale the moment the cohort gains a row, which the
-in-progress season does on every refresh.
+These land as `pct_*` columns on season_stats, written by
+data/backfills/percentile_backfill.py. Storing them costs a staleness risk —
+a percentile is only correct for the cohort it was computed over, and the
+in-progress season gains rows on every pull — which is why the backfill runs
+as a refresh step immediately after `pull`.
+
+The alternative, attaching them in memory at panel-build time, avoids that
+risk but loses a worse bet: nine separate call sites do
+`SELECT * FROM season_stats` and group by player_id, including the live
+scoring path in model/pipelines/prod.py. Attaching in memory means attaching
+in all nine, and missing one is silent — the model trains with the columns
+and scores without them, or vice versa. Columns cannot be missed.
 """
 
 from __future__ import annotations

@@ -55,7 +55,6 @@ from prospects.model.hazards.survival import (
     MAX_OBS_YEAR, build_windowed_features,
 )
 from prospects.core.storage import ProspectDB
-from prospects.features.percentiles import attach_percentiles
 
 CACHE_DIR = REPO_ROOT / "scratch" / "v20b_oof"
 CHUNKS_DIR = CACHE_DIR / "chunks"
@@ -106,13 +105,9 @@ def step1_prep(db_path: str, max_draft_year: int) -> int:
         except Exception:
             org_rank_rows = []
 
-    all_stats = [dict(s) for s in stats_rows]
-    # Cohort ranks need the whole table at once — every row in a (level, year)
-    # — so this has to happen here, before the rows are split per player.
-    attach_percentiles(all_stats, verbose=True)
-
     stats_by_pid: dict[str, list[dict]] = {}
-    for d in all_stats:
+    for s in stats_rows:
+        d = dict(s)
         stats_by_pid.setdefault(d["player_id"], []).append(d)
 
     rankings_by_pid: dict[str, list[tuple[int, int, str]]] = {}

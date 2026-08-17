@@ -31,6 +31,8 @@ Steps, in order:
     backup    copy prospects.db -> prospects.db.bak_pre_pull_<stamp>
     pull      prospects.data.pull --phase all (FULL, never current-season-only)
     outcomes  post_repull_chain — rebuild career_outcomes after dedup + verify
+    woba      derive wOBA on season_stats from the raw counting stats
+    percentiles  rank each row within its (level, season_year) cohort
     snapshot  copy prospects.db -> prospects_snapshot.db (what modeling reads)
     split     regenerate the fit/val split over the current universe
     oof       OOF folds + hazards + joint_xgb.pkl
@@ -62,8 +64,9 @@ from prospects.config import REPO_ROOT
 NON_BLOCKING = {"evaluate"}
 
 # Ordered step names. Also the vocabulary for --from / --only / --skip.
-STEP_ORDER = ["tests", "backup", "pull", "outcomes", "snapshot", "split",
-              "oof", "hazards", "prod", "calibrators", "evaluate", "buylist"]
+STEP_ORDER = ["tests", "backup", "pull", "outcomes", "woba", "percentiles",
+              "snapshot", "split", "oof", "hazards", "prod", "calibrators",
+              "evaluate", "buylist"]
 
 
 def _banner(text: str) -> None:
@@ -143,6 +146,14 @@ def build_plan(args) -> list[tuple[str, str, object]]:
          _py("prospects.data.pull", "--phase", "all", "--db", "prospects.db")),
         ("outcomes", "rebuild career_outcomes post-dedup + verify",
          _py("prospects.data.backfills.post_repull_chain")),
+        # Both derive columns on season_stats from the rows the pull just
+        # wrote, so they belong between `pull` and `snapshot` — modeling reads
+        # the snapshot, so a derivation landing after the copy is invisible to
+        # every model. Order matters: percentiles rank pct_woba, so woba first.
+        ("woba", "derive wOBA from raw counting stats",
+         _py("prospects.data.backfills.woba_backfill")),
+        ("percentiles", "rank each row within its (level, year) cohort",
+         _py("prospects.data.backfills.percentile_backfill")),
         ("snapshot", "refresh prospects_snapshot.db", step_snapshot),
         ("split", "regenerate the fit/val split over the current universe",
          _py("prospects.model.train.make_split", *tag_args)),

@@ -214,6 +214,33 @@ class SeasonStats:
     # Defense/positional context
     primary_position: Optional[str] = None
 
+    # ---- Within-cohort percentile ranks (level, season_year) ----
+    # Derived, not pulled: written by data/backfills/percentile_backfill.py
+    # after every pull. Stored as columns rather than computed in the feature
+    # layer because nine separate call sites do `SELECT * FROM season_stats`
+    # and group by player; attaching in memory means attaching in all nine,
+    # and a single miss silently feeds the model all-MISSING columns — or,
+    # worse, trains with them and scores without.
+    #
+    # These go stale if the cohort gains rows without a recompute, which the
+    # in-progress season does on every pull. The backfill is wired into
+    # refresh.py directly after `pull` for that reason.
+    pct_woba: Optional[float] = None
+    pct_iso: Optional[float] = None
+    pct_k_pct: Optional[float] = None
+    pct_bb_pct: Optional[float] = None
+    pct_avg: Optional[float] = None
+    pct_obp: Optional[float] = None
+    pct_slg: Optional[float] = None
+    pct_hr_per_pa: Optional[float] = None
+    pct_sb_per_pa: Optional[float] = None
+    pct_era: Optional[float] = None
+    pct_k9: Optional[float] = None
+    pct_bb9: Optional[float] = None
+    pct_fip: Optional[float] = None
+    pct_whip: Optional[float] = None
+    pct_hr9: Optional[float] = None
+
 
 # ============================================================================
 # PLATOON SPLITS — one row per player-season-level-side
