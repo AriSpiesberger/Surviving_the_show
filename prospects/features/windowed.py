@@ -31,6 +31,7 @@ from typing import Optional
 import numpy as np
 
 from prospects.core.storage import ProspectDB
+from prospects.features.percentiles import HIT_PCT_NAMES, PIT_PCT_NAMES
 
 
 LEVEL_RANK = {
@@ -65,11 +66,19 @@ HIT_FEATS = [
     "avg", "obp", "slg",
     "hr_per_pa", "sb_per_pa",
     "level_rank_h",
+    # Rank within the player's own (level, season) cohort. Added alongside the
+    # raw values rather than replacing them: the raw number carries absolute
+    # quality, the percentile carries quality relative to the peers actually
+    # faced. Both matter, and every one of these stats drifts enough year to
+    # year that a raw split threshold does not mean one thing across the panel.
+    # See features/percentiles.py for the measured drift.
+    *HIT_PCT_NAMES,
 ]
 PIT_FEATS = [
     "ip", "era", "k9", "bb9", "fip",
     "whip", "hr9",
     "level_rank_p",
+    *PIT_PCT_NAMES,
 ]
 
 
@@ -192,6 +201,12 @@ def _stats_for_year(rows: list[dict], year: int, is_pitcher: bool) -> list[float
             h_sb_per_pa if h_sb_per_pa is not None else MISSING,
             float(h_level) if h_level > 0 else MISSING,
         ]
+        # Cohort ranks, PA-weighted exactly like the raw stats above. A row
+        # missing its percentile (cohort too small, or the stat itself absent)
+        # drops out of the weighted mean rather than counting as zero.
+        for name in HIT_PCT_NAMES:
+            v = wavg(name)
+            hit_vec.append(v if v is not None else MISSING)
     else:
         hit_vec = [MISSING] * len(HIT_FEATS)
 
@@ -224,6 +239,9 @@ def _stats_for_year(rows: list[dict], year: int, is_pitcher: bool) -> list[float
             p_hr9 if p_hr9 is not None else MISSING,
             float(p_level) if p_level > 0 else MISSING,
         ]
+        for name in PIT_PCT_NAMES:
+            v = wavgp(name)
+            pit_vec.append(v if v is not None else MISSING)
     else:
         pit_vec = [MISSING] * len(PIT_FEATS)
 
