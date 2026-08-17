@@ -332,12 +332,15 @@ def main():
     ap.add_argument("--skip-xgb", action="store_true")
     ap.add_argument("--skip-score", action="store_true")
     ap.add_argument("--skip-buylist", action="store_true")
-    ap.add_argument("--prorate-asof", default=None, metavar="YYYY-MM-DD",
+    ap.add_argument("--prorate-asof", default="auto",
+                    metavar="YYYY-MM-DD|auto|none",
                     help="Mid-season scoring: interpolate the in-progress "
-                         "snap-year season to full-season equivalents as of "
-                         "this date (counting stats only; rows under 50 PA / "
-                         "15 IP dropped). Live snaps only — never use on "
-                         "historical walk-forward snaps.")
+                         "snap-year season to full-season equivalents (counting "
+                         "stats only; rows under 50 PA / 15 IP dropped). Default "
+                         "'auto' = today's date when --snap-year is the current "
+                         "year (the live, in-progress season), else off. 'none' "
+                         "forces it off. Never applied to historical walk-forward "
+                         "snaps — a past year's season is already complete.")
     ap.add_argument("--tag", default=None,
                     help="Consume + write tagged artifacts (matching "
                          "run_v2_0b_oof/train_v2_0b_prod_hazards --tag): the "
@@ -350,6 +353,19 @@ def main():
                     help="Timing model for the buy list (default: the baseline "
                          "v2.0b timing model, reused across tags).")
     args = ap.parse_args()
+
+    # Auto-prorate the LIVE season: scoring the current calendar year means the
+    # snap-year season is in progress, so scale its partial counting stats to
+    # full-season equivalents (as of today). Without this, mid-season lines read
+    # to the complete-season-trained model as bench/injury seasons. Past-year
+    # snaps (backtests) are already complete and must never prorate.
+    import datetime as _dt
+    if args.prorate_asof == "auto":
+        _today = _dt.date.today()
+        args.prorate_asof = (_today.isoformat()
+                             if args.snap_year == _today.year else None)
+    elif args.prorate_asof and args.prorate_asof.lower() in ("none", "off", "no"):
+        args.prorate_asof = None
 
     global XGB_OUT, LM_HAZ_OUT, SNAP_LONG, BUYLIST_ALL, BUYLIST_FINAL
     # --tag points every output at runs/<tag>/ instead of runs/current/.

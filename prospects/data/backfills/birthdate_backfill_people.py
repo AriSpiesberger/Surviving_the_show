@@ -22,7 +22,7 @@ import json
 import re
 import sqlite3
 import time
-import urllib.request
+import requests
 from pathlib import Path
 
 from prospects.config import REPO_ROOT
@@ -48,8 +48,10 @@ def _fetch(ids: list[int]) -> dict[int, dict]:
     url = API.format(ids=",".join(str(i) for i in ids))
     for attempt in range(3):
         try:
-            with urllib.request.urlopen(url, timeout=20) as r:
-                people = json.load(r).get("people", [])
+            r = requests.get(url, headers={"User-Agent": "ProspectClassifier/1.0"},
+                             timeout=20)
+            r.raise_for_status()
+            people = r.json().get("people", [])
             return {int(p["id"]): p for p in people if "id" in p}
         except Exception as e:  # noqa: BLE001
             if attempt == 2:
