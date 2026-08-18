@@ -36,11 +36,22 @@ Steps, in order:
     snapshot  copy prospects.db -> prospects_snapshot.db (what modeling reads)
     split     regenerate the fit/val split over the current universe
     oof       OOF folds + hazards + joint_xgb.pkl
+    evaluate  held-out metrics + evaluation/README.md  (non-blocking)
     hazards   full-panel production hazards -> models/hazards.pkl
     prod      prod joint XGB + snap scoring + buy list
     calibrators  refit isotonic/Platt calibrators on THIS run's OOF val
-    evaluate  held-out metrics + evaluation/README.md  (non-blocking)
     buylist   explicit rebuild against joint_xgb_prod.pkl
+
+There are two useful runs here, and picking the wrong one wastes hours.
+The EVAL run answers "did this modelling change help?" and stops at the
+metrics — everything it needs comes out of oof:
+
+    python -m prospects.refresh --from split \
+        --skip hazards --skip prod --skip calibrators --skip buylist
+
+The FULL run additionally builds the production artifacts and the buy list.
+Only that second half needs prod hazards, the prod XGB and calibrators, and
+none of it feeds `evaluate`.
 
 `evaluate` is deliberately non-blocking: a metrics regression is something to
 read, not a reason to throw away a completed multi-hour rebuild. Every other
@@ -64,9 +75,16 @@ from prospects.config import REPO_ROOT
 NON_BLOCKING = {"evaluate"}
 
 # Ordered step names. Also the vocabulary for --from / --only / --skip.
+# `evaluate` sits directly behind `oof` on purpose. It reads only
+# oof_val_long + joint_xgb, both OOF outputs, and nothing downstream — so
+# putting it after the production build meant paying for prod hazards, the
+# prod XGB, calibrators and a buy list just to read a metric. Validating a
+# modelling change is now:
+#     prospects-refresh --from split --skip hazards --skip prod \
+#                       --skip calibrators --skip buylist
 STEP_ORDER = ["tests", "backup", "pull", "outcomes", "woba", "percentiles",
-              "snapshot", "split", "oof", "hazards", "prod", "calibrators",
-              "evaluate", "buylist"]
+              "snapshot", "split", "oof", "evaluate", "hazards", "prod",
+              "calibrators", "buylist"]
 
 
 def _banner(text: str) -> None:
@@ -159,6 +177,8 @@ def build_plan(args) -> list[tuple[str, str, object]]:
          _py("prospects.model.train.make_split", *tag_args)),
         ("oof", "OOF folds + hazards + joint_xgb.pkl",
          _py("prospects.model.pipelines.oof", *tag_args)),
+        ("evaluate", "held-out metrics + report",
+         _py("prospects.evaluation.run", *tag_args)),
         ("hazards", "full-panel production hazards",
          _py("prospects.model.train.hazards", *tag_args)),
         ("prod", f"prod XGB + score snap={args.season} + buy list",
@@ -169,8 +189,6 @@ def build_plan(args) -> list[tuple[str, str, object]]:
              "--val-long", str(run.oof_val_long),
              "--xgb", str(run.joint_xgb),
              "--out", str(run.calibrators))),
-        ("evaluate", "held-out metrics + report",
-         _py("prospects.evaluation.run", *tag_args)),
         ("buylist", "buy list against joint_xgb_prod.pkl",
          _py("prospects.buylist.build",
              "--long", str(run.snap_long(args.season)),
