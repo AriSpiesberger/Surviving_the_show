@@ -997,10 +997,27 @@ def _trajectory_block(
 
     # level changes year-over-year
     def _level_for(y):
+        """Peak level reached in year `y`, for trajectory purposes.
+
+        Deliberately `highest_level_in_year` and not `level_rank`. level_rank
+        is the level the player took the most PA/IP at, which is the right
+        context for the *_vs_level baselines but the wrong thing to measure a
+        climb against: a mid-season promotion always leaves most of the sample
+        at the LOWER level, so level_rank reports the level a player is
+        leaving rather than the one they reached.
+
+        The bias only runs one way, and it runs against exactly the players
+        worth catching — the more recent the promotion, the more of the season
+        sits below it. A 2026 case: A (27 PA) -> A+ (153) -> AA (77) scored a
+        level_change of 0.0, three levels of climbing read as standing still,
+        because A+ held the most PA in both 2025 and 2026.
+        """
         agg = year_aggs.get(y)
         if not agg:
             return None
-        v = agg["shared"]["level_rank"]
+        v = agg["shared"]["highest_level_in_year"]
+        if _is_missing(v):
+            v = agg["shared"]["level_rank"]
         return None if _is_missing(v) else v
 
     l_yT = _level_for(as_of_year)
@@ -1023,7 +1040,9 @@ def _trajectory_block(
             agg = year_aggs.get(y)
             if not agg:
                 break
-            lv = agg["shared"]["level_rank"]
+            lv = agg["shared"]["highest_level_in_year"]
+            if _is_missing(lv):
+                lv = agg["shared"]["level_rank"]
             if _is_missing(lv):
                 break
             if int(lv) == max_lvl_int:
@@ -1041,7 +1060,9 @@ def _trajectory_block(
             agg = year_aggs.get(y)
             if not agg:
                 break
-            lv = agg["shared"]["level_rank"]
+            lv = agg["shared"]["highest_level_in_year"]
+            if _is_missing(lv):
+                lv = agg["shared"]["level_rank"]
             if _is_missing(lv):
                 break
             if int(lv) == cur:
@@ -1293,9 +1314,10 @@ def build_scouting_features(
         accel[f"accel_{stat}"] = _accel(yT["hit"][stat], y1["hit"][stat], y2["hit"][stat])
     for stat in ("era", "fip", "k9", "bb9"):
         accel[f"accel_{stat}"] = _accel(yT["pit"][stat], y1["pit"][stat], y2["pit"][stat])
-    accel["accel_level"] = _accel(yT["shared"]["level_rank"],
-                                  y1["shared"]["level_rank"],
-                                  y2["shared"]["level_rank"])
+    def _peak(y):
+        v = y["shared"]["highest_level_in_year"]
+        return y["shared"]["level_rank"] if _is_missing(v) else v
+    accel["accel_level"] = _accel(_peak(yT), _peak(y1), _peak(y2))
 
     # ---- H. Window summary ----
     window_years = {as_of_year - i for i in range(WINDOW)}

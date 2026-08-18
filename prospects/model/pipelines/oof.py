@@ -39,6 +39,7 @@ from __future__ import annotations
 import argparse
 import gc
 import hashlib
+import pathlib
 import pickle
 import sqlite3
 import subprocess
@@ -146,9 +147,21 @@ def _feature_sig(db_path: str | None = None) -> str:
     silent-staleness failure one level down. Counting the populated derived
     columns is cheap and moves whenever a backfill or repull lands.
     """
-    from prospects.features.windowed import FEATURE_NAMES
-    sig = (f"{len(FEATURE_NAMES)}:"
-           f"{hashlib.sha1(chr(0).join(FEATURE_NAMES).encode()).hexdigest()[:12]}")
+    from prospects.features import percentiles, scouting, windowed
+    # Names AND the code that fills them. Twice now a change has slipped past
+    # this guard: percentile columns were added to windowed while the landmark
+    # panel is built from scouting, and later the level-trajectory features
+    # changed VALUE without changing NAME. A name hash cannot see either, so
+    # hash the source of every module that computes a panel column too. A
+    # comment-only edit will also invalidate — a needless rebuild is cheap
+    # next to silently training on a stale panel.
+    names = list(scouting.FEATURE_NAMES) + list(windowed.FEATURE_NAMES)
+    src = b"".join(
+        pathlib.Path(m.__file__).read_bytes()
+        for m in (scouting, windowed, percentiles))
+    sig = (f"{len(scouting.FEATURE_NAMES)}/{len(windowed.FEATURE_NAMES)}:"
+           f"{hashlib.sha1(chr(0).join(names).encode()).hexdigest()[:8]}:"
+           f"{hashlib.sha1(src).hexdigest()[:8]}")
     if db_path is None:
         return sig
     try:
