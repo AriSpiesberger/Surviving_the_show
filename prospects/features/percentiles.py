@@ -53,6 +53,8 @@ from typing import Callable, Optional
 
 import numpy as np
 
+from prospects.features.advanced import hitter_advanced, pitcher_advanced
+
 # A cohort smaller than this does not support a meaningful rank — the early
 # years at some levels have only a handful of qualified rows.
 MIN_COHORT = 30
@@ -84,7 +86,46 @@ def _col(name: str) -> Callable[[dict], Optional[float]]:
     return get
 
 
+# Derived metrics live in features/advanced.py and are not stored as columns.
+# Computing one costs the whole dict, so the dict is computed once per row and
+# stashed under a private key; the extractors below just read it. Without the
+# memo, 16 metrics means 16 full recomputations of the same row.
+_H_MEMO = "_adv_h"
+_P_MEMO = "_adv_p"
+
+
+def _adv(memo: str, key: str) -> Callable[[dict], Optional[float]]:
+    def get(r: dict) -> Optional[float]:
+        d = r.get(memo)
+        if d is None:
+            return None
+        v = d.get(key)
+        return None if v is None else float(v)
+    return get
+
+
+def _memoize_advanced(rows: list[dict]) -> None:
+    for r in rows:
+        if (r.get("pa") or 0) > 0:
+            r[_H_MEMO] = hitter_advanced(r)
+        if (r.get("ip") or 0) > 0:
+            r[_P_MEMO] = pitcher_advanced(r)
+
+
+def _drop_memos(rows: list[dict]) -> None:
+    for r in rows:
+        r.pop(_H_MEMO, None)
+        r.pop(_P_MEMO, None)
+
+
 # (feature name, extractor). The name becomes `pct_<name>` on the row.
+#
+# The stored-column metrics carry both a raw feature and this percentile in the
+# panel. The derived block below is percentile-ONLY, deliberately: those are
+# the most non-stationary quantities measured (pitches_per_bf moves 8.0
+# within-year sd peak to trough, swing_pct 4.6, swstr_pct 3.6), so the raw
+# number is the part that does not transfer across seasons. Rank against the
+# peers actually faced is the signal; the absolute value is mostly era.
 HIT_METRICS: list[tuple[str, Callable[[dict], Optional[float]]]] = [
     ("woba", _col("woba")),
     ("iso", _col("iso")),
@@ -95,6 +136,15 @@ HIT_METRICS: list[tuple[str, Callable[[dict], Optional[float]]]] = [
     ("slg", _col("slg")),
     ("hr_per_pa", _hr_per_pa),
     ("sb_per_pa", _sb_per_pa),
+    # --- derived, percentile-only ---
+    ("swstr_pct", _adv(_H_MEMO, "swstr_pct")),
+    ("contact_pct", _adv(_H_MEMO, "contact_pct")),
+    ("pitches_per_pa", _adv(_H_MEMO, "pitches_per_pa")),
+    ("gb_pct", _adv(_H_MEMO, "gb_pct")),
+    ("fb_pct", _adv(_H_MEMO, "fb_pct")),
+    ("ld_pct", _adv(_H_MEMO, "ld_pct")),
+    ("hr_per_fb", _adv(_H_MEMO, "hr_per_fb")),
+    ("babip", _adv(_H_MEMO, "babip")),
 ]
 
 PIT_METRICS: list[tuple[str, Callable[[dict], Optional[float]]]] = [
@@ -104,6 +154,17 @@ PIT_METRICS: list[tuple[str, Callable[[dict], Optional[float]]]] = [
     ("fip", _col("fip")),
     ("whip", _col("whip")),
     ("hr9", _col("hr9")),
+    # --- derived, percentile-only ---
+    ("p_swstr_pct", _adv(_P_MEMO, "swstr_pct")),
+    ("p_contact_pct", _adv(_P_MEMO, "contact_pct")),
+    ("p_strike_pct", _adv(_P_MEMO, "strike_pct")),
+    ("p_pitches_per_bf", _adv(_P_MEMO, "pitches_per_bf")),
+    ("p_gb_pct", _adv(_P_MEMO, "gb_pct")),
+    ("p_fb_pct", _adv(_P_MEMO, "fb_pct")),
+    ("p_ld_pct", _adv(_P_MEMO, "ld_pct")),
+    ("p_k_bb_ratio", _adv(_P_MEMO, "k_bb_ratio")),
+    ("p_babip_against", _adv(_P_MEMO, "babip_against")),
+    ("p_siera_proxy", _adv(_P_MEMO, "siera_proxy")),
 ]
 
 HIT_PCT_NAMES = [f"pct_{n}" for n, _ in HIT_METRICS]
@@ -131,6 +192,7 @@ def attach_percentiles(rows: list[dict], verbose: bool = False) -> dict:
     value is missing, simply do not get the key; the caller treats an absent
     key the same as any other missing feature.
     """
+    _memoize_advanced(rows)
     cohorts: dict[tuple, list[dict]] = {}
     for r in rows:
         cohorts.setdefault((r.get("level"), r.get("season_year")), []).append(r)
@@ -167,6 +229,7 @@ def attach_percentiles(rows: list[dict], verbose: bool = False) -> dict:
                     r[col] = float(p)
                 stats["values"] += len(targets)
 
+    _drop_memos(rows)
     if verbose:
         print(f"[percentiles] {stats['cohorts']:,} cohorts ranked, "
               f"{stats['skipped_small']:,} too small (<{MIN_COHORT}), "

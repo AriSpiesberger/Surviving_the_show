@@ -234,12 +234,30 @@ class SeasonStats:
     pct_slg: Optional[float] = None
     pct_hr_per_pa: Optional[float] = None
     pct_sb_per_pa: Optional[float] = None
+    pct_swstr_pct: Optional[float] = None
+    pct_contact_pct: Optional[float] = None
+    pct_pitches_per_pa: Optional[float] = None
+    pct_gb_pct: Optional[float] = None
+    pct_fb_pct: Optional[float] = None
+    pct_ld_pct: Optional[float] = None
+    pct_hr_per_fb: Optional[float] = None
+    pct_babip: Optional[float] = None
     pct_era: Optional[float] = None
     pct_k9: Optional[float] = None
     pct_bb9: Optional[float] = None
     pct_fip: Optional[float] = None
     pct_whip: Optional[float] = None
     pct_hr9: Optional[float] = None
+    pct_p_swstr_pct: Optional[float] = None
+    pct_p_contact_pct: Optional[float] = None
+    pct_p_strike_pct: Optional[float] = None
+    pct_p_pitches_per_bf: Optional[float] = None
+    pct_p_gb_pct: Optional[float] = None
+    pct_p_fb_pct: Optional[float] = None
+    pct_p_ld_pct: Optional[float] = None
+    pct_p_k_bb_ratio: Optional[float] = None
+    pct_p_babip_against: Optional[float] = None
+    pct_p_siera_proxy: Optional[float] = None
 
 
 # ============================================================================
