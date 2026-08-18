@@ -498,7 +498,7 @@ def exit_labels(
     joined: list[dict],
     years: list[int],
     stats_by_pid: dict,
-    max_year: int = MAX_OBS_YEAR,
+    max_year: int | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Per (player, year), eligibility and label for the EXIT hazard.
 
@@ -509,7 +509,31 @@ def exit_labels(
                   past this year if they hadn't).
     Players whose last_active_year == max_year are censored: their final
     eligible row is labeled 0 (still in baseball as of cutoff).
+
+    `max_year` defaults to the latest season present in the data, NOT to
+    MAX_OBS_YEAR. The two answer different questions and must not be conflated.
+    MAX_OBS_YEAR is the last season whose OUTCOMES are resolved, which is what
+    debut and top-100 need. Exit is evidenced differently: a player's absence
+    from the following season IS the exit signal, and it is available the
+    moment that season's stats land, without waiting for outcomes to resolve.
+
+    Pinning exit to MAX_OBS_YEAR censored the most recent complete season and
+    suppressed roughly 5% of exit positives, all at the recent end. That biases
+    the fitted hazard low, and `in_baseball` gates every downstream event —
+    step_p = surv * in_baseball * h — so an underestimated exit inflates debut,
+    established and star probabilities for exactly the players nearest the
+    cutoff.
+
+    The in-progress season is a deliberate part of the reference: a player who
+    has not appeared by the time it is well underway has almost certainly
+    exited. The cost of a wrong call there is one mislabeled row for a player
+    returning late from injury, against ~1,500 correctly labeled exits.
     """
+    if max_year is None:
+        max_year = max(
+            (s.get("season_year") for rows in stats_by_pid.values()
+             for s in rows if s.get("season_year") is not None),
+            default=MAX_OBS_YEAR)
     n = len(years)
     eligible = np.zeros(n, dtype=bool)
     y = np.zeros(n, dtype=np.int8)

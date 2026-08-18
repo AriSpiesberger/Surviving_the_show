@@ -386,17 +386,41 @@ def exit_landmark_rows(
     landmark_years: list[int],
     stats_by_pid: dict,
     K: int = K_EXIT,
-    max_obs_year: int = MAX_OBS_YEAR,
+    max_obs_year: int | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Per (player, landmark, k) eligibility + label for the EXIT hazard.
 
-    Exit fires in year Y when last_active_year(player) == Y and the
-    player never reached MLB before that year (the contemporaneous
-    exit_labels rule).  We follow the same semantics, evaluated at the
-    label year S+k.
+    Exit means the career ended: the last year the player appears anywhere in
+    organized baseball, MiLB or MLB. Dropping from MLB back to Triple-A is not
+    an exit — the MiLB rows keep arriving, so `_last_active_year` (the max over
+    final_mlb_year and every season_stats year) keeps them at risk. Only the
+    end of the career counts.
+
+    This previously excluded anyone who had debuted, on the reasoning that a
+    player in MLB is no longer an "exit candidate" in the prospects sense. That
+    left MLB attrition unmodelled entirely: 6,681 players debuted, 5,003 of
+    them have already retired, and not one was labelled. The at-risk set was
+    ~18% short, all of it at the far end of the event ladder.
+
+    That mattered because `in_baseball` gates every downstream event —
+    step_p = surv * in_baseball * h — and the events behind debut
+    (ESTABLISHED_MLB, ALL_STAR, MAJOR_AWARD, ELITE, STAR) belong to players who
+    have by definition debuted. With no exit hazard for them, `in_baseball`
+    never decayed, probability accumulated across the whole horizon, and the
+    high-end outcomes came out inflated.
+
+    `max_obs_year` defaults to the latest season in the data, not MAX_OBS_YEAR.
+    Exit is evidenced by absence from the following season, which is known as
+    soon as that season's stats land — it does not wait on outcomes resolving
+    the way debut and top-100 do.
 
     Returns landmark_idx, k_arr, y as in landmark_event_rows.
     """
+    if max_obs_year is None:
+        max_obs_year = max(
+            (s.get("season_year") for rows in stats_by_pid.values()
+             for s in rows if s.get("season_year") is not None),
+            default=MAX_OBS_YEAR)
     last_active_cache: dict[str, int | None] = {}
     landmark_idx: list[int] = []
     k_arr: list[int] = []
@@ -406,9 +430,6 @@ def exit_landmark_rows(
         if pid not in last_active_cache:
             last_active_cache[pid] = _last_active_year(p, stats_by_pid)
         last = last_active_cache[pid]
-        debut = p.get("mlb_debut_year")
-        # Once a player debuts, they're no longer an "exit candidate" in
-        # the prospects sense.
         # Per landmark, walk k=1..K:
         for k in range(1, K + 1):
             label_year = S + k
@@ -418,15 +439,16 @@ def exit_landmark_rows(
             if last is None:
                 # Insufficient data to define last_active.
                 continue
-            if debut is not None and debut <= label_year:
-                # Already in MLB by the label year — not an exit candidate.
-                continue
             if label_year < last:
                 # Still active in subsequent years.
                 landmark_idx.append(i); k_arr.append(k); y_list.append(0)
             elif label_year == last:
-                # This is the exit year.
-                landmark_idx.append(i); k_arr.append(k); y_list.append(1)
+                # Their last observed year. Only an exit if we can see PAST
+                # it — a player still active in the final year of data is
+                # censored, not retired, and labelling them 1 would teach the
+                # model that every current player is about to quit.
+                landmark_idx.append(i); k_arr.append(k)
+                y_list.append(1 if last < max_obs_year else 0)
             else:
                 # Already exited before label_year — not a training row
                 # (they're out of the at-risk set).
