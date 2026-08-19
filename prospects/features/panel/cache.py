@@ -93,8 +93,9 @@ def step1_prep(db_path: str, max_draft_year: int) -> int:
         stats_rows = conn.execute("SELECT * FROM season_stats").fetchall()
         try:
             rank_rows = conn.execute(
-                "SELECT player_id, year, rank, source "
-                "FROM prospect_rankings").fetchall()
+                "SELECT player_id, CAST(substr(as_of, 1, 4) AS INTEGER), "
+                "overall_rank, source FROM rankings_history "
+                "WHERE overall_rank IS NOT NULL").fetchall()
         except Exception:
             rank_rows = []
         try:
