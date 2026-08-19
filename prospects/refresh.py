@@ -82,9 +82,10 @@ NON_BLOCKING = {"evaluate"}
 # modelling change is now:
 #     prospects-refresh --from split --skip hazards --skip prod \
 #                       --skip calibrators --skip buylist
-STEP_ORDER = ["tests", "backup", "pull", "outcomes", "birthdates", "woba",
-              "percentiles", "snapshot", "baselines", "split", "oof",
-              "evaluate", "hazards", "prod", "calibrators", "buylist"]
+STEP_ORDER = ["tests", "backup", "pull", "mlb_seasons", "outcomes",
+              "birthdates", "biometrics", "woba", "percentiles", "snapshot",
+              "baselines", "split", "oof", "evaluate", "hazards", "prod",
+              "calibrators", "buylist"]
 
 
 def _banner(text: str) -> None:
@@ -162,6 +163,15 @@ def build_plan(args) -> list[tuple[str, str, object]]:
         ("backup", "back up prospects.db", step_backup),
         ("pull", "FULL data pull (--phase all)",
          _py("prospects.data.pull", "--phase", "all", "--db", "prospects.db")),
+        # MLB rows used to come from Lahman, which stops at 2021 — every
+        # season after that was simply absent, so 1,422 players who reached
+        # the majors from 2022 on had their whole big-league career invisible
+        # to the panel. The league-wide stats endpoint returns one already-
+        # summed row per player-season (the per-team form would let a traded
+        # player's two partial lines collide on the primary key), and unlike
+        # Lahman it carries the batted-ball and pitch-level detail.
+        ("mlb_seasons", "MLB season lines from the stats API",
+         _py("prospects.data.backfills.mlb_seasons_stitch")),
         ("outcomes", "rebuild career_outcomes post-dedup + verify",
          _py("prospects.data.backfills.post_repull_chain")),
         # Both derive columns on season_stats from the rows the pull just
@@ -178,6 +188,12 @@ def build_plan(args) -> list[tuple[str, str, object]]:
         ("birthdates", "backfill birth_date + derive age_during_season",
          _py("prospects.data.backfills.birthdate_backfill_people",
              "--db", "prospects.db", "--apply")),
+        # height / weight / bats / throws. Same story as the birthdates:
+        # the script existed and had never been wired in, leaving bats_L,
+        # bats_S and throws_L dead and height/weight at 43%.
+        ("biometrics", "backfill height, weight, bats, throws",
+         _py("prospects.data.backfills.biometrics_backfill",
+             "--db", "prospects.db")),
         ("woba", "derive wOBA from raw counting stats",
          _py("prospects.data.backfills.woba_backfill")),
         ("percentiles", "rank each row within its (level, year) cohort",
