@@ -133,75 +133,54 @@ def _entry_year(player: dict, stats_by_pid: dict) -> int | None:
 
 
 def _feature_sig(db_path: str | None = None) -> str:
-    """Identity of the panel: the feature definition AND the data behind it.
+    """Identity of the panel: everything a cached panel's values depend on.
 
-    Two halves, because there are two ways a cached panel goes wrong.
+    This guard has now missed a change four separate times, each in a new
+    way, and each miss looked like a clean run reporting the old model's
+    numbers. In order: names-only missed percentile columns landing in a
+    module the landmark panel does not read; adding a data fingerprint still
+    missed a change to feature VALUES that left every NAME identical; hashing
+    three feature modules still missed a query fix in six OTHER modules, a
+    regenerated baselines file, and a database column that was not in the
+    fingerprint list.
 
-    Features — hashes the ordered names, so both a count change and a
-    reordering invalidate. A reordering leaves the width identical while
-    silently remapping every column.
-
-    Data — a repair pull or a derived-column backfill changes what the same
-    feature definition computes to. A features-only signature matches happily
-    and reuses a panel built before the data was fixed, which is the same
-    silent-staleness failure one level down. Counting the populated derived
-    columns is cheap and moves whenever a backfill or repull lands.
+    So it stops enumerating and hashes everything the panel is built from:
+    the source of every module under features/ and model/hazards/, the league
+    baselines file, and a count of each derived column. Over-invalidating
+    costs one rebuild. Under-invalidating costs a run whose metrics describe
+    a model that was never trained.
     """
-    from prospects.features import percentiles, scouting, windowed
-    # Names AND the code that fills them. Twice now a change has slipped past
-    # this guard: percentile columns were added to windowed while the landmark
-    # panel is built from scouting, and later the level-trajectory features
-    # changed VALUE without changing NAME. A name hash cannot see either, so
-    # hash the source of every module that computes a panel column too. A
-    # comment-only edit will also invalidate — a needless rebuild is cheap
-    # next to silently training on a stale panel.
+    from prospects.features import scouting, windowed
+
+    parts: list[bytes] = []
+    for d in (REPO_ROOT / "prospects" / "features",
+              REPO_ROOT / "prospects" / "model" / "hazards"):
+        for f in sorted(d.rglob("*.py")):
+            if "__pycache__" not in f.parts:
+                parts.append(f.read_bytes())
+    bl = REPO_ROOT / "reference" / "milb_baselines.json"
+    if bl.exists():
+        parts.append(bl.read_bytes())
+    code = hashlib.sha1(b"".join(parts)).hexdigest()[:10]
+
     names = list(scouting.FEATURE_NAMES) + list(windowed.FEATURE_NAMES)
-    src = b"".join(
-        pathlib.Path(m.__file__).read_bytes()
-        for m in (scouting, windowed, percentiles))
     sig = (f"{len(scouting.FEATURE_NAMES)}/{len(windowed.FEATURE_NAMES)}:"
-           f"{hashlib.sha1(chr(0).join(names).encode()).hexdigest()[:8]}:"
-           f"{hashlib.sha1(src).hexdigest()[:8]}")
+           f"{hashlib.sha1(chr(0).join(names).encode()).hexdigest()[:8]}:{code}")
     if db_path is None:
         return sig
     try:
         with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as conn:
-            n, woba, ab, pct = conn.execute(
-                "SELECT COUNT(*), COUNT(woba), COUNT(ab), COUNT(pct_woba) "
-                "FROM season_stats").fetchone()
+            cols = ("woba", "ab", "pct_woba", "age_during_season",
+                    "swings_and_misses", "fip")
+            counts = conn.execute(
+                "SELECT COUNT(*), " + ", ".join(f"COUNT({c})" for c in cols)
+                + " FROM season_stats").fetchone()
+            ranks = conn.execute(
+                "SELECT COUNT(*) FROM rankings_history "
+                "WHERE overall_rank IS NOT NULL").fetchone()[0]
     except sqlite3.Error:
         return f"{sig}:db?"
-    return f"{sig}:{n}-{woba}-{ab}-{pct}"
-
-
-def _purge_derived() -> None:
-    """Delete everything downstream of the panel when the panel changes.
-
-    Stages 2-6 resume by asking `does the output file exist?`, which is right
-    for picking up after a crash and wrong after a feature change: the panel
-    rebuilds and every stage below it then reuses artifacts computed from the
-    OLD panel. The run completes, reports metrics, and describes a model that
-    was never trained on the new features.
-
-    That is not hypothetical — it is exactly what a level-trajectory change
-    produced: panel rebuilt, all six folds reused, headline unchanged, and the
-    numbers looked like a real result.
-
-    Fold and train pid lists survive. They partition players, not features, so
-    keeping them holds the splits fixed across a comparison — which is what
-    makes two runs comparable at all.
-    """
-    victims = list(SCRATCH.glob("fold*_long.csv"))
-    victims += list(SCRATCH.glob("fold*_hazards.pkl"))
-    victims += [OOF_STACKED, OOF_VAL, XGB_OUT]
-    gone = 0
-    for f in victims:
-        if f.exists():
-            f.unlink()
-            gone += 1
-    if gone:
-        print(f"           purged {gone} derived artifact(s) built on the old "
-              f"panel (fold longs, hazards, stacked, val, XGB)")
+    return f"{sig}:{'-'.join(str(x) for x in counts)}-r{ranks}"
 
 
 # ---- Stage 1: panel build with tqdm ----
