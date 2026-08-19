@@ -82,9 +82,9 @@ NON_BLOCKING = {"evaluate"}
 # modelling change is now:
 #     prospects-refresh --from split --skip hazards --skip prod \
 #                       --skip calibrators --skip buylist
-STEP_ORDER = ["tests", "backup", "pull", "outcomes", "woba", "percentiles",
-              "snapshot", "split", "oof", "evaluate", "hazards", "prod",
-              "calibrators", "buylist"]
+STEP_ORDER = ["tests", "backup", "pull", "outcomes", "birthdates", "woba",
+              "percentiles", "snapshot", "baselines", "split", "oof",
+              "evaluate", "hazards", "prod", "calibrators", "buylist"]
 
 
 def _banner(text: str) -> None:
@@ -168,11 +168,29 @@ def build_plan(args) -> list[tuple[str, str, object]]:
         # wrote, so they belong between `pull` and `snapshot` — modeling reads
         # the snapshot, so a derivation landing after the copy is invisible to
         # every model. Order matters: percentiles rank pct_woba, so woba first.
+        # season_stats.age_during_season was empty for every one of 177,710
+        # rows because these two were never wired in. That silently killed
+        # eight panel features — age_yT/y1/y2, age_vs_level_*, delta_age,
+        # delta_age_vs_level — and age-for-level is the single most load-
+        # bearing concept in prospect evaluation. The `people` pass covers
+        # anyone with an mlbam id (IFAs included); the draft pass covers
+        # drafted players and derives age_during_season from birth_date.
+        ("birthdates", "backfill birth_date + derive age_during_season",
+         _py("prospects.data.backfills.birthdate_backfill_people",
+             "--db", "prospects.db", "--apply")),
         ("woba", "derive wOBA from raw counting stats",
          _py("prospects.data.backfills.woba_backfill")),
         ("percentiles", "rank each row within its (level, year) cohort",
          _py("prospects.data.backfills.percentile_backfill")),
         ("snapshot", "refresh prospects_snapshot.db", step_snapshot),
+        # Baselines are league medians per level, read from the SNAPSHOT, so
+        # they have to be rebuilt after the copy and before any feature is
+        # built. The checked-in file was computed while woba, fip and age
+        # were all empty columns, so it carried no entry for any of them and
+        # woba_vs_level / fip_vs_level / age_vs_level were dead in the panel.
+        ("baselines", "recompute league baselines per level",
+         _py("prospects.features.scouting", "--compute-baselines",
+             "--out", "reference/milb_baselines.json")),
         ("split", "regenerate the fit/val split over the current universe",
          _py("prospects.model.train.make_split", *tag_args)),
         ("oof", "OOF folds + hazards + joint_xgb.pkl",
