@@ -174,6 +174,36 @@ def _feature_sig(db_path: str | None = None) -> str:
     return f"{sig}:{n}-{woba}-{ab}-{pct}"
 
 
+def _purge_derived() -> None:
+    """Delete everything downstream of the panel when the panel changes.
+
+    Stages 2-6 resume by asking `does the output file exist?`, which is right
+    for picking up after a crash and wrong after a feature change: the panel
+    rebuilds and every stage below it then reuses artifacts computed from the
+    OLD panel. The run completes, reports metrics, and describes a model that
+    was never trained on the new features.
+
+    That is not hypothetical — it is exactly what a level-trajectory change
+    produced: panel rebuilt, all six folds reused, headline unchanged, and the
+    numbers looked like a real result.
+
+    Fold and train pid lists survive. They partition players, not features, so
+    keeping them holds the splits fixed across a comparison — which is what
+    makes two runs comparable at all.
+    """
+    victims = list(SCRATCH.glob("fold*_long.csv"))
+    victims += list(SCRATCH.glob("fold*_hazards.pkl"))
+    victims += [OOF_STACKED, OOF_VAL, XGB_OUT]
+    gone = 0
+    for f in victims:
+        if f.exists():
+            f.unlink()
+            gone += 1
+    if gone:
+        print(f"           purged {gone} derived artifact(s) built on the old "
+              f"panel (fold longs, hazards, stacked, val, XGB)")
+
+
 # ---- Stage 1: panel build with tqdm ----
 def stage_panel(db_path: str, max_draft_year: int,
                 partial_seed: int | None = None) -> tuple:
@@ -190,6 +220,7 @@ def stage_panel(db_path: str, max_draft_year: int,
             print(f"[Stage 1] panel cache STALE "
                   f"(cached {sig or 'unsigned'} != current {_feature_sig(db_path)}) "
                   f"— rebuilding")
+            _purge_derived()
         else:
             print(f"[Stage 1] loading panel cache {PANEL_NPZ.name}")
             npz = np.load(PANEL_NPZ, allow_pickle=True)

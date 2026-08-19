@@ -64,6 +64,13 @@ LEVEL_RANK: dict[str, int] = {
 
 LEVELS_FOR_BASELINES = ["RK", "A-", "A", "A+", "AA", "AAA"]
 
+# A level counts as "sustained" at this share of the season, or at this
+# absolute sample regardless of share (a September promotion is real even
+# though it is a small slice of the year).
+_SUSTAINED_SHARE = 0.15
+_SUSTAINED_PA = 50.0
+_SUSTAINED_IP = 15.0
+
 PREMIUM_POSITIONS = {"SS", "C", "CF"}
 PITCHER_POS = {"P", "RHP", "LHP", "SP", "RP"}
 
@@ -169,8 +176,10 @@ SHARED_PER_YEAR = [
     "level_rank",
     "age",
     "age_vs_level",
-    "n_levels_in_year",  # 1 = stable, 2+ = promoted mid-season
-    "highest_level_in_year",
+    "n_levels_in_year",  # 1 = stable, 2+ = moved mid-season
+    "highest_level_in_year",       # ceiling touched, however briefly
+    "sustained_level_in_year",     # highest level actually held down
+    "lowest_level_in_year",        # floor — exposes rehab / demotion shape
 ]
 
 CAREER_TO_DATE_FEATS = [
@@ -616,6 +625,42 @@ def _year_aggregate(
     highest_level_in_year = max(
         [LEVEL_RANK.get(lvl, 0) for lvl in levels_seen] or [0]
     )
+    lowest_level_in_year = min(
+        [LEVEL_RANK.get(lvl, 0) for lvl in levels_seen
+         if LEVEL_RANK.get(lvl, 0) > 0] or [0]
+    )
+
+    # Highest level the player actually HELD DOWN, as opposed to touched.
+    #
+    # A season's top level is not automatically where the player belongs. Of
+    # the 1,795 multi-level 2026 seasons, 434 are cameos: one player logged
+    # 281 PA at Low-A and 13 at Triple-A, so a plain max reads that as a
+    # three-level climb. Requiring a real share of the season keeps the
+    # genuine promotions — a 77-PA Double-A stint that is 30% of the year —
+    # and drops the 13-PA look.
+    #
+    # Sides are measured separately because PA and IP are not comparable, and
+    # a level qualifies on either a share of the season or an absolute sample,
+    # so a late promotion with a small share still counts if it is substantial.
+    def _sustained(rows, key, abs_min):
+        by_lvl: dict[str, float] = {}
+        for r in rows:
+            lvl = (r.get("level") or "").upper()
+            if LEVEL_RANK.get(lvl, 0) > 0:
+                by_lvl[lvl] = by_lvl.get(lvl, 0) + (r.get(key) or 0)
+        total = sum(by_lvl.values())
+        if total <= 0:
+            return 0
+        ok = [LEVEL_RANK[l] for l, v in by_lvl.items()
+              if v / total >= _SUSTAINED_SHARE or v >= abs_min]
+        return max(ok) if ok else 0
+
+    sustained_level_in_year = max(
+        _sustained(hit_rows, "pa", _SUSTAINED_PA),
+        _sustained(pit_rows, "ip", _SUSTAINED_IP),
+    )
+    if sustained_level_in_year == 0:
+        sustained_level_in_year = level_rank
 
     shared = {
         "level_rank": float(level_rank) if level_rank > 0 else MISSING,
@@ -623,6 +668,8 @@ def _year_aggregate(
         "age_vs_level": float(age_vs_level) if not _is_missing(age_vs_level) else MISSING,
         "n_levels_in_year": float(len(levels_seen)) if levels_seen else MISSING,
         "highest_level_in_year": float(highest_level_in_year) if highest_level_in_year > 0 else MISSING,
+        "sustained_level_in_year": float(sustained_level_in_year) if sustained_level_in_year > 0 else MISSING,
+        "lowest_level_in_year": float(lowest_level_in_year) if lowest_level_in_year > 0 else MISSING,
     }
 
     return {"hit": hit, "pit": pit, "shared": shared,
@@ -1015,7 +1062,7 @@ def _trajectory_block(
         agg = year_aggs.get(y)
         if not agg:
             return None
-        v = agg["shared"]["highest_level_in_year"]
+        v = agg["shared"]["sustained_level_in_year"]
         if _is_missing(v):
             v = agg["shared"]["level_rank"]
         return None if _is_missing(v) else v
@@ -1040,7 +1087,7 @@ def _trajectory_block(
             agg = year_aggs.get(y)
             if not agg:
                 break
-            lv = agg["shared"]["highest_level_in_year"]
+            lv = agg["shared"]["sustained_level_in_year"]
             if _is_missing(lv):
                 lv = agg["shared"]["level_rank"]
             if _is_missing(lv):
@@ -1060,7 +1107,7 @@ def _trajectory_block(
             agg = year_aggs.get(y)
             if not agg:
                 break
-            lv = agg["shared"]["highest_level_in_year"]
+            lv = agg["shared"]["sustained_level_in_year"]
             if _is_missing(lv):
                 lv = agg["shared"]["level_rank"]
             if _is_missing(lv):
@@ -1315,7 +1362,7 @@ def build_scouting_features(
     for stat in ("era", "fip", "k9", "bb9"):
         accel[f"accel_{stat}"] = _accel(yT["pit"][stat], y1["pit"][stat], y2["pit"][stat])
     def _peak(y):
-        v = y["shared"]["highest_level_in_year"]
+        v = y["shared"]["sustained_level_in_year"]
         return y["shared"]["level_rank"] if _is_missing(v) else v
     accel["accel_level"] = _accel(_peak(yT), _peak(y1), _peak(y2))
 
