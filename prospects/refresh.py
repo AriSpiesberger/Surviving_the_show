@@ -82,7 +82,7 @@ NON_BLOCKING = {"evaluate"}
 # modelling change is now:
 #     prospects-refresh --from split --skip hazards --skip prod \
 #                       --skip calibrators --skip buylist
-STEP_ORDER = ["tests", "backup", "pull", "mlb_seasons", "outcomes",
+STEP_ORDER = ["tests", "backup", "pull", "repair", "mlb_seasons", "outcomes",
               "birthdates", "biometrics", "woba", "percentiles", "snapshot",
               "baselines", "split", "oof", "evaluate", "hazards", "prod",
               "calibrators", "buylist"]
@@ -163,6 +163,15 @@ def build_plan(args) -> list[tuple[str, str, object]]:
         ("backup", "back up prospects.db", step_backup),
         ("pull", "FULL data pull (--phase all)",
          _py("prospects.data.pull", "--phase", "all", "--db", "prospects.db")),
+        # The pull drops players sporadically — a full sweep still left 7.3%
+        # of MiLB hitter rows with no raw counting stats, about one player per
+        # team-season, and re-running a single affected team-season by hand
+        # fills it correctly. Nothing is wrong with the pull logic; the misses
+        # are transient. This re-pulls only the team-seasons that came back
+        # incomplete, which is roughly a third of a full sweep, and it is a
+        # no-op when the pull was clean.
+        ("repair", "re-pull team-seasons missing raw counting stats",
+         _py("prospects.data.backfills.repull_missing_raw")),
         # MLB rows used to come from Lahman, which stops at 2021 — every
         # season after that was simply absent, so 1,422 players who reached
         # the majors from 2022 on had their whole big-league career invisible
