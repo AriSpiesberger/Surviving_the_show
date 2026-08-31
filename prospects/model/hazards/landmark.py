@@ -481,6 +481,26 @@ _HAZARD_HP_DEFAULTS = dict(
 )
 
 
+def _apply_feature_mask(X: np.ndarray, bundle: dict) -> np.ndarray:
+    """Subset a full-width feature matrix to the columns a hazard was fit on.
+
+    Hazards fit under a feature-selection manifest store the boolean mask they
+    were trained with. Callers always BUILD full width (FEATURE_NAMES_LM, with
+    the k column at K_FEATURE_INDEX) and write k before this runs — masking is
+    the last step, so k's position in the full vector never moves and every
+    upstream feature-building path stays untouched.
+    """
+    m = bundle.get("feature_mask")
+    if m is None:
+        return X
+    m = np.asarray(m, dtype=bool)
+    if m.size != X.shape[1]:
+        raise ValueError(
+            f"hazard feature_mask is {m.size} wide but X is {X.shape[1]}; "
+            f"the model was fit against a different feature contract")
+    return X[:, m]
+
+
 def _train_event(X_tr: np.ndarray, y_tr: np.ndarray, seed: int = 42,
                  hp: dict | None = None,
                  ) -> HistGradientBoostingClassifier:
@@ -505,6 +525,7 @@ def fit_landmark_hazards(
     max_obs_year: int = MAX_OBS_YEAR,
     verbose: bool = True,
     hazard_hp: dict | None = None,
+    feature_mask: np.ndarray | None = None,
 ) -> dict:
     """Per-event HistGBT fit. Output dict matches survival.fit_hazards
     so load_hazards / save_hazards / downstream Beta calibration code
@@ -516,6 +537,15 @@ def fit_landmark_hazards(
         v1.18b-prod we'll pass all-True (train on 100%); for v1.18b-test
         the prod pipeline uses an 80/10/10 split on the LANDMARK rows.
 
+    feature_mask : bool array (N_FEATURES_LM,) | None
+        COLUMN mask from a feature-selection manifest
+        (``features.selection.feature_mask``). None (default) trains on the
+        full contract, exactly as before. When set, each fit sees only the
+        selected columns and the mask is stored in every bundle so
+        ``predict_cumulative_batch_landmark`` subsets identically — the
+        selection travels with the model rather than with the caller, so a
+        mask can never be applied at train time and forgotten at inference.
+
     Returns dict keyed by event:
       {event: {"hazard": HistGBT, "feature_names": FEATURE_NAMES_LM,
                "kind": "landmark", "k_max": K_event, "n_train": int,
@@ -524,6 +554,23 @@ def fit_landmark_hazards(
     k_per_event = dict(k_per_event or K_PER_EVENT)
     if train_mask is None:
         train_mask = np.ones(X_lm.shape[0], dtype=bool)
+
+    if feature_mask is not None:
+        feature_mask = np.asarray(feature_mask, dtype=bool)
+        if feature_mask.size != N_FEATURES_LM:
+            raise ValueError(
+                f"feature_mask is {feature_mask.size} wide, expected "
+                f"{N_FEATURES_LM} (FEATURE_NAMES_LM)")
+        if not feature_mask[K_FEATURE_INDEX]:
+            raise ValueError(
+                f"feature_mask excludes {LANDMARK_K_FEATURE}, which carries "
+                f"the horizon at inference — it cannot be deselected")
+        sel_names = [n for n, keep in zip(FEATURE_NAMES_LM, feature_mask) if keep]
+        if verbose:
+            print(f"feature selection: {int(feature_mask.sum())}/"
+                  f"{N_FEATURES_LM} columns")
+    else:
+        sel_names = list(FEATURE_NAMES_LM)
 
     hazards: dict = {}
     train_events = list(CareerEvent.all_events()) + [ELITE_KEY, STAR_KEY]
@@ -558,6 +605,8 @@ def fit_landmark_hazards(
                       f"{K:>3} {n:>10,d} {n_pos:>7d}    skip")
             continue
         X_tr = _assemble_event_X(X_lm, landmark_idx, k_arr)
+        if feature_mask is not None:
+            X_tr = X_tr[:, feature_mask]
         clf = _train_event(X_tr, y_all, seed=seed, hp=hazard_hp)
         if verbose:
             print(f"{ename:<24} {f'rc={rc},min={min_yrs}':<20} "
@@ -565,7 +614,9 @@ def fit_landmark_hazards(
                   f"{100.0*n_pos/n:>8.2f}%")
         hazards[event] = {
             "hazard": clf,
-            "feature_names": list(FEATURE_NAMES_LM),
+            "feature_names": list(sel_names),
+            "feature_mask": (None if feature_mask is None
+                             else feature_mask.copy()),
             "kind": "landmark",
             "k_max": K,
             "n_train": n,
@@ -586,13 +637,17 @@ def fit_landmark_hazards(
     n = int(y_all.size); n_pos = int(y_all.sum())
     if n_pos >= 10 and n_pos < n - 10:
         X_tr = _assemble_event_X(X_lm, landmark_idx, k_arr)
+        if feature_mask is not None:
+            X_tr = X_tr[:, feature_mask]
         clf_e = _train_event(X_tr, y_all, seed=seed)
         if verbose:
             print(f"{EXIT_KEY:<24} {'exit-only':<20} {K_EXIT:>3} "
                   f"{n:>10,d} {n_pos:>7d} {100.0*n_pos/n:>8.2f}%")
         hazards[EXIT_KEY] = {
             "hazard": clf_e,
-            "feature_names": list(FEATURE_NAMES_LM),
+            "feature_names": list(sel_names),
+            "feature_mask": (None if feature_mask is None
+                             else feature_mask.copy()),
             "kind": "landmark",
             "k_max": K_EXIT,
             "n_train": n,
@@ -687,6 +742,7 @@ def predict_cumulative_batch_landmark(
             X = X0[mask].copy()
             k_eff = min(t_step, hazards[e].get("k_max", t_step))
             X[:, K_FEATURE_INDEX] = float(k_eff)
+            X = _apply_feature_mask(X, hazards[e])
             h = hazards[e]["hazard"].predict_proba(X)[:, 1]
             step_haz[e][mask, step] = h   # raw per-year hazard curve
             step_p = surv[e][mask] * in_baseball[mask] * h
@@ -700,6 +756,7 @@ def predict_cumulative_batch_landmark(
             X = X0.copy()
             k_eff = min(t_step, k_max_exit)
             X[:, K_FEATURE_INDEX] = float(k_eff)
+            X = _apply_feature_mask(X, hazards[EXIT_KEY])
             h_exit = exit_clf.predict_proba(X)[:, 1]
             in_baseball = in_baseball * (1.0 - h_exit)
 

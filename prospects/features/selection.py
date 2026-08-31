@@ -96,7 +96,13 @@ from prospects.core.schema import CareerEvent
 # --- screen thresholds -----------------------------------------------------
 # Defaults are deliberately conservative: this module should propose drops that
 # are obvious, not drops that are arguable. Tighten via the CLI to explore.
-MAX_MISSING = 0.98      # NaN fraction at or above which a column is dropped
+# Missingness drops columns that are NEVER present, and nothing else. An
+# earlier 0.98 threshold cost 20% of held-out AP on MLB_DEBUT: the 98-99.4%
+# NaN block (best_top100_rank, the scout_*_p grades, bonus_vs_slot) is the most
+# valuable in the panel, because for a rare event "was ranked/scouted at all"
+# is itself enormous signal and HistGBT reads it natively through the NaN.
+# Rarity is not the same as uninformativeness — let stage 5 judge these.
+MAX_MISSING = 1.0       # NaN fraction at or above which a column is dropped
 MAX_DOMINANT = 0.995    # single-value share (of non-missing) that counts as degenerate
 MAX_RHO = 0.98          # |Spearman| against a kept feature that counts as redundant
 MIN_AUC_LIFT = 0.005    # |AUC - 0.5| below which a column has no marginal signal
@@ -348,6 +354,10 @@ def select_features(
     miss = _missing_rate(Xs)
     for j in np.where(miss >= max_missing)[0]:
         _kill(int(j), "missingness", f"nan_frac={miss[j]:.4f}")
+    if max_missing < 1.0 and verbose:
+        print(f"    WARNING: max_missing={max_missing} drops rare-but-present "
+              f"columns. On this panel the 0.98-1.0 NaN block is worth ~20% "
+              f"of held-out AP; 1.0 (never-present only) is the safe rule.")
 
     # --- stage 2: degeneracy ----------------------------------------------
     dom = _dominant_share(Xs)
@@ -356,9 +366,10 @@ def select_features(
             _kill(int(j), "degenerate", f"dominant_share={dom[j]:.5f}")
 
     # --- univariate signal (feeds stages 3 and 4) --------------------------
-    auc = np.full(p, 0.5)
-    live = np.where(alive)[0]
-    auc[live] = _univariate_auc(Xs[:, live], ys)
+    # Computed for EVERY column, including ones already killed: an AUC of 0.5
+    # in the stats CSV then means "no marginal signal", not "not measured".
+    # That distinction is what made the missingness misfire hard to see.
+    auc = _univariate_auc(Xs, ys)
     lift = np.abs(auc - 0.5)
 
     # --- stage 3: redundancy ----------------------------------------------
