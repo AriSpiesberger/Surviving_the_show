@@ -101,6 +101,93 @@ def _sum(row: dict, *keys: str) -> Optional[float]:
 
 
 # ============================================================================
+# PITCH-DATA RELIABILITY GATE
+#
+# Pitch-level logging is not uniform across leagues that share a sportId. The
+# Dominican Summer League — and the Venezuelan Summer League, which ran
+# through 2015 — record roughly HALF the pitches actually thrown. Measured on
+# 2024 (players with 50+ PA / 20+ IP), against the complex leagues that share
+# sportId 16:
+#
+#     league    P/PA    P/IP    Swing%   Whiff%   SwStr%
+#     DSL       1.97     8.54    0.600    0.480    0.288
+#     ACL       3.80    17.45    0.443    0.314    0.139
+#     FCL       3.80    16.87    0.432    0.282    0.122
+#
+# Note that `totalSwings` and `swingAndMisses` are corrupted independently of
+# `numberOfPitches` — Whiff% is swings-and-misses over swings and never
+# touches the pitch count, yet it still reads ~1.6x the complex-league rate.
+# So the whole pitch-tracking block has to go, not only the ratios with
+# pitches in the denominator.
+#
+# What survives is everything built on plate appearances and balls in play.
+# Same 2024 sample:
+#
+#     league      K%      BB%     GB%      LD%     BABIP
+#     DSL       0.219    0.139   0.463    0.179    0.308
+#     ACL       0.249    0.130   0.458    0.181    0.348
+#     FCL       0.235    0.131   0.464    0.168    0.314
+#
+# Those are league differences, not artifacts. So a DSL line still yields
+# wOBA, K%, BB% and the full batted-ball profile — only the swing rates are
+# unusable.
+# ============================================================================
+
+PITCH_DATA_UNRELIABLE_LEAGUES = frozenset({
+    "DSL",   # Dominican Summer League — ~50% of pitches logged
+    "VSL",   # Venezuelan Summer League — same, ran through 2015
+})
+
+# Metrics that must be suppressed when the pitch log is unreliable.
+_PITCH_DERIVED_HIT = (
+    "swing_pct", "whiff_pct", "swstr_pct", "contact_pct",
+    "pitches_per_pa", "k_minus_swstr",
+)
+_PITCH_DERIVED_PIT = (
+    "strike_pct", "swing_pct", "whiff_pct", "swstr_pct", "contact_pct",
+    "pitches_per_bf", "pitches_per_ip",
+)
+
+
+def pitch_data_reliable(row: dict) -> bool:
+    """Whether a row's pitch-level counts can be trusted.
+
+    Primary source is `season_stats.pitch_data_valid`, a per-(level, season,
+    team) flag written by data/backfills/pitch_validity.py from a numeric
+    range check. Prefer it over any league or era rule: the logging rollout
+    was team-by-team at the boundaries, so AAA 2006, AA 2008-2011 and RK 2024
+    are all genuinely split cells that no league-level rule can express.
+
+    Falls back to the league name only when the flag has not been computed.
+    Anything undetermined is treated as UNRELIABLE — the corrupt half of the
+    panel is large enough that silence must not read as consent.
+    """
+    flag = row.get("pitch_data_valid")
+    if flag is not None:
+        return bool(flag)
+
+    lg = row.get("league")
+    if lg is not None:
+        return str(lg).strip().upper() not in PITCH_DATA_UNRELIABLE_LEAGUES
+
+    # No flag and no league. Range-check the row itself as a last resort.
+    pa, pitches = _f(row, "pa"), _f(row, "pitches_seen")
+    if pa and pitches and pa >= 50:
+        return (pitches / pa) >= 3.0
+    ip, p_pitches = _f(row, "ip"), _f(row, "p_pitches")
+    if ip and p_pitches and ip >= 20:
+        return (p_pitches / ip) >= 10.0
+    return False
+
+
+def _suppress_pitch_metrics(out: dict, keys) -> dict:
+    for k in keys:
+        if k in out:
+            out[k] = None
+    return out
+
+
+# ============================================================================
 # HITTER METRICS
 # ============================================================================
 
@@ -215,6 +302,10 @@ def hitter_advanced(row: dict) -> dict:
     xbh = _sum(row, "doubles", "triples", "home_runs")
     out["xbh_pct"] = _div(xbh, pa, MIN_PA)
     out["hr_pct"] = _div(hr, pa, MIN_PA)
+
+    # Drop the swing metrics where the league's pitch log is known bad.
+    if not pitch_data_reliable(row):
+        _suppress_pitch_metrics(out, _PITCH_DERIVED_HIT)
 
     return out
 
@@ -361,6 +452,10 @@ def pitcher_advanced(row: dict, lg_hr_per_fb: Optional[float] = None,
         1.0 if (out["start_pct"] is not None and out["start_pct"] >= 0.5)
         else (0.0 if out["start_pct"] is not None else None))
 
+    # Drop the swing/strike metrics where the league's pitch log is known bad.
+    if not pitch_data_reliable(row):
+        _suppress_pitch_metrics(out, _PITCH_DERIVED_PIT)
+
     return out
 
 
@@ -437,6 +532,76 @@ def league_context(rows: list[dict]) -> dict:
         ctx["fip_constant"] = FIP_CONSTANT_DEFAULT
 
     return ctx
+
+
+# ============================================================================
+# BATTED-BALL DIRECTION & CONTACT QUALITY
+#
+# Derived from a `batted_ball_profile` row (see data/sources/spray.py), which
+# is scraped from game-feed hitData and therefore exists at every level.
+# ============================================================================
+
+MIN_BATTED_BALLS = 25
+
+
+def spray_advanced(row: dict) -> dict:
+    """Pull / centre / oppo rates and contact quality for one profile row."""
+    out: dict[str, Optional[float]] = {}
+    n = _f(row, "batted_balls")
+
+    out["pull_pct"] = _div(_f(row, "pull_n"), n, MIN_BATTED_BALLS)
+    out["center_pct"] = _div(_f(row, "center_n"), n, MIN_BATTED_BALLS)
+    out["oppo_pct"] = _div(_f(row, "oppo_n"), n, MIN_BATTED_BALLS)
+
+    # Pull-minus-oppo: one signed number for approach. Strongly positive is a
+    # pull-heavy hitter, whose power tends to translate but whose batting
+    # average is more shift- and defense-sensitive.
+    if out["pull_pct"] is not None and out["oppo_pct"] is not None:
+        out["pull_minus_oppo"] = out["pull_pct"] - out["oppo_pct"]
+    else:
+        out["pull_minus_oppo"] = None
+
+    out["spray_angle_mean"] = _f(row, "spray_angle_mean")
+    # Spread of the spray distribution — a proxy for all-fields ability that
+    # does not depend on where the middle of that distribution sits.
+    out["spray_angle_sd"] = _f(row, "spray_angle_sd")
+
+    # Contact quality from the stringer's `hardness` grade.
+    #
+    # TREAT WITH SUSPICION. Measured across levels and eras, the grade is
+    # overwhelmingly "medium" and barely discriminates:
+    #
+    #     MLB 2025   medium 83.5%   hard 14.3%   soft  2.2%
+    #     AAA 2025   medium 83.4%   hard  9.7%   soft  6.9%
+    #     AA  2025   medium 91.8%   hard  6.3%   soft  1.8%
+    #     A   2025   medium 84.1%   hard  8.6%   soft  7.4%
+    #     MLB 2015   medium 85.8%   hard  6.7%   soft  7.5%
+    #     AA  2015   medium 97.6%   hard  1.3%   soft  1.1%
+    #
+    # Only 2-16% of batted balls get a non-medium tag, and the rate swings
+    # with level and season far more than hitter populations plausibly do —
+    # AA moved from 97.6% medium in 2015 to 91.8% in 2025. That is scorer
+    # behaviour drifting, not contact quality. These are emitted because they
+    # are free, but they are NOT a substitute for exit velocity and must not
+    # enter the panel without per-level-season normalization; even normalized,
+    # the discriminating power is thin.
+    graded = _sum(row, "hard_n", "medium_n", "soft_n")
+    out["hard_pct"] = _div(_f(row, "hard_n"), graded, MIN_BATTED_BALLS)
+    out["soft_pct"] = _div(_f(row, "soft_n"), graded, MIN_BATTED_BALLS)
+    if out["hard_pct"] is not None and out["soft_pct"] is not None:
+        out["hard_minus_soft"] = out["hard_pct"] - out["soft_pct"]
+    else:
+        out["hard_minus_soft"] = None
+
+    # Play-level trajectory. Redundant with the season-stat grid where both
+    # exist, but it is the fallback where the season grid is missing.
+    traj = _sum(row, "gb_n", "fb_n", "ld_n", "pu_n")
+    out["gb_pct_pbp"] = _div(_f(row, "gb_n"), traj, MIN_BATTED_BALLS)
+    out["fb_pct_pbp"] = _div(_f(row, "fb_n"), traj, MIN_BATTED_BALLS)
+    out["ld_pct_pbp"] = _div(_f(row, "ld_n"), traj, MIN_BATTED_BALLS)
+    out["pu_pct_pbp"] = _div(_f(row, "pu_n"), traj, MIN_BATTED_BALLS)
+
+    return out
 
 
 def wrc_plus(woba: Optional[float], ctx: dict,

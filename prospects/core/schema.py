@@ -214,6 +214,23 @@ class SeasonStats:
     # Defense/positional context
     primary_position: Optional[str] = None
 
+    # League identity. Needed because pitch-level data quality is not uniform
+    # across leagues that share a sportId: the DSL (and historically the VSL)
+    # log roughly half the pitches actually thrown, which silently doubles
+    # every swing rate derived from them. See PITCH_DATA_UNRELIABLE_LEAGUES.
+    league: Optional[str] = None
+    league_id: Optional[int] = None
+
+    # Whether this row's pitch-level counts (pitches_seen, total_swings,
+    # swings_and_misses, p_pitches, p_strikes) are numerically credible.
+    # 1 = valid, 0 = corrupt, NULL = undetermined.
+    #
+    # NOT a league property and NOT an era property — it is per
+    # (level, season, team), because the MiLB pitch-logging rollout was
+    # team-by-team at the boundaries. Written by
+    # data/backfills/pitch_validity.py; see that module for the detector.
+    pitch_data_valid: Optional[int] = None
+
     # ---- Within-cohort percentile ranks (level, season_year) ----
     # Derived, not pulled: written by data/backfills/percentile_backfill.py
     # after every pull. Stored as columns rather than computed in the feature
@@ -258,6 +275,48 @@ class SeasonStats:
     pct_p_k_bb_ratio: Optional[float] = None
     pct_p_babip_against: Optional[float] = None
     pct_p_siera_proxy: Optional[float] = None
+
+
+# ============================================================================
+# BATTED-BALL PROFILE — spray direction and contact quality
+#
+# Aggregated from game-feed `hitData`, which carries coordX/coordY, trajectory
+# and a human-graded `hardness` tag at EVERY level back to 2007 — including
+# levels where no exit-velocity tracking exists. This is the only route to
+# pull% / oppo% below MLB.
+# ============================================================================
+
+@dataclass
+class BattedBallProfile:
+    """One player's batted-ball direction and contact quality for a season."""
+    player_id: str
+    season_year: int
+    level: str
+
+    batted_balls: int = 0
+
+    # Spray direction, classified against the stance actually used in the
+    # plate appearance, so switch hitters resolve per-PA rather than per-player.
+    pull_n: Optional[int] = None
+    center_n: Optional[int] = None
+    oppo_n: Optional[int] = None
+    spray_angle_mean: Optional[float] = None   # deg; -45 = LF line, +45 = RF
+    spray_angle_sd: Optional[float] = None
+
+    # Contact quality — the game-feed `hardness` grade. Human-scored, so it is
+    # coarser than exit velocity and carries scorer bias, but it exists where
+    # exit velocity does not.
+    hard_n: Optional[int] = None
+    medium_n: Optional[int] = None
+    soft_n: Optional[int] = None
+
+    # Trajectory, from the same source but play-level rather than season-total.
+    gb_n: Optional[int] = None
+    fb_n: Optional[int] = None
+    ld_n: Optional[int] = None
+    pu_n: Optional[int] = None
+
+    games_parsed: Optional[int] = None
 
 
 # ============================================================================

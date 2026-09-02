@@ -64,6 +64,12 @@ LEVEL_RANK: dict[str, int] = {
 
 LEVELS_FOR_BASELINES = ["RK", "A-", "A", "A+", "AA", "AAA"]
 
+# Leagues that share a sportId with the affiliate minors but are not
+# part of the affiliate pipeline. Rows from these must never enter a
+# level baseline, a park factor, or a level-relative feature.
+#   125 = Mexican League (inside sportId 11 / "AAA" through 2020)
+EXCLUDE_LEAGUE_IDS = {125}
+
 # A level counts as "sustained" at this share of the season, or at this
 # absolute sample regardless of share (a September promotion is real even
 # though it is a small slice of the year).
@@ -115,10 +121,26 @@ PEDIGREE_FEATS = [
     "log_signing_bonus",
     "has_signing_bonus",
     "age_at_signing",
-    # v1.9: biometrics + bonus-vs-slot (from MLB Stats API backfill).
-    "height_inches",
-    "weight_lbs",
-    "bmi",
+    # v1.9: bonus-vs-slot (from MLB Stats API backfill).
+    #
+    # height_inches / weight_lbs / bmi REMOVED (leakage). They came from
+    # /api/v1/people, which returns CURRENT state with no measurement date and
+    # no dated variant. They were stored per-player with no season dimension,
+    # so every snapshot received the present-day value: a 2010 A-ball row
+    # carried the player's 2026 listed weight.
+    #
+    # Measured on 1,767 players appearing on 3+ FanGraphs boards (which DO
+    # carry dated physicals): weight genuinely drifts for 40.1% of players,
+    # median swing 17 lb, p90 40 lb, max 85 lb (Jay Groome 215 -> 262,
+    # Kopech 195 -> 225). "Filled out and succeeded" was being fed backwards
+    # into the snapshot that was supposed to predict it.
+    #
+    # Height drifts for only 14.1% and is nearly benign, but it is dropped
+    # with the others because bmi couples them and the residual value is small.
+    #
+    # Do not reintroduce from /people. A dated source exists for 2017+ only
+    # (reference/fangraphs_board), which would trade a clean leak for a
+    # missingness confound across the 2017 boundary. See docs/MODEL_AND_DATA.md.
     "bats_L",        # 1 if bats Left (R is baseline)
     "bats_S",        # 1 if switch
     "throws_L",      # 1 if throws Left (R is baseline)
@@ -358,6 +380,14 @@ def compute_baselines(
     for r in rows:
         lvl = (r.get("level") or "").upper()
         if lvl not in LEVELS_FOR_BASELINES:
+            continue
+        # Exclude non-affiliate leagues sharing a sportId with the affiliate
+        # minors. The Mexican League (leagueId 125) sat inside sportId 11
+        # through 2020 - 16 clubs a season, 9,399 rows, 18.2% of all AAA -
+        # so every pre-2021 AAA baseline was computed over a foreign
+        # professional league mixed in with the affiliate panel. Those
+        # baselines feed woba_vs_level and every derived twin.
+        if r.get("league_id") in EXCLUDE_LEAGUE_IDS:
             continue
         pa = r.get("pa") or 0
         ip = r.get("ip") or 0.0
@@ -1205,12 +1235,7 @@ def build_scouting_features(
     draft_year = prospect.get("draft_year")
     bonus = prospect.get("signing_bonus_usd")
 
-    # v1.9: biometrics + bonus-vs-slot
-    h_in = prospect.get("height_inches")
-    w_lbs = prospect.get("weight_lbs")
-    bmi = MISSING
-    if h_in and w_lbs and float(h_in) > 0:
-        bmi = float(w_lbs) * 703.0 / (float(h_in) ** 2)
+    # v1.9: bonus-vs-slot. Biometrics removed - see FEATURE_NAMES.
     bats = (prospect.get("bats") or "").upper()
     throws = (prospect.get("throws") or "").upper()
     pick_value = prospect.get("pick_value_usd")
@@ -1233,9 +1258,6 @@ def build_scouting_features(
         "log_signing_bonus": float(math.log1p(bonus)) if bonus and bonus > 0 else MISSING,
         "has_signing_bonus": 1.0 if bonus and bonus > 0 else 0.0,
         "age_at_signing": float(prospect["age_at_signing"]) if prospect.get("age_at_signing") is not None else MISSING,
-        "height_inches": float(h_in) if h_in is not None else MISSING,
-        "weight_lbs": float(w_lbs) if w_lbs is not None else MISSING,
-        "bmi": float(bmi) if not _is_missing(bmi) else MISSING,
         "bats_L": 1.0 if bats == "L" else (0.0 if bats in ("R", "S") else MISSING),
         "bats_S": 1.0 if bats == "S" else (0.0 if bats in ("R", "L") else MISSING),
         "throws_L": 1.0 if throws == "L" else (0.0 if throws in ("R", "S") else MISSING),

@@ -76,6 +76,23 @@ TRAIN_DIR = _RUN.training
 LOG_DIR = _RUN.logs
 
 
+# Feature-selection mask (features.selection manifest). None = full contract,
+# which is the default and reproduces every prior run bit-for-bit. Set once in
+# main() from --feature-selection and read by both hazard fit sites, so a fold
+# and the val-scoring refit can never disagree about the column set.
+_FEATURE_MASK = None
+
+
+def _load_mask(path):
+    """Manifest path -> boolean column mask over FEATURE_NAMES_LM, or None."""
+    if not path:
+        return None
+    from prospects.features.selection import feature_mask, load_selection
+    m = feature_mask(load_selection(path))
+    print(f"[feature-selection] {path}: {int(m.sum())}/{m.size} columns kept")
+    return m
+
+
 class _TeeUnbuffered:
     """Mirror writes to stdout AND a log file, flushing every line so a
     silent process kill still leaves the last line on disk."""
@@ -586,7 +603,7 @@ def run_one_fold(X_lm, pids, S_yrs, joined, stats_by_pid,
         hazards = lm.fit_landmark_hazards(
             X_lm, joined, S_yrs, stats_by_pid,
             train_mask=train_mask, seed=seed, verbose=True,
-            hazard_hp=hazard_hp,
+            hazard_hp=hazard_hp, feature_mask=_FEATURE_MASK,
         )
         print(f"           hazards fit in {time.time()-t:.0f}s, "
               f"saving {hazards_pkl.name}")
@@ -620,12 +637,20 @@ def main():
                          "with this seed (down-samples each landmark's current "
                          "season to an in-progress line). Omit for the "
                          "complete-season baseline.")
+    ap.add_argument("--feature-selection", default=None,
+                    help="Path to a features.selection manifest. Hazards then "
+                         "train and predict on that column subset only; the "
+                         "mask is stored in each bundle. Omit for the full "
+                         "feature contract (default).")
     ap.add_argument("--tag", default=None,
                     help="Artifact namespace suffix (e.g. 'partial'). When set, "
                          "the scratch dir + stacked/val longs + XGB are written "
                          "side-by-side under this tag, leaving the baseline "
                          "v2.0b artifacts intact.")
     args = ap.parse_args()
+
+    global _FEATURE_MASK
+    _FEATURE_MASK = _load_mask(args.feature_selection)
 
     # Namespace all outputs under --tag so a partial run sits beside the
     # complete-season baseline (the panel cache that train_v2_0b_prod_hazards
@@ -727,6 +752,7 @@ def main():
             last_hazards = lm.fit_landmark_hazards(
                 X_lm, joined, S_yrs, stats_by_pid,
                 train_mask=train_mask, seed=args.seed, verbose=True,
+                feature_mask=_FEATURE_MASK,
             )
         val_partial_dir = SCRATCH / "val_partial"
         n = _score_checkpointed(

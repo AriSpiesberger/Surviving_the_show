@@ -1,0 +1,32 @@
+{
+  "model": "C:\\Users\\arisp\\Documents\\Research\\Surviving_the_show\\runs\\fsbase\\models\\joint_xgb.pkl",
+  "val_long": "C:\\Users\\arisp\\Documents\\Research\\Surviving_the_show\\runs\\fsbase\\training\\oof_val_long.csv",
+  "eval_horizon": 6,
+  "weighted_ap": 0.4753663322814067,
+  "per_event": [
+    {
+      "event": "TOP_100_PROSPECT",
+      "ap": 0.4763360098826526,
+      "auc": 0.9814260085805483,
+      "ap_lift": 45.90854348633964
+    },
+    {
+      "event": "MLB_DEBUT",
+      "ap": 0.6624143918197034,
+      "auc": 0.9515862544568134,
+      "ap_lift": 8.586814222735434
+    },
+    {
+      "event": "ESTABLISHED_MLB",
+      "ap": 0.41465434496358006,
+      "auc": 0.9633795492874021,
+      "ap_lift": 16.820663237403203
+    },
+    {
+      "event": "STAR_PLUS_ELITE",
+      "ap": 0.16101252292139345,
+      "auc": 0.9648470273360177,
+      "ap_lift": 33.377350196442414
+    }
+  ]
+}

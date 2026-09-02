@@ -24,6 +24,16 @@ import numpy as np
 
 from prospects.model.hazards import landmark as lm
 
+
+def _load_mask(path):
+    """Manifest path -> boolean column mask over FEATURE_NAMES_LM, or None."""
+    if not path:
+        return None
+    from prospects.features.selection import feature_mask, load_selection
+    m = feature_mask(load_selection(path))
+    print(f"[feature-selection] {path}: {int(m.sum())}/{m.size} columns kept")
+    return m
+
 from prospects import config
 from prospects.config import REPO_ROOT
 _RUN = config.run()
@@ -35,6 +45,9 @@ OUT = _RUN.hazards
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument("--feature-selection", default=None,
+                    help="Path to a features.selection manifest; must match "
+                         "the one the OOF folds were trained with.")
     ap.add_argument("--force", action="store_true")
     ap.add_argument("--tag", default=None,
                     help="Read the tagged panel cache "
@@ -76,6 +89,7 @@ def main():
         X_lm, joined, S_yrs, stats_by_pid,
         train_mask=None,  # 100% — val pids included for prod inference
         seed=args.seed, verbose=True,
+        feature_mask=_load_mask(args.feature_selection),
     )
     print(f"\nHazards trained in {time.time()-t:.0f}s")
 

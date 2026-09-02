@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Iterable, Optional
 
 from prospects.core.schema import (
+    BattedBallProfile,
     CareerEvent,
     CareerOutcome,
     CatcherDefense,
@@ -212,6 +213,13 @@ CREATE TABLE IF NOT EXISTS pitch_arsenal (
     PRIMARY KEY (player_id, season_year, pitch_type)
 );
 
+CREATE TABLE IF NOT EXISTS batted_ball_profile (
+    player_id TEXT NOT NULL,
+    season_year INTEGER NOT NULL,
+    level TEXT NOT NULL,
+    PRIMARY KEY (player_id, season_year, level)
+);
+
 CREATE TABLE IF NOT EXISTS catcher_defense (
     player_id TEXT NOT NULL,
     season_year INTEGER NOT NULL,
@@ -224,6 +232,7 @@ CREATE INDEX IF NOT EXISTS idx_park_season ON park_factors(season_year, level);
 CREATE INDEX IF NOT EXISTS idx_sc_bat_player ON statcast_batting(player_id);
 CREATE INDEX IF NOT EXISTS idx_sc_pit_player ON statcast_pitching(player_id);
 CREATE INDEX IF NOT EXISTS idx_arsenal_player ON pitch_arsenal(player_id);
+CREATE INDEX IF NOT EXISTS idx_bbp_player ON batted_ball_profile(player_id);
 """
 
 
@@ -266,6 +275,8 @@ _MANAGED_TABLES: dict[str, tuple] = {
     "statcast_pitching": (StatcastPitching, ("player_id", "season_year")),
     "pitch_arsenal": (PitchArsenal, ("player_id", "season_year", "pitch_type")),
     "catcher_defense": (CatcherDefense, ("player_id", "season_year")),
+    "batted_ball_profile": (BattedBallProfile,
+                            ("player_id", "season_year", "level")),
 }
 
 # Columns that must not be clobbered by a NULL/zero from the other stat group.
@@ -549,6 +560,13 @@ class ProspectDB:
 
     def upsert_catcher_defense(self, records: Iterable[CatcherDefense]) -> int:
         return self._upsert_managed("catcher_defense", records)
+
+    def upsert_batted_ball_profile(
+            self, records: Iterable[BattedBallProfile]) -> int:
+        return self._upsert_managed("batted_ball_profile", records)
+
+    def get_batted_ball_profile(self, player_id: str) -> list[dict]:
+        return self._fetch_by_player("batted_ball_profile", player_id)
 
     def get_platoon_splits(self, player_id: str) -> list[dict]:
         return self._fetch_by_player("platoon_splits", player_id)
