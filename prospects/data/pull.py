@@ -103,7 +103,10 @@ def phase_milb(db: ProspectDB, start: int, end: int, levels: list = None) -> Non
         MILB_CSV_PATH, _CsvAppender, pull_milb_season,
     )
     if levels is None:
-        levels = ["AAA", "AA", "A+", "A"]
+        # Must match deploy/daily_data.py LEVELS. The old 4-level default is
+        # why RK and A- sat at 0% advanced-stat coverage: `--phase all` ran
+        # "everything" and silently skipped the largest level in the database.
+        levels = ["MLB", "AAA", "AA", "A+", "A", "A-", "RK", "WIN"]
     stat_types = ["batting", "pitching"]
     total = 0
     appender = _CsvAppender(MILB_CSV_PATH)

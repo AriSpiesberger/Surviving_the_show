@@ -225,9 +225,25 @@ def _purge_derived() -> None:
         if f.exists():
             f.unlink()
             gone += 1
+
+    # Per-snapshot scoring checkpoints (fold*_partial/ and val_partial/).
+    #
+    # These are the resume unit *inside* a fold, and deleting the fold long
+    # alone is not enough: the rebuild walks straight back into snap_*.csv
+    # files written against the old panel. This is not hypothetical - it
+    # silently froze two full retrains at a two-week-old state, because the
+    # partials were reused while every other artifact was correctly rebuilt.
+    # The run looked clean at every stage: panel rebuilt, hazards retrained,
+    # XGB rewritten, and the held-out metrics came back bit-identical.
+    import shutil
+    for d in SCRATCH.glob("*_partial"):   # fold0_partial ... AND val_partial
+        if d.is_dir():
+            shutil.rmtree(d, ignore_errors=True)
+            gone += 1
+
     if gone:
         print(f"           purged {gone} derived artifact(s) built on the old "
-              f"panel (fold longs, hazards, stacked, val, XGB)")
+              f"panel (fold longs, hazards, partial scores, stacked, val, XGB)")
 
 
 # ---- Stage 1: panel build with tqdm ----
