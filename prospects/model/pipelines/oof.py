@@ -415,10 +415,27 @@ def stage_partition(prospects: list[dict], stats_by_pid: dict,
     fold_pid_files = [SCRATCH / f"fold{i}_pids.txt" for i in range(k)]
     train_pid_files = [SCRATCH / f"train{i}_pids.txt" for i in range(k)]
     if all(f.exists() for f in fold_pid_files + train_pid_files):
-        print(f"[Stage 2] reusing existing fold/train pid lists")
         fold_sets = [set(f.read_text().splitlines()) - {""}
                      for f in fold_pid_files]
-        return fold_sets
+        # GUARD (2026-09-05): cached fold lists are only valid against the
+        # CURRENT val set. val_pids.txt regenerates whenever the universe
+        # changes (make_split reshuffles), and reusing stale folds then puts
+        # val players INSIDE training — this exact failure held 90% of val
+        # in-fold and inflated every metric for four days while presenting
+        # as a calibration mystery. If any overlap exists, the partition and
+        # everything trained from it are void: purge and rebuild.
+        overlap = set().union(*fold_sets) & val_pids
+        if overlap:
+            print(f"[Stage 2] STALE FOLD LISTS: {len(overlap):,} current val "
+                  f"pids inside cached folds — purging partition AND all "
+                  f"fold-derived artifacts, repartitioning")
+            for f in fold_pid_files + train_pid_files:
+                f.unlink(missing_ok=True)
+            _purge_derived()
+        else:
+            print(f"[Stage 2] reusing existing fold/train pid lists "
+                  f"(0 val overlap — verified)")
+            return fold_sets
 
     universe = []
     for p in prospects:
