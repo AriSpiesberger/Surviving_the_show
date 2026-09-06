@@ -75,6 +75,9 @@ REQUIRED = [
     # but only model.train.hazards writes them and that step is hand-run.
     # Listed so a missing/stale file fails loudly rather than scoring silently.
     _RUN.hazards,
+    # --- Stage C (v2.4, the deployed scorer) ---
+    _RUN.models / "joint_xgb_v2.4.pkl",
+    _RUN.models / "calibrators_v2.4.pkl",
     # --- Shared infra ---
     config.POSITION_LOOKUP,
     config.model_db(),
@@ -141,14 +144,53 @@ def run_retrain() -> int:
     if rc != 0:
         return rc
 
-    # Stage B: v2.0b — joint XGB on the landmark longs + snap=2026 scoring
-    # + buy list. Produces results/buy_lists/buy_list_v2.0b_FINAL.csv as
-    # the prod artifact.
+    # Stage B: v2.0b — joint XGB on the landmark longs + snap=2026 scoring.
+    # --skip-buylist: the buy list is built by Stage C from the v2.4
+    # artifacts (the v2.1c-recipe joint_xgb_prod.pkl is still trained and
+    # kept as the fallback scorer).
     rc = run_step("retrain/v2.0b",
-                  [sys.executable, "-m", "prospects.model.pipelines.prod"],
+                  [sys.executable, "-m", "prospects.model.pipelines.prod",
+                   "--skip-buylist"],
                   REPO_ROOT)
     if rc != 0:
         return rc
+
+    # Stage C (v2.4, ported 2026-09-05/06): recent-cohort augmentation +
+    # full-coverage raw-feature bag + era-aware OOF calibrators on the fresh
+    # longs, promoted over the v2.4 artifact names, then calibrated eval +
+    # README + buy list. Hazards stay default-HP (capacity measured neutral).
+    v24_dir = str(REPO_ROOT / "runs" / "current" / "scratch" / "v24_build")
+    aug_long = str(_RUN.training / "recent_long.csv")
+    for label, cmd in (
+        # Recent-cohort augmentation long: post-cutoff entries' resolved
+        # short-h outcomes, scored with val-excluded hazards. Walk-forward
+        # proven (+0.04..+0.07 out-of-era debut@3, exp_walkforward3).
+        ("retrain/v2.4-recent", [
+            sys.executable, "-m",
+            "prospects.model.train.score_recent_cohorts"]),
+        ("retrain/v2.4-joint", [
+            sys.executable, "-m", "prospects.model.train.exp_cdf_timing5",
+            "--aug-long", aug_long,
+            "--cal-min-snap-year", "2008", "--out-dir", v24_dir]),
+        ("retrain/v2.4-promote", [
+            sys.executable, "-m", "prospects.model.train.promote_v22",
+            "--source", v24_dir, "--bag-name", "joint_xgb_exp5_bag.pkl",
+            "--version", "v2.4"]),
+        ("retrain/v2.4-eval", [
+            sys.executable, "-m", "prospects.evaluation.run",
+            "--xgb", str(_RUN.models / "joint_xgb_v2.4.pkl"),
+            "--calibrators", str(_RUN.models / "calibrators_v2.4.pkl"),
+            "--threshold", "0.6"]),
+        ("retrain/v2.4-report", [
+            sys.executable, "-m", "prospects.evaluation.report"]),
+        ("retrain/v2.4-buylist", [
+            sys.executable, "-m", "prospects.buylist.build",
+            "--xgb", str(_RUN.models / "joint_xgb_v2.4.pkl"),
+            "--calibrators", str(_RUN.models / "calibrators_v2.4.pkl")]),
+    ):
+        rc = run_step(label, cmd, REPO_ROOT)
+        if rc != 0:
+            return rc
 
     print(f"\n[retrain] OK\n", flush=True)
     return 0
@@ -232,13 +274,14 @@ def main():
             print(f"FATAL: need {snap_long.name} but it doesn't exist; "
                   f"run without --buylist-only first")
             sys.exit(3)
-        # The weekly buy list is scored with the PROD joint XGB (in-sample
-        # hazards, no leakage on the fresh cohort) and the v2.0b timing model.
+        # The weekly buy list is scored with the promoted v2.3 bag +
+        # calibrators (timing comes from the calibrated debut CDF inside
+        # buylist.build; the Lasso --timing path is legacy-bundle only).
         rc = run_step("buylist", [
             sys.executable, "-m", "prospects.buylist.build",
             "--long", str(snap_long),
-            "--xgb", str(_RUN.joint_xgb_prod),
-            "--timing", str(_RUN.timing),
+            "--xgb", str(_RUN.models / "joint_xgb_v2.4.pkl"),
+            "--calibrators", str(_RUN.models / "calibrators_v2.4.pkl"),
             "--out-all", str(_RUN.buy_list_all),
             "--out-final", str(_RUN.buy_list_final),
         ], REPO_ROOT)
