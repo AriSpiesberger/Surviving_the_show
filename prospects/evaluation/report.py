@@ -58,6 +58,30 @@ def _section(df, group_col, order, label):
     return "\n".join(out)
 
 
+def _reliability(df):
+    """Probability-bucket reliability tables — THE calibration view: a sheet
+    probability is trustworthy iff its bucket's realized rate matches it."""
+    if df is None or df.empty:
+        return "\n(reliability.csv missing — rerun evaluation.run)"
+    hdr = ("| predicted | n | avg pred | actual | diff |\n"
+           "|---|---:|---:|---:|---:|")
+    out = []
+    for ev in EVENTS:
+        for h in sorted(df[df.event == ev]["h"].unique()):
+            sub = df[(df.event == ev) & (df.h == h)]
+            if sub.empty:
+                continue
+            rows = [hdr]
+            for _, r in sub.iterrows():
+                rows.append(
+                    f"| {r['bucket']} | {int(r['n']):,} | "
+                    f"{r['avg_pred']*100:.1f}% | {r['actual']*100:.1f}% | "
+                    f"{r['diff']*100:+.1f}% |")
+            out.append(f"\n#### {ev} — P(within {int(h)}y)\n\n"
+                       + "\n".join(rows))
+    return "\n".join(out)
+
+
 def _per_horizon(df):
     """Trajectory-quality table: AP/AUC/Brier/calibration by event x horizon h,
     each row evaluated on the slice resolved at that h (years_fwd >= h)."""
@@ -99,6 +123,10 @@ def main():
     EV = Path(args.in_dir)
     OUT = Path(args.out)
 
+    try:
+        reliability = pd.read_csv(EV / "reliability.csv")
+    except FileNotFoundError:
+        reliability = None
     bucket = pd.read_csv(EV / "per_bucket_validation.csv")
     yip = pd.read_csv(EV / "per_yip_validation.csv")
     level = pd.read_csv(EV / "per_level_validation.csv")
@@ -120,23 +148,67 @@ def main():
                   f"{r['spearman_rho']:.3f} | {prec} | {r['recall']:.3f} | {f1} |")
     hl.append(f"| **weighted-AP** | | | **{head['weighted_ap']:.3f}** | | | | | | |")
 
-    md = f"""# Held-out validation — v2.1c conditional refinement
+    md = f"""# Held-out validation — v2.4 (raw-feature bag + recent-cohort augmentation)
 
-Reproducible evaluation of the v2.1c landmark stack against the **10% val
-player slice** of the v1.17 seed=42 split — players neither the landmark
-hazards nor the joint XGBoost head trained on. Validation universe: drafted
-players with `draft_year ≤ 2020` (plus IFAs).
+Reproducible evaluation of the v2.4 stack against the **10% val player
+slice** of the v1.17 seed=42 split — players neither the landmark hazards nor
+the joint XGBoost head trained on. Validation universe: drafted players with
+`draft_year ≤ 2020` (plus IFAs). The numbers below are the **deployable
+calibrated probabilities** (calibrators applied before metrics), and the
+calibrators were fit on cross-fitted OOF predictions — never on this val
+slice.
 
-**Conditional refinement.** The joint XGB is no longer a terminal scalar head.
-It is a *conditional refinement* of the hazard trajectory: given a player's full
-per-year hazard curves (`hk1..hk10`) + baseline + a **target horizon h**, it
-outputs the refined cumulative `P(event by snap+h)`. Sweeping h=1..10 yields a
-per-year trajectory per event instead of one collapsed scalar. Horizon `h` is an
-input feature (the same trick the landmark hazards use to kill train/inference
-mismatch), and the hazard model's own cumulative answer at h
-(`haz_cum_h_<event>`) is fed in as the quantity to refine — `FEAT_COND` = 74
-features (6 cumulative probs + age/yip + 6 yip-interactions + 5 scouting + 50
-hazard-curve steps + 4 per-event anchors + h).
+**SPLIT-LEAK CORRECTION (2026-09-05).** `val_pids.txt` regenerated on Sep 1
+(the universe grew, `make_split` reshuffles) while `stage_partition` silently
+reused the Aug-15 fold lists — **90% of "held-out" val players were inside
+training** for every evaluation Sep 1–5. All READMEs from that window are
+inflated (the v2.1c baseline read 0.647 debut@3; its honest value is 0.557).
+`stage_partition` now hard-verifies zero val overlap and purges stale
+partitions. The tables below are from the rebuilt, verified-clean split.
+
+**What survived the correction:** the joint-layer gains (raw features,
+monotone-h, full coverage, era calibration) are real — honest debut@3
+**0.614 vs 0.557** baseline (+10%), corroborated throughout by the val-free
+internal screens. What did NOT survive: the apparent hazard-capacity gains —
+`hz3_max` HP (kept, harmless) measures within noise of default HP on the
+clean split; its dramatic "wins" were the leak rewarding memorization.
+
+**Recent-cohort augmentation (v2.4).** The joint layer also trains on
+post-cutoff entry cohorts' (2021+) resolved short-horizon (row, h) pairs,
+scored with val-excluded hazards (`model/train/score_recent_cohorts`). The
+random-split val below CANNOT see this gain (it holds only ≤2020 entries) —
+the walk-forward A/B measured it where it matters: **+0.04..+0.07 out-of-era
+debut@3 AP and roughly a third of the era-drift over-prediction removed**
+(`model/train/exp_walkforward3`) — the recent cohorts carry the current
+promotion regime.
+
+**Conditional refinement, un-bottlenecked (v2.2, retained).** The joint
+layer is a *conditional refinement* of the hazard trajectory: given a
+player's per-year hazard curves (`hk1..hk10`) + baseline + a **target
+horizon h**, it outputs the refined cumulative `P(event by snap+h)`;
+sweeping h=1..10 yields the per-year trajectory per event. Relative to
+v2.1c:
+
+1. **The head sees the evidence, not just the hazards' verdict**: on top of
+   v2.1c's `FEAT_COND` (74), it reads the hazard layer's per-event timing
+   moments (`mean_t`/`sd_t`), `p_ALL_STAR_ONCE`/`p_MAJOR_AWARD`, explicit
+   horizon margins (`h − mean_t`), and the **top-160 raw landmark-panel
+   features** (age-vs-level, level-adjusted rates, trajectory deltas,
+   scouting grades) built as-of the snap for every row — 252 features total
+   (`joint2.attach_raw_features`, full coverage incl. the scoring cohort).
+2. **Monotone in h by construction**: a 5-seed bag of XGBs with
+   `monotone_constraints` +1 on `h_centered` and the horizon margins —
+   cummax survives only as residual cleanup, not as the source of
+   monotonicity.
+3. **Honest, career-stage-aware calibration**: ONE per-event logistic map
+   over `[logit(p), h, yip, interactions, quadratics]`, fit on 3-fold
+   player-grouped cross-fitted predictions of the training longs — and (new
+   in v2.3) **only on snaps ≥ 2008**: the pre-2008 snaps are a different
+   data regime (≤2 years of stat history exist in the 2005+ DB; era calib
+   0.79 vs 0.91–1.09 for 2008+) and were dragging the map away from the
+   deployment-relevant eras. The val slice is a pure reporting set (v2.1c
+   fit per-(event,h) calibrators on the same val rows the XGB
+   early-stopped on).
 
 **Yardstick: per-horizon, resolved slice.** Labels are right-censored, so each
 `(player-snap, h)` cell is used only where it is *resolved* — `years_fwd >= h`,
@@ -160,22 +232,38 @@ scout_is_scouted`) fed to the XGB. HOF_TRAJECTORY dropped from the event set.
 
 | Layer | Model | Trained on |
 |---|---|---|
-| Hazards (per-fold OOF, eval) | `runs/current/scratch/oof/fold[0-5]_hazards.pkl` | Each fold trained on the OTHER 5 (val pids excluded). HistGBT, default HP, 314 features (incl. 76 scouting). Survival → censoring-aware. |
-| Hazards (production) | `runs/current/models/hazards.pkl` | 100% of ≤2020 data. Scores the 2026 cohort (entry 2024–26 — not in training, so no leakage). |
-| Conditional joint XGB | `runs/current/models/joint_xgb.pkl` (`model/train/joint_xgb.py`) | OOF stacked, expanded to resolved `(row, h)` pairs for h=1..10. `multi_output_tree` over the 4 heads; per-horizon censoring built in (no `--censor-window`). Outputs `P(event by snap+h)`; monotone in h via cummax at inference. |
-| Timing | `runs/current/models/timing.pkl` | LassoCV on v2.0b hazard probs + `mean_t`/`sd_t`. MAE 1.14 yr, Spearman 0.66. |
+| Hazards (per-fold OOF, eval) | `runs/hz0_default/scratch/oof/fold[0-5]_hazards.pkl` | Each fold trained on the OTHER 5 (val pids excluded, partition verified). HistGBT, default HP (capacity retune measured NEUTRAL on the clean split), 327 features. Survival → censoring-aware. |
+| Hazards (production) | `runs/current/models/hazards.pkl` | 100% of ≤2020 data, default HP. Scores the 2026 cohort (entry 2024–26 — not in training, so no leakage). |
+| Conditional joint XGB | `runs/current/models/joint_xgb_v2.4.pkl` (`model/joint2.py`; trained via `model/train/exp_cdf_timing5.py`, incl. recent-cohort augmentation) | OOF stacked, resolved `(row, h)` pairs h=1..10, 252 features incl. 160 raw panel features (full coverage). 5-seed bag, depth 8 / mcw 100 / colsample 0.6 / lr 0.03, monotone in h. |
+| Calibrators | `runs/current/models/calibrators_v2.4.pkl` | Per-event logistic over `[logit(p), h, yip, …]`, fit on 3-fold cross-fitted OOF predictions, snaps ≥ 2008 only (val never used). |
+| Timing | derived — calibrated debut CDF (`joint2.cdf_timing`) | No separate model: `pmf_j = F(j) − F(j−1)` off the calibrated trajectory. Clean-val debutees: median-MAE **1.04 yr** (Spearman 0.61); mean-MAE 1.13 (0.63). Lasso baseline: 1.29 / 0.56. |
 
-**Buy-list (`build_v2.0_buylist.py`):** thesis = **`P(MLB_DEBUT ≤ 3y)`**
-(`xp_MLB_DEBUT_h3`) — filter, sort, and the output `p_MLB_DEBUT` column all use
-the 3-year debut slice; ceiling events (top100/established/star) reported at
-h={H} for context (`p_MLB_DEBUT_6y` carried alongside). Universe filters: EXIT
+**Buy-list (`buylist/build.py`):** thesis = **`P(MLB_DEBUT ≤ 3y)`**
+(`xp_MLB_DEBUT_h3`, calibrated) — filter, sort, and the output `p_MLB_DEBUT`
+column all use the 3-year debut slice; ceiling events reported at h={H}
+(`p_MLB_DEBUT_6y` carried alongside). `time_to_debut` = calibrated-CDF median,
+with a `debut_eta_lo`/`debut_eta_hi` (q25–q75) window. Universe filters: EXIT
 washouts, point-in-time top-100 drop, currently-MLB drop, R1 kept.
 
-**Calibration finding.** Ranking (AUC) is 0.95–0.99 across all events and all h.
-MLB_DEBUT is near-perfectly calibrated (`calib` ≈ 1.0 from h≥3). **STAR_PLUS_ELITE
-is well-ranked but under-calibrated at long horizons** (`calib` ≈ 0.7 by h≥4) —
-the magnitude of stardom is under-predicted; a per-horizon isotonic recal on that
-head is the fix (ranking needs none).
+**Calibration finding (v2.3, clean split).** The Reliability section below
+is the source of truth: probabilities are calibrated on cross-fitted OOF
+predictions (2008+ snaps, never val), and the honest reliability evidence is
+the fit-OOF bucket table being flat (±1–2% everywhere). Pooled calib ratios
+in these tables include the pre-2008 regime the map deliberately ignores and
+read below 1.0 for that reason. Judge sheet trustworthiness by the 2008+
+bucket tables, and expect high-probability buckets to be thin (small n) on a
+10% val sample — bucket wobble of ±5–10pts at n≈100 is sampling noise, not
+miscalibration. STAR_PLUS_ELITE below h=4 is a ranking signal, not a rate.
+
+**Era-shift bound (full-stack walk-forward, `model/train/exp_walkforward2`).**
+Scoring never-seen entry cohorts with label-frozen models at three historical
+origins: ranking holds (AP 0.48–0.73, AUC 0.87–0.96 out-of-era) but absolute
+probabilities swing **0.7×–2× by era** (COVID, draft-size and minors-
+restructuring shocks) — and neither the calibration layer nor recency
+weighting can remove it, because the shocks aren't learnable from history.
+Read the sheet accordingly: rank-order and relative comparisons are robust;
+absolute probabilities are honest to the historical average with era-level
+uncertainty around them.
 
 ## Headline (ALL bucket, h={H}, threshold = 0.60)
 
@@ -183,6 +271,14 @@ head is the fix (ranking needs none).
 
 (MLB_DEBUT 2× weight, others 1×, per-event eligibility filters. Scores =
 `xp_<event>_h{H}` vs realized-within-{H}y, on rows resolved at h={H}.)
+
+## Reliability — probability buckets vs realized rates (2008+ snaps)
+
+This is the table that decides whether a sheet probability can be trusted:
+players are bucketed by their PRINTED probability and each bucket's realized
+rate is shown beside it. `diff` ≈ 0 everywhere = calibrated; positive diff =
+the printed number is a floor (model conservative in that range).
+{_reliability(reliability)}
 
 ## Per-horizon trajectory (h=1..10, resolved at each h)
 {_per_horizon(horizon)}
@@ -217,18 +313,32 @@ All paths resolve through `prospects.config` to `runs/current/`; the commands
 below take no explicit artifact paths.
 
 ```bash
-# OOF folds + hazards, then the conditional joint XGB (per-horizon censoring
-# is built in; wired into pipelines.oof stage 6 and pipelines.prod stage 1)
+# OOF folds (default hazard HP; stage_partition verifies the split)
 python -m prospects.model.pipelines.oof
-python -m prospects.model.pipelines.prod    # 100% prod hazards + cond XGB + score 2026
 
-# validation — per-horizon, headline at the publish horizon (h={H})
-python -m prospects.evaluation.run --eval-horizon {H}
+# v2.3 joint layer: full-coverage raw-feature bag + era-aware OOF calibrators
+python -m prospects.model.train.exp_cdf_timing5 --cal-min-snap-year 2008 \\
+    --out-dir runs/current/scratch/v23_build
+python -m prospects.model.train.promote_v22 \\
+    --source runs/current/scratch/v23_build --version v2.3
+
+# prod hazards + rescore the 2026 cohort
+python -m prospects.model.train.hazards --force
+python -m prospects.model.pipelines.prod --skip-xgb --skip-buylist
+
+# validation — calibrated, headline at the publish horizon (h={H})
+python -m prospects.evaluation.run --xgb runs/current/models/joint_xgb_v2.4.pkl \\
+    --calibrators runs/current/models/calibrators_v2.4.pkl --threshold 0.6 --eval-horizon {H}
 python -m prospects.evaluation.report
 
-# buy list — P(debut <= {DH}y) thesis
-python -m prospects.buylist.build --debut-horizon {DH} --threshold {THR}
+# buy list — P(debut <= {DH}y) thesis, CDF timing + debut window
+python -m prospects.buylist.build --xgb runs/current/models/joint_xgb_v2.4.pkl \\
+    --calibrators runs/current/models/calibrators_v2.4.pkl --debut-horizon {DH}
 ```
+
+The weekly retrain (`deploy/weekly_score.py`, ported 2026-09-05) now runs
+Stage C = the v2.4 steps above automatically after stage_a + prod; the
+Monday job produces the v2.3 buy list end-to-end.
 """
     OUT.write_text(md, encoding="utf-8")
     print(f"Wrote {OUT} ({len(md):,} chars)")

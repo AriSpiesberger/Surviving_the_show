@@ -240,7 +240,15 @@ def main():
                          "0.60 is the production buy-list cutoff.")
     ap.add_argument("--val-long", default=str(VAL_LONG))
     ap.add_argument("--xgb", default=str(XGB_PKL),
-                    help="Conditional joint XGB to evaluate.")
+                    help="Conditional joint XGB to evaluate (v2.1c scaler "
+                         "bundle or v2.2 bag bundle — auto-dispatched).")
+    ap.add_argument("--calibrators", default=None,
+                    help="Optional calibrator bundle. When set, every "
+                         "xp_<event>_h{h} column is calibrated before metrics "
+                         "(raw kept as *_raw), so the tables describe the "
+                         "deployable probabilities. Supports both the legacy "
+                         "per-(event,h) format and the v2.2 h/yip-covariate "
+                         "format.")
     ap.add_argument("--out-dir", default=str(OUT_DIR),
                     help="Directory for the per-* CSVs + headline.json.")
     ap.add_argument("--tag", default=None,
@@ -281,7 +289,13 @@ def main():
     print(f"  after entry<={args.max_entry}: {len(df):,} rows")
 
     print(f"Scoring conditional trajectory with {XGB_PKL.name}...")
-    df = predict_trajectory(pickle.load(open(XGB_PKL, "rb")), df)
+    from prospects.model.joint2 import (
+        apply_calibrators_frame, load_calibrators, score_trajectory,
+    )
+    df, _bundle = score_trajectory(XGB_PKL, df, str(DB))
+    if args.calibrators:
+        print(f"Calibrating with {Path(args.calibrators).name}...")
+        df = apply_calibrators_frame(df, load_calibrators(args.calibrators))
 
     print(f"Joining current level...")
     df = _join_current_level(df, str(DB))
@@ -352,6 +366,39 @@ def main():
             if row:
                 horizon_rows.append(row)
     _write_table(horizon_rows, OUT_DIR / "per_horizon.csv")
+
+    # ---- reliability.csv: THE calibration view — probability buckets vs
+    # realized rates, per event at the buy (h=3) and publish (h=6) horizons,
+    # on the deployment-era slice (2008+ snaps; pre-2008 is a different data
+    # regime the calibrators deliberately ignore). A sheet probability is
+    # trustworthy iff its bucket's actual rate matches it here. ----
+    print(f"\n=== reliability buckets (2008+ snaps) ===")
+    edges = [0, .05, .10, .20, .30, .40, .50, .60, .70, .80, .90, 1.001]
+    blabels = ["0-5%", "5-10%", "10-20%", "20-30%", "30-40%", "40-50%",
+               "50-60%", "60-70%", "70-80%", "80-90%", "90-100%"]
+    rel_rows = []
+    for ev in EVENTS:
+        for h in (3, 6):
+            col = f"xp_{ev}_h{h}"
+            if col not in df.columns:
+                continue
+            d = df[(df["years_fwd"] >= h) & (df["snap_year"] >= 2008)]
+            if f"eligible_{ev}" in d.columns:
+                d = d[d[f"eligible_{ev}"] == 1]
+            d = d[d[col].notna()].copy()
+            d["_y"] = realized_by_h(d, ev, h)
+            d["_b"] = pd.cut(d[col].astype(float), edges, labels=blabels)
+            for b in blabels:
+                s = d[d["_b"] == b]
+                if len(s) < 15:
+                    continue
+                ap_ = float(s[col].mean())
+                ac = float(s["_y"].mean())
+                rel_rows.append({
+                    "event": ev, "h": h, "bucket": b, "n": len(s),
+                    "avg_pred": ap_, "actual": ac, "diff": ac - ap_,
+                })
+    _write_table(rel_rows, OUT_DIR / "reliability.csv")
 
     # ---- headline.json ----
     weighted_ap = 0.0

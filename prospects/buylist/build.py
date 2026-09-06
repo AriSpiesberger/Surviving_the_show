@@ -243,9 +243,13 @@ def main():
     df = _join_prospect_meta(df, args.db)
     df = _join_current_level(df, args.db)
     print(f"Scoring conditional trajectory with {args.xgb}")
-    with open(args.xgb, "rb") as fh:
-        bundle = pickle.load(fh)
-    scored = predict_trajectory(bundle, df)  # adds xp_<ev>_h{1..H} + xp_<ev> (h6)
+    from prospects.model.joint2 import (
+        apply_calibrators_frame, cdf_timing, is_bag_bundle, load_calibrators,
+        make_cal_fn, score_trajectory,
+    )
+    # v2.2 bag bundles (raw features attached from the DB) and legacy v2.1c
+    # scaler bundles both come back with the same xp_<ev>_h{1..H} schema.
+    scored, bundle = score_trajectory(args.xgb, df, args.db)
     dh = args.debut_horizon
     debut_col = f"xp_MLB_DEBUT_h{dh}"
     if debut_col not in scored.columns:
@@ -255,17 +259,21 @@ def main():
     # probabilities using per-(event, horizon) calibrators fit on the held-out
     # val. Keeps the raw score as p_lasso_<col>_raw.
     cal = None
+    _cal_fn = None
     if args.calibrators:
-        with open(args.calibrators, "rb") as fh:
-            cal = pickle.load(fh)["calibrators"]
+        cal_bundle = load_calibrators(args.calibrators)
+        cal = cal_bundle["calibrators"]
+        _cal_fn = make_cal_fn(cal_bundle, scored)
         print(f"  calibrating probabilities with {Path(args.calibrators).name} "
-              f"({len(cal)} (event,h) calibrators)")
+              f"({len(cal)} calibrators, "
+              f"{cal_bundle.get('kind', 'per-(event,h)')})")
 
     def _cal(values, event, h):
-        """Calibrate a raw score vector for (event, h); identity if no cal."""
-        if cal is None or (event, h) not in cal:
+        """Calibrate a raw score vector for (event, h); identity if no cal.
+        Dispatches across legacy per-(event,h) and v2.2 h/yip formats."""
+        if _cal_fn is None:
             return values
-        return cal[(event, h)].predict(values)
+        return _cal_fn(values, event, h)
 
     # Ceiling/context events reported at the publish horizon (h=6).
     for ev in args.events:
@@ -296,11 +304,22 @@ def main():
           f"debut horizons emitted: {', '.join(f'{h}y' for h in debut_hs)}; "
           f"ceiling events at h=6"
           + ("  [CALIBRATED]" if cal is not None else ""))
-    # Time-to-debut: feed the publish-horizon (h6) debut prob, the distribution
-    # the timing model was trained against.
-    print(f"Scoring time-to-debut with {args.timing}")
-    df["time_to_debut"] = _score_timing(df, args.timing,
-                                        scored["xp_MLB_DEBUT"].to_numpy())
+    # Time-to-debut. v2.2 bag bundles: read it off the calibrated debut
+    # trajectory (CDF median + q25-q75 window) — the same object the
+    # probabilities come from, so "when" and "whether" can never disagree.
+    # Legacy bundles keep the Lasso timing model.
+    if is_bag_bundle(bundle):
+        print(f"Timing from the calibrated debut CDF (median + q25-q75)")
+        traj = (apply_calibrators_frame(scored, cal_bundle)
+                if args.calibrators else scored)
+        tim = cdf_timing(traj, "MLB_DEBUT")
+        df["time_to_debut"] = tim["t_med"].to_numpy()
+        df["debut_eta_lo"] = tim["t_q25"].to_numpy()
+        df["debut_eta_hi"] = tim["t_q75"].to_numpy()
+    else:
+        print(f"Scoring time-to-debut with {args.timing}")
+        df["time_to_debut"] = _score_timing(df, args.timing,
+                                            scored["xp_MLB_DEBUT"].to_numpy())
 
     if args.prices:
         print(f"Joining eBay prices from {args.prices}")
@@ -397,6 +416,7 @@ def main():
     keep += ["p_lasso_MLB_DEBUT"]
     keep += [f"p_lasso_MLB_DEBUT_{h}y" for h in debut_hs]
     keep += ["time_to_debut", "passes_filter"]
+    keep += [c for c in ("debut_eta_lo", "debut_eta_hi") if c in df.columns]
     for c in ("ebay_price_median", "ebay_price_p25", "ebay_n_listings",
               "ebay_top_listing_url"):
         if c in df.columns:
@@ -429,8 +449,16 @@ def main():
     print(f"\nWrote {args.out_all}  rows={len(out):,}")
 
     final = out[out["passes_filter"]].copy()
-    final.to_csv(args.out_final, index=False)
-    print(f"Wrote {args.out_final}  rows={len(final):,}")
+    try:
+        final.to_csv(args.out_final, index=False)
+        print(f"Wrote {args.out_final}  rows={len(final):,}")
+    except PermissionError:
+        # The final CSV is routinely open in Excel; a locked file must not
+        # fail the (weekly) build. Park the fresh list next to it instead.
+        alt = str(Path(args.out_final).with_suffix("")) + "_new.csv"
+        final.to_csv(alt, index=False)
+        print(f"WARN: {args.out_final} is locked (open in Excel?) — wrote "
+              f"{alt} instead. Close the file and rename it over.")
     if len(final):
         print(f"\nFINAL by level:")
         for lv, n in final.groupby("cur_level_2026").size().items():
