@@ -49,6 +49,13 @@ def main():
                     help="Path to a features.selection manifest; must match "
                          "the one the OOF folds were trained with.")
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--hazard-hp", default=None,
+                    help="HistGBT hyperparameters for every event head: a "
+                         "named config from model.train.exp_hazard_hp.CONFIGS "
+                         "(e.g. 'hz1_capacity') or an inline JSON dict. "
+                         "Default None = the historical default HP. MUST match "
+                         "the HP the OOF folds were trained with, or the joint "
+                         "XGB sees out-of-distribution hazard features.")
     ap.add_argument("--tag", default=None,
                     help="Read the tagged panel cache "
                          "(scratch/v20b_oof_<tag>/) and write tagged prod "
@@ -82,13 +89,24 @@ def main():
     joined = [prospects_list[i] for i in joined_idx]
     print(f"  X_lm={X_lm.shape}  prospects={len(prospects_list):,}")
 
-    print(f"\nFitting landmark hazards on 100% of panel (default HP, "
-          f"no Optuna)...")
+    hazard_hp = None
+    if args.hazard_hp:
+        import json
+        if args.hazard_hp.strip().startswith("{"):
+            hazard_hp = json.loads(args.hazard_hp)
+        else:
+            from prospects.model.train.exp_hazard_hp import CONFIGS
+            hazard_hp = CONFIGS[args.hazard_hp]
+        print(f"hazard HP override [{args.hazard_hp}]: {hazard_hp}")
+
+    print(f"\nFitting landmark hazards on 100% of panel "
+          f"({'default HP' if hazard_hp is None else args.hazard_hp})...")
     t = time.time()
     hazards = lm.fit_landmark_hazards(
         X_lm, joined, S_yrs, stats_by_pid,
         train_mask=None,  # 100% — val pids included for prod inference
         seed=args.seed, verbose=True,
+        hazard_hp=hazard_hp,
         feature_mask=_load_mask(args.feature_selection),
     )
     print(f"\nHazards trained in {time.time()-t:.0f}s")
