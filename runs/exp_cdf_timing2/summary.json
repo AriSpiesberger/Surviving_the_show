@@ -1,0 +1,96 @@
+{
+  "when": "2026-09-04 23:10:45",
+  "quick": false,
+  "winner": "h2_deep",
+  "screen": {
+    "c0_ctrl": {
+      "best_iter": 212,
+      "ap_h1": 0.4409260115861682,
+      "ap_h2": 0.5301559277476506,
+      "ap_h3": 0.5545914664412259,
+      "wap_h6": 0.38701504694628086,
+      "overrides": {}
+    },
+    "f1_feats": {
+      "best_iter": 239,
+      "ap_h1": 0.4352175894940272,
+      "ap_h2": 0.5283271573717442,
+      "ap_h3": 0.5549355492255089,
+      "wap_h6": 0.39965894848661077,
+      "overrides": {}
+    },
+    "h1_subcol": {
+      "best_iter": 253,
+      "ap_h1": 0.4307946194178174,
+      "ap_h2": 0.5285791413430534,
+      "ap_h3": 0.5532160302545485,
+      "wap_h6": 0.4009457168740774,
+      "overrides": {
+        "subsample": 0.8,
+        "colsample_bytree": 0.8
+      }
+    },
+    "h2_deep": {
+      "best_iter": 164,
+      "ap_h1": 0.4371251241115511,
+      "ap_h2": 0.5293132266050611,
+      "ap_h3": 0.5566650403668966,
+      "wap_h6": 0.39613194625801595,
+      "overrides": {
+        "max_depth": 8,
+        "min_child_weight": 100
+      }
+    },
+    "h3_slow": {
+      "best_iter": 376,
+      "ap_h1": 0.43642579532330583,
+      "ap_h2": 0.5314541877332679,
+      "ap_h3": 0.5563298062057598,
+      "wap_h6": 0.407030322230567,
+      "overrides": {
+        "learning_rate": 0.03,
+        "subsample": 0.8,
+        "colsample_bytree": 0.8
+      }
+    }
+  },
+  "timing": [
+    {
+      "estimator": "D_cdf_mean(cal,OOF)",
+      "n": 2911,
+      "mae": 1.0994498796844705,
+      "spearman": 0.6218158985793324,
+      "bias": 0.14434781962189175,
+      "q25_q75_coverage": NaN,
+      "mean_window_width": NaN
+    },
+    {
+      "estimator": "D_cdf_median(cal,OOF)",
+      "n": 2911,
+      "mae": 1.0450017176228101,
+      "spearman": 0.5962275032897882,
+      "bias": -0.1326004809343868,
+      "q25_q75_coverage": 0.7461353486774305,
+      "mean_window_width": 1.7842665750601168
+    },
+    {
+      "estimator": "lasso_timing.pkl",
+      "n": 2911,
+      "mae": 1.1631700440671366,
+      "spearman": 0.5714838558698382,
+      "bias": 0.17400225104526343,
+      "q25_q75_coverage": NaN,
+      "mean_window_width": NaN
+    },
+    {
+      "estimator": "hazard_mean_t",
+      "n": 2911,
+      "mae": 1.5394623617287024,
+      "spearman": 0.5463674557902984,
+      "bias": 1.0329073071202821,
+      "q25_q75_coverage": NaN,
+      "mean_window_width": NaN
+    }
+  ],
+  "elapsed_s": 1129.3
+}

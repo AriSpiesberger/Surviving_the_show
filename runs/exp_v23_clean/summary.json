@@ -1,0 +1,35 @@
+{
+  "when": "2026-09-05 20:42:11",
+  "quick": false,
+  "best_iter": 263,
+  "timing": [
+    {
+      "estimator": "G_cdf_mean(cal,OOF)",
+      "n": 2911,
+      "mae": 1.125582362141484,
+      "spearman": 0.6256249251363974,
+      "bias": 0.24309827740590406,
+      "q25_q75_coverage": NaN,
+      "mean_window_width": NaN
+    },
+    {
+      "estimator": "G_cdf_median(cal,OOF)",
+      "n": 2911,
+      "mae": 1.0398488491927174,
+      "spearman": 0.605473738376043,
+      "bias": -0.07042253521126761,
+      "q25_q75_coverage": 0.7344555135692202,
+      "mean_window_width": 1.8515973892133288
+    },
+    {
+      "estimator": "lasso_timing.pkl",
+      "n": 2911,
+      "mae": 1.2877718597837748,
+      "spearman": 0.5646921264997823,
+      "bias": 0.5075843826720482,
+      "q25_q75_coverage": NaN,
+      "mean_window_width": NaN
+    }
+  ],
+  "elapsed_min": 28.6
+}

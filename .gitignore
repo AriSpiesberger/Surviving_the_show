@@ -115,3 +115,15 @@ Thumbs.db
 
 # FanGraphs scrape debug dumps (debris, not source)
 reference/fangraphs_board/raw/**/debug_*.json
+
+# =============================================================================
+# Experiment workspaces (runs/exp_*, tagged hz runs) + local restore points —
+# keep the small result files (summary.json, metrics CSVs) in git, keep the
+# heavy regeneratable artifacts (bags, OOF caches, longs, partials) out.
+# =============================================================================
+runs/backup_*/
+runs/exp_*/**/*.pkl
+runs/exp_*/**/*.npz
+runs/exp_*/**/*_long.csv
+runs/exp_*/**/*_partial/
+reference/*.bak*
