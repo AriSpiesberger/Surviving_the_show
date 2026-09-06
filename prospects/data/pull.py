@@ -106,7 +106,11 @@ def phase_milb(db: ProspectDB, start: int, end: int, levels: list = None) -> Non
         # Must match deploy/daily_data.py LEVELS. The old 4-level default is
         # why RK and A- sat at 0% advanced-stat coverage: `--phase all` ran
         # "everything" and silently skipped the largest level in the database.
-        levels = ["MLB", "AAA", "AA", "A+", "A", "A-", "RK", "WIN"]
+        # WIN (winter ball) is deliberately EXCLUDED. It is not part of the
+        # affiliate development ladder, LEVEL_RANK has no entry for it (so it
+        # scores 0 - below rookie ball), and pulling it shifted the entry year
+        # of 320 existing prospects, moving snap_offset for all of them.
+        levels = ["MLB", "AAA", "AA", "A+", "A", "A-", "RK"]
     stat_types = ["batting", "pitching"]
     total = 0
     appender = _CsvAppender(MILB_CSV_PATH)
