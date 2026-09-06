@@ -1,0 +1,92 @@
+{
+  "when": "2026-09-04 23:37:29",
+  "quick": false,
+  "inherits_exp2_winner": "h2_deep",
+  "winner": "e2_rawcol",
+  "n_raw_features": 160,
+  "raw_coverage_fit": 0.8074823255441728,
+  "raw_coverage_val": 0.7798476907959384,
+  "top_raw": [
+    "n_years_observed_in_window",
+    "ip_in_window",
+    "years_in_current_system",
+    "pa_in_window",
+    "lowest_level_in_year_yT",
+    "age_at_as_of",
+    "years_since_max_level",
+    "draft_pick",
+    "current_ip_vs_max_ip",
+    "years_since_max_level_ever",
+    "log_signing_bonus",
+    "age_at_as_of_vs_level",
+    "promotion_velocity",
+    "distinct_levels_played",
+    "ip_yT",
+    "career_milb_hr",
+    "career_milb_sb",
+    "best_org_rank",
+    "career_max_ip_in_year",
+    "pa_at_AA_career",
+    "pa_at_max_level_career",
+    "recent_org_rank",
+    "era_vs_level_yT",
+    "scout_servicetime",
+    "pa_yT"
+  ],
+  "screen": {
+    "e1_raw": {
+      "best_iter": 214,
+      "ap_h1": 0.4396218679501518,
+      "ap_h2": 0.5349348639942803,
+      "ap_h3": 0.5666761748838965,
+      "wap_h6": 0.40035338931209985,
+      "overrides": {
+        "max_depth": 8,
+        "min_child_weight": 100
+      }
+    },
+    "e2_rawcol": {
+      "best_iter": 152,
+      "ap_h1": 0.44240629826650024,
+      "ap_h2": 0.5430105575209326,
+      "ap_h3": 0.5693955820779636,
+      "wap_h6": 0.40651254726587516,
+      "overrides": {
+        "max_depth": 8,
+        "min_child_weight": 100,
+        "colsample_bytree": 0.6
+      }
+    }
+  },
+  "exp2_control_ap_h3": 0.5566650403668966,
+  "timing": [
+    {
+      "estimator": "E_cdf_mean(cal,OOF)",
+      "n": 2911,
+      "mae": 1.0395188264891004,
+      "spearman": 0.6615288610420916,
+      "bias": 0.07047589455186573,
+      "q25_q75_coverage": NaN,
+      "mean_window_width": NaN
+    },
+    {
+      "estimator": "E_cdf_median(cal,OOF)",
+      "n": 2911,
+      "mae": 0.9745791824115424,
+      "spearman": 0.6498113472429157,
+      "bias": -0.2092064582617657,
+      "q25_q75_coverage": 0.7543799381655788,
+      "mean_window_width": 1.7138440398488493
+    },
+    {
+      "estimator": "lasso_timing.pkl",
+      "n": 2911,
+      "mae": 1.1631700440671366,
+      "spearman": 0.5714838558698382,
+      "bias": 0.17400225104526343,
+      "q25_q75_coverage": NaN,
+      "mean_window_width": NaN
+    }
+  ],
+  "elapsed_s": 1570.2
+}

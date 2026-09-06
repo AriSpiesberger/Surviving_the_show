@@ -5,9 +5,23 @@ reaching MLB milestones, and turns those scores into a card **buy list** —
 players whose Bowman 1st Chrome autos look cheap relative to the model's
 outlook.
 
-Current model: **v2.1c** — landmark discrete-time hazards feeding a
-horizon-conditional joint XGBoost. Held-out weighted AP @ h=6 ≈ **0.50**
-(see [`runs/current/evaluation/README.md`](runs/current/evaluation/README.md)).
+Current model: **v2.4** — landmark hazards feeding a horizon-conditional
+joint XGBoost **bag** (monotone-in-h, 160 raw panel features passed through,
+per-event h/yip calibration fit on OOF over 2008+ snaps, debut timing read
+off the calibrated CDF). On the verified-clean holdout: debut AP@3y **0.61
+vs 0.56** for the v2.1c recipe (+10%), weighted AP @ h=6 **0.47 vs 0.42**,
+timing MAE 1.04 vs 1.29 — see
+[`runs/current/evaluation/README.md`](runs/current/evaluation/README.md),
+including its 2026-09-05 split-leak correction note (metrics reported Sep
+1–5, e.g. "0.50–0.59 weighted AP", were inflated by a stale fold partition;
+absolute numbers are not comparable across that boundary).
+v2.4 adds recent-cohort augmentation: 2021+ entries' resolved short-horizon
+outcomes join training (walk-forward proven: +0.04–0.07 out-of-era debut@3
+AP, and it trims era-drift). Artifacts are `models/joint_xgb_v2.4.pkl` +
+`models/calibrators_v2.4.pkl` (+ `models/hazards.pkl`, default HP — the
+capacity retune measured neutral), selected via `--xgb`/`--calibrators`; the
+weekly retrain (`deploy/weekly_score.py`) produces the full v2.4 stack
+automatically (Stage C, ported 2026-09-05/06).
 
 ## Layout
 

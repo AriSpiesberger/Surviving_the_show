@@ -1,0 +1,106 @@
+{
+  "when": "2026-09-05 00:31:02",
+  "quick": false,
+  "winner": "g3_slow",
+  "screen": {
+    "g0_ctrl": {
+      "best_iter": 152,
+      "n_raw": 160,
+      "ap_h1": 0.44240629826650024,
+      "ap_h2": 0.5430105575209326,
+      "ap_h3": 0.5693955820779636,
+      "wap_h6": 0.40651254726587516,
+      "overrides": {
+        "max_depth": 8,
+        "min_child_weight": 100,
+        "colsample_bytree": 0.6
+      }
+    },
+    "g1_col04": {
+      "best_iter": 170,
+      "n_raw": 160,
+      "ap_h1": 0.4468000816512913,
+      "ap_h2": 0.5442877479699026,
+      "ap_h3": 0.5689005292613405,
+      "wap_h6": 0.40418397227215436,
+      "overrides": {
+        "max_depth": 8,
+        "min_child_weight": 100,
+        "colsample_bytree": 0.4
+      }
+    },
+    "g2_raw240": {
+      "best_iter": 164,
+      "n_raw": 234,
+      "ap_h1": 0.4493859736689171,
+      "ap_h2": 0.541726008446008,
+      "ap_h3": 0.5689806681680899,
+      "wap_h6": 0.4067102549495848,
+      "overrides": {
+        "max_depth": 8,
+        "min_child_weight": 100,
+        "colsample_bytree": 0.6
+      }
+    },
+    "g3_slow": {
+      "best_iter": 287,
+      "n_raw": 160,
+      "ap_h1": 0.45067845841348647,
+      "ap_h2": 0.5471442434738688,
+      "ap_h3": 0.5721361007415267,
+      "wap_h6": 0.40715257454742104,
+      "overrides": {
+        "max_depth": 8,
+        "min_child_weight": 100,
+        "colsample_bytree": 0.6,
+        "learning_rate": 0.03
+      }
+    },
+    "g4_sub": {
+      "best_iter": 187,
+      "n_raw": 160,
+      "ap_h1": 0.44609169197269416,
+      "ap_h2": 0.5456247341572131,
+      "ap_h3": 0.5708622662902253,
+      "wap_h6": 0.40503350230146007,
+      "overrides": {
+        "max_depth": 8,
+        "min_child_weight": 100,
+        "colsample_bytree": 0.6,
+        "subsample": 0.8
+      }
+    }
+  },
+  "raw_coverage_fit": 0.8074823255441728,
+  "raw_coverage_val": 0.7798476907959384,
+  "timing": [
+    {
+      "estimator": "F_cdf_mean(cal,OOF)",
+      "n": 2911,
+      "mae": 1.0376934420076616,
+      "spearman": 0.6630682662655112,
+      "bias": 0.059273107134974364,
+      "q25_q75_coverage": NaN,
+      "mean_window_width": NaN
+    },
+    {
+      "estimator": "F_cdf_median(cal,OOF)",
+      "n": 2911,
+      "mae": 0.9687392648574373,
+      "spearman": 0.6510409723577549,
+      "bias": -0.2281003091721058,
+      "q25_q75_coverage": 0.7506011679835108,
+      "mean_window_width": 1.7052559257986946
+    },
+    {
+      "estimator": "lasso_timing.pkl",
+      "n": 2911,
+      "mae": 1.1631700440671366,
+      "spearman": 0.5714838558698382,
+      "bias": 0.17400225104526343,
+      "q25_q75_coverage": NaN,
+      "mean_window_width": NaN
+    }
+  ],
+  "elapsed_s": 2937.8
+}
