@@ -51,18 +51,20 @@ def compute_yip_thresholds(val_long, xgb, horizon=3, target=0.70,
     `calibrators` to emit thresholds in CALIBRATED probability space (so they
     apply directly to a calibrated buy list). Returns {yip_str: threshold}.
     """
+    from prospects.model.joint2 import (
+        load_calibrators, make_cal_fn, score_trajectory,
+    )
     ev = "MLB_DEBUT"
     H = horizon
     p_col = f"xp_{ev}_h{H}"
     df = pd.read_csv(val_long) if isinstance(val_long, (str, Path)) else val_long.copy()
     df = prep_base(df, db, max_entry=max_entry)
-    df = predict_trajectory(pickle.load(open(xgb, "rb")), df)
+    df, _bundle = score_trajectory(xgb, df, db)
     if calibrators:
-        cals = pickle.load(open(calibrators, "rb"))["calibrators"]
-        if (ev, H) in cals:
-            df[p_col] = cals[(ev, H)].predict(df[p_col].astype(float).values)
-            if verbose:
-                print(f"  thresholds in CALIBRATED space ({Path(calibrators).name})")
+        _cal = make_cal_fn(load_calibrators(calibrators), df)
+        df[p_col] = _cal(df[p_col].astype(float).values, ev, H)
+        if verbose:
+            print(f"  thresholds in CALIBRATED space ({Path(calibrators).name})")
 
     d = df[(df["years_fwd"] >= H) & (df.get(f"eligible_{ev}", 1) == 1)].copy()
     d["y"] = realized_by_h(d, ev, H).astype(float)
@@ -128,16 +130,18 @@ def main():
     ev = "MLB_DEBUT"
     p_col = f"xp_{ev}_h{H}"
 
+    from prospects.model.joint2 import (
+        load_calibrators, make_cal_fn, score_trajectory,
+    )
     print(f"Loading {Path(args.val_long).name} + {Path(args.xgb).name}")
     df = pd.read_csv(args.val_long)
     df = prep_base(df, DB, max_entry=args.max_entry)
-    df = predict_trajectory(pickle.load(open(args.xgb, "rb")), df)
+    df, _bundle = score_trajectory(args.xgb, df, DB)
 
     if args.calibrators:
-        cals = pickle.load(open(args.calibrators, "rb"))["calibrators"]
-        if (ev, H) in cals:
-            df[p_col] = cals[(ev, H)].predict(df[p_col].astype(float).values)
-            print(f"  thresholds in CALIBRATED space ({Path(args.calibrators).name})")
+        _cal = make_cal_fn(load_calibrators(args.calibrators), df)
+        df[p_col] = _cal(df[p_col].astype(float).values, ev, H)
+        print(f"  thresholds in CALIBRATED space ({Path(args.calibrators).name})")
 
     # Resolved at H (label trustworthy), in the buy universe (not yet debuted),
     # and carrying a debut score.
