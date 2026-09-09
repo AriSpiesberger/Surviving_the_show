@@ -1,0 +1,27 @@
+{
+  "when": "2026-09-07 09:10:13",
+  "quick": false,
+  "nrounds": 212,
+  "emb_gain_share": 0.020698573828190847,
+  "timing": [
+    {
+      "estimator": "T_cdf_median(cal)",
+      "n": 2911,
+      "mae": 1.0343524562006183,
+      "spearman": 0.6121278765519895,
+      "bias": -0.10340089316386121,
+      "q25_q75_coverage": 0.7430436276193748,
+      "mean_window_width": 1.8718653383716937
+    },
+    {
+      "estimator": "lasso_timing.pkl",
+      "n": 2911,
+      "mae": 1.1976633014314144,
+      "spearman": 0.5696410945914615,
+      "bias": 0.2581537851204021,
+      "q25_q75_coverage": NaN,
+      "mean_window_width": NaN
+    }
+  ],
+  "elapsed_min": 41.6
+}

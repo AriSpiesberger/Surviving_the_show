@@ -1,0 +1,42 @@
+{
+  "when": "2026-09-06 18:03:51",
+  "quick": false,
+  "nrounds": 355,
+  "v24_ref": {
+    "deb_ap_h1": 0.4421,
+    "deb_ap_h3": 0.612,
+    "deb_ap_h6": 0.6683,
+    "wap_h6": 0.4759,
+    "tim_mae": 1.034
+  },
+  "timing": [
+    {
+      "estimator": "H_cdf_median(cal)",
+      "n": 2911,
+      "mae": 1.0051528684300928,
+      "spearman": 0.6266524286669867,
+      "bias": -0.11336310546204054,
+      "q25_q75_coverage": 0.7657162487117829,
+      "mean_window_width": 1.8962555822741325
+    },
+    {
+      "estimator": "H_cdf_mean(cal)",
+      "n": 2911,
+      "mae": 1.1033228798116108,
+      "spearman": 0.6381329694316782,
+      "bias": 0.20425863184949705,
+      "q25_q75_coverage": NaN,
+      "mean_window_width": NaN
+    },
+    {
+      "estimator": "lasso_timing.pkl",
+      "n": 2911,
+      "mae": 1.1976633014314144,
+      "spearman": 0.5696410945914615,
+      "bias": 0.2581537851204021,
+      "q25_q75_coverage": NaN,
+      "mean_window_width": NaN
+    }
+  ],
+  "elapsed_min": 63.4
+}
