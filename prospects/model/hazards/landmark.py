@@ -501,14 +501,33 @@ def _apply_feature_mask(X: np.ndarray, bundle: dict) -> np.ndarray:
     return X[:, m]
 
 
+def _monotone_cst(sel_names: list[str]) -> np.ndarray | None:
+    """Monotone constraints for the hazard fits: event hazard is
+    non-decreasing in scout_fv (2026-09-08 — the empirical debut<=3y
+    ordering among comparable AA/AAA performers is 43.8% unscouted [FV
+    floored at 30] < 77.7% FV<=45 < 95.8% FV>=50, but the unconstrained
+    trees learned a scouted-modest penalty that inverted it; see
+    features.grades.FV_UNSCOUTED). Zeros elsewhere."""
+    if "scout_fv" not in sel_names:
+        return None
+    cst = np.zeros(len(sel_names), dtype=np.int8)
+    cst[sel_names.index("scout_fv")] = 1
+    if "scout_is_graded" in sel_names:      # scouted >= unscouted, ceteris
+        cst[sel_names.index("scout_is_graded")] = 1
+    return cst
+
+
 def _train_event(X_tr: np.ndarray, y_tr: np.ndarray, seed: int = 42,
                  hp: dict | None = None,
+                 monotonic_cst: np.ndarray | None = None,
                  ) -> HistGradientBoostingClassifier:
     """Fit one event's HistGBT. `hp` overrides any defaults — used by
     the Optuna hazards tuner."""
     params = dict(_HAZARD_HP_DEFAULTS)
     if hp:
         params.update(hp)
+    if monotonic_cst is not None:
+        params["monotonic_cst"] = monotonic_cst
     return HistGradientBoostingClassifier(
         **params, random_state=seed,
     ).fit(X_tr, y_tr)
@@ -607,7 +626,8 @@ def fit_landmark_hazards(
         X_tr = _assemble_event_X(X_lm, landmark_idx, k_arr)
         if feature_mask is not None:
             X_tr = X_tr[:, feature_mask]
-        clf = _train_event(X_tr, y_all, seed=seed, hp=hazard_hp)
+        clf = _train_event(X_tr, y_all, seed=seed, hp=hazard_hp,
+                           monotonic_cst=_monotone_cst(sel_names))
         if verbose:
             print(f"{ename:<24} {f'rc={rc},min={min_yrs}':<20} "
                   f"{K:>3} {n:>10,d} {n_pos:>7d} "

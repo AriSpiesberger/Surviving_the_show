@@ -70,6 +70,12 @@ G3_SLOW = {"max_depth": 8, "min_child_weight": 100,
 CONFIGS: dict[str, dict] = {
     # historical default HP — the honest-baseline reference config
     "hz0_default": {},
+    # default HP under the 2026-09-08 data/feature repairs (unscouted FV
+    # floor + scout_fv monotone + NCAA rows excluded) — fresh tag so the
+    # contract-changed panel rebuilds cleanly
+    "hz0_fvfix": {},
+    # round 2: + scout_is_graded flag (monotone), physicals/org_rank imputed
+    "hz0_fvfix2": {},
     # more capacity, slower lr, leaf-count-limited depth
     "hz1_capacity": dict(max_iter=600, learning_rate=0.03, max_depth=None,
                          max_leaf_nodes=63, min_samples_leaf=50,

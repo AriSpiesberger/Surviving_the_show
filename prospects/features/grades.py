@@ -39,12 +39,45 @@ else:  # data not built yet -> no scouting features (graceful, deterministic)
     SCOUTING_GRADE_NAMES = []
     _BY_PLAYER = {}
 
+# Presence must be ONE feature, not 75 correlated NaN patterns (2026-09-08
+# round 2): with fv floored, the trees re-derived the "scouted-modest = doom"
+# shortcut from scout_weight/height/org_rank PRESENCE (NaN-ing them raised a
+# buried AA/AAA performer +0.25). So: explicit scout_is_graded flag (monotone
+# +1 in the hazards — empirically scouted > unscouted at equal performance),
+# physicals imputed to neutral league-typical values for the unscouted, and
+# org_rank to the existing unranked-is-worst sentinel.
+if SCOUTING_GRADE_NAMES:
+    SCOUTING_GRADE_NAMES = SCOUTING_GRADE_NAMES + ["scout_is_graded"]
+_IMPUTE_UNSCOUTED = {"scout_weight": 195.0, "scout_height": 74.0,
+                     "scout_org_rank": 45.0}
+
 _NAN = {n: np.nan for n in SCOUTING_GRADE_NAMES}
+if SCOUTING_GRADE_NAMES:
+    _NAN["scout_is_graded"] = 0.0
+    for _k, _v in _IMPUTE_UNSCOUTED.items():
+        if _k in _NAN:
+            _NAN[_k] = _v
+
+# Unscouted FV floor (2026-09-08). Unscouted used to be NaN, routed by the
+# trees to branches dominated by a DIFFERENT population — which inverted the
+# empirical ordering: among AA/AAA performers (age<=25.5, woba>=.320, pa>=250,
+# snaps 2017-21) realized debut<=3y is 43.8% unscouted < 77.7% FV<=45 < 95.8%
+# FV>=50, yet the hazard model scored scouted-modest performers ~6x BELOW
+# unscouted twins (the Gourson/Pence anomaly). Placing unscouted at FV 30 —
+# strictly below every real grade — puts "invisible to scouts" on the same
+# monotone scale the outcomes follow; fit_landmark_hazards pairs this with a
+# monotonic_cst(+1) on scout_fv.
+FV_UNSCOUTED = 30.0
+_FV_IDX = (SCOUTING_GRADE_NAMES.index("scout_fv")
+           if "scout_fv" in SCOUTING_GRADE_NAMES else None)
+if _FV_IDX is not None:
+    _NAN["scout_fv"] = FV_UNSCOUTED
 
 
 def scouting_grade_dict(player_id, as_of_year) -> dict[str, float]:
     """Return {scout_*: value} for the latest snapshot with season <= as_of_year
-    (no lookahead). Always returns all SCOUTING_GRADE_NAMES; NaN where absent."""
+    (no lookahead). Always returns all SCOUTING_GRADE_NAMES; NaN where absent —
+    except scout_fv, floored at FV_UNSCOUTED for the unscouted (see above)."""
     e = _BY_PLAYER.get(str(player_id))
     if e is None or as_of_year is None:
         return dict(_NAN)
@@ -52,7 +85,14 @@ def scouting_grade_dict(player_id, as_of_year) -> dict[str, float]:
     i = int(np.searchsorted(seasons, as_of_year, side="right")) - 1
     if i < 0:
         return dict(_NAN)
-    return {n: v for n, v in zip(SCOUTING_GRADE_NAMES, vals[i])}
+    out = {n: v for n, v in zip(SCOUTING_GRADE_NAMES, vals[i])}
+    out["scout_is_graded"] = 1.0
+    if not np.isfinite(out.get("scout_fv", np.nan)):
+        out["scout_fv"] = FV_UNSCOUTED
+    for k, v in _IMPUTE_UNSCOUTED.items():
+        if k in out and not np.isfinite(out[k]):
+            out[k] = v
+    return out
 
 
 # ---------------------------------------------------------------------------

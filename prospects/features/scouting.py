@@ -1215,8 +1215,14 @@ def build_scouting_features(
     """Build the full scouting feature vector (length N_FEATURES)."""
 
     if milb_only:
+        # MLB rows are not MiLB evidence; neither are NCAA rows (2026-09-08:
+        # college seasons were passing through and reading as A-ball-equivalent
+        # pro years — a 2024 draftee with 2022-24 NCAA rows looked "stuck at
+        # A-ball since 2022" to every trajectory feature; 59 players affected).
         season_stats = [s for s in season_stats
-                        if (s.get("level") or "").upper() != "MLB"]
+                        if (s.get("level") or "").upper() != "MLB"
+                        and not (s.get("level") or "").upper()
+                        .startswith("NCAA")]
     # No-lookahead guard (v2.1): drop any season AFTER the snapshot. The
     # windowed features filter season_year<=as_of locally, but has_any_milb_data
     # / has_hitting / has_pitching and the years_in_pro / years_in_current_system

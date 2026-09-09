@@ -29,8 +29,8 @@ from prospects.model.pipelines.oof import _entry_year
 
 _RUN = config.run()
 DB = str(REPO_ROOT / "prospects_snapshot.db")
-DEFAULT_HAZARDS = (REPO_ROOT / "runs" / "hz0_default" / "scratch" / "oof"
-                   / "fold0_hazards.pkl")
+DEFAULT_HAZARDS = (REPO_ROOT / "runs" / "hz0_fvfix2" / "scratch" / "oof"
+                   / "fold0_hazards.pkl")  # 328-contract (2026-09-08 fixes)
 OUT_CSV = _RUN.training / "recent_long.csv"
 
 
