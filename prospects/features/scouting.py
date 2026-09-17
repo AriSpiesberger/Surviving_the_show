@@ -35,6 +35,8 @@ Module API:
 
 from __future__ import annotations
 
+from prospects.features.pedigree_rules import usable_signing_bonus
+
 import argparse
 import json
 import math
@@ -1239,7 +1241,9 @@ def build_scouting_features(
         "univ", "college", "state", "u of", "tech", "institute"
     ))
     draft_year = prospect.get("draft_year")
-    bonus = prospect.get("signing_bonus_usd")
+    # Only from the completely-covered block (see pedigree_rules): elsewhere the
+    # bonus is on file mostly for players who went on to debut.
+    bonus = usable_signing_bonus(prospect)
 
     # v1.9: bonus-vs-slot. Biometrics removed - see FEATURE_NAMES.
     bats = (prospect.get("bats") or "").upper()
@@ -1262,7 +1266,10 @@ def build_scouting_features(
         "draft_round": float(prospect["draft_round"]) if prospect.get("draft_round") is not None else MISSING,
         "draft_pick": float(prospect["draft_pick"]) if prospect.get("draft_pick") is not None else MISSING,
         "log_signing_bonus": float(math.log1p(bonus)) if bonus and bonus > 0 else MISSING,
-        "has_signing_bonus": 1.0 if bonus and bonus > 0 else 0.0,
+        # Neutralised: as a bare presence flag it was the single leakiest
+        # feature (on for 49% of eventual debuters vs 8% of never-debuters at
+        # draft_year+1); after gating it would only mark the draft era.
+        "has_signing_bonus": MISSING,
         "age_at_signing": float(prospect["age_at_signing"]) if prospect.get("age_at_signing") is not None else MISSING,
         "bats_L": 1.0 if bats == "L" else (0.0 if bats in ("R", "S") else MISSING),
         "bats_S": 1.0 if bats == "S" else (0.0 if bats in ("R", "L") else MISSING),

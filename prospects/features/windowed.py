@@ -267,9 +267,10 @@ def build_windowed_features(
     is_pitcher = pos in PITCHER_POS or bool(prospect.get("is_pitcher"))
 
     # Pedigree
-    bonus = prospect.get("signing_bonus_usd")
+    from prospects.features.pedigree_rules import usable_signing_bonus
+    bonus = usable_signing_bonus(prospect)   # completely-covered block only
     log_bonus = float(np.log1p(bonus)) if bonus and bonus > 0 else MISSING
-    has_bonus = 1.0 if bonus and bonus > 0 else 0.0
+    has_bonus = MISSING                       # neutralised presence flag
     draft_round = prospect.get("draft_round")
     draft_pick = prospect.get("draft_pick")
     origin = (prospect.get("origin") or "").lower()

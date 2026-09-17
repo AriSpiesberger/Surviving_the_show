@@ -24,8 +24,25 @@ _OFF = os.environ.get("SCOUTING_GRADES_OFF") == "1"
 
 if _CSV.exists() and not _OFF:
     _df = pd.read_csv(_CSV, low_memory=False)
+    # Columns that must never reach a model (2026-09-17):
+    #  - servicetime: NOT point-in-time. It is the player's MLB service time at
+    #    scrape date stamped onto every historical season (99.8% of players
+    #    carry one identical value across all their seasons; 2,573 rows dated
+    #    BEFORE the player's debut have servicetime > 0; 2017 rows median 3.1y).
+    #    That is the debut label leaking into the features: pre-debut rows with
+    #    a value went on to debut 87% vs 41% without. Both layers keyed on it
+    #    (hazards: scout_servicetime; joint XGB kept rw_scout_servicetime), so
+    #    validation on scouted rows looked superb while the live board, where
+    #    nobody has service time yet, was buried: ranked AA/AAA 23.5+ players
+    #    scored p3y 0.06 vs 0.30 for unranked, the reverse of history
+    #    (Gelof .908 OPS -> 0.02, Pecko 0.07, Mayer 0.02).
+    #  - contact_style, versatility_count: 0% present in every training-era
+    #    season, populated only on the 2026 board. No signal can be learned;
+    #    they are pure train/serve skew.
+    _BANNED_COLS = {"servicetime", "contact_style", "versatility_count"}
     _FEAT_COLS = [c for c in _df.columns
-                  if c not in ("player_id", "season", "source")]
+                  if c not in ("player_id", "season", "source")
+                  and c not in _BANNED_COLS]
     # one row per (player, season); prefer fg_board over twtc on overlap
     _df = (_df.sort_values(["player_id", "season", "source"])
            .drop_duplicates(["player_id", "season"], keep="first"))

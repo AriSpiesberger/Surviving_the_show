@@ -90,6 +90,15 @@ def main():
     with open(_kr_src, "rb") as fh:
         b4 = pickle.load(fh)
     keep_raw = list(b4["keep_raw"])
+    # The list is inherited from an older bundle; features can be retired from
+    # the panel since (e.g. the leaked scout_servicetime). Drop what no longer
+    # exists rather than crash in attach_raw_features.
+    from prospects.features.scouting import FEATURE_NAMES as _FN
+    _live = {f"rw_{n}" for n in _FN}
+    _gone = [c for c in keep_raw if c not in _live]
+    if _gone:
+        print(f"[exp5] dropping {len(_gone)} retired raw feature(s): {_gone}")
+        keep_raw = [c for c in keep_raw if c in _live]
     print(f"[exp5] keep_raw ({len(keep_raw)}) from {_kr_src.name}")
     feats = list(FEAT2) + keep_raw
     del b4
