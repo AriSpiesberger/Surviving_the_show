@@ -103,9 +103,12 @@ def run_cmd(label: str, cmd: list[str]) -> int:
         cmd, cwd=REPO_ROOT,
         env={
             **os.environ,
-            "OMP_NUM_THREADS": "1",
-            "OPENBLAS_NUM_THREADS": "1",
-            "MKL_NUM_THREADS": "1",
+            # Default 1 (the pin dates from a BSOD-instability window). Set
+            # PROSPECT_NUM_THREADS to use more cores: the joint fit measured
+            # 315 min pinned vs 74 min unpinned on the 32-core box (2026-09).
+            "OMP_NUM_THREADS": os.environ.get("PROSPECT_NUM_THREADS", "1"),
+            "OPENBLAS_NUM_THREADS": os.environ.get("PROSPECT_NUM_THREADS", "1"),
+            "MKL_NUM_THREADS": os.environ.get("PROSPECT_NUM_THREADS", "1"),
             "PYTHONIOENCODING": "utf-8",
         },
     )
@@ -222,8 +225,12 @@ def build_plan(args) -> list[tuple[str, str, object]]:
          _py("prospects.model.pipelines.oof", *tag_args)),
         ("evaluate", "held-out metrics + report",
          _py("prospects.evaluation.run", *tag_args)),
+        # --force: without it the step prints "already exist" and exits 0, so the
+        # model that scores the live sheet silently stays frozen at whatever was
+        # last trained. On 2026-09-17 that was a Sep-8 file with 329 features,
+        # still carrying the leaked scout_servicetime, after two "full" retrains.
         ("hazards", "full-panel production hazards",
-         _py("prospects.model.train.hazards", *tag_args)),
+         _py("prospects.model.train.hazards", "--force", *tag_args)),
         ("prod", f"prod XGB + score snap={args.season} + buy list",
          _py("prospects.model.pipelines.prod",
              "--snap-year", str(args.season), *tag_args)),

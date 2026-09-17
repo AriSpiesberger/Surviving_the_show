@@ -108,9 +108,12 @@ def run_step(label: str, cmd: list[str], cwd: Path,
         cmd, cwd=cwd,
         env={
             **os.environ,
-            "OMP_NUM_THREADS": "1",
-            "OPENBLAS_NUM_THREADS": "1",
-            "MKL_NUM_THREADS": "1",
+            # Default 1 (the pin dates from a BSOD-instability window). Set
+            # PROSPECT_NUM_THREADS to use more cores: the joint fit measured
+            # 315 min pinned vs 74 min unpinned on the 32-core box (2026-09).
+            "OMP_NUM_THREADS": os.environ.get("PROSPECT_NUM_THREADS", "1"),
+            "OPENBLAS_NUM_THREADS": os.environ.get("PROSPECT_NUM_THREADS", "1"),
+            "MKL_NUM_THREADS": os.environ.get("PROSPECT_NUM_THREADS", "1"),
             "PYTHONIOENCODING": "utf-8",
         },
         stdout=subprocess.DEVNULL if quiet else None,
