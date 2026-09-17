@@ -42,8 +42,15 @@ from prospects.config import REPO_ROOT
 
 
 def eligible_pids(db_path: str, max_draft_year: int) -> list[str]:
-    """Panel-eligible modeling universe: drafted <= max_draft_year, with an
-    outcome label and at least one MiLB season. Sorted for determinism."""
+    """Panel-eligible modeling universe: drafted <= max_draft_year, or an
+    international signee whose first non-MLB season is <= max_draft_year (the
+    same entry-year rule the OOF panel applies to IFAs), with an outcome label
+    and at least one MiLB season. Sorted for determinism.
+
+    IFAs were absent here until 2026-09-10: the OOF folds and the joint XGB
+    fit long already carried ~14k of them, but with a draft-only val set they
+    were never held-out-evaluated or calibrated, and the per-yip buy-list
+    thresholds (computed on val) never saw one."""
     con = sqlite3.connect(db_path)
     rows = con.execute(
         """
@@ -51,9 +58,13 @@ def eligible_pids(db_path: str, max_draft_year: int) -> list[str]:
         FROM prospects p
         JOIN career_outcomes o ON o.player_id = p.player_id
         JOIN season_stats    s ON s.player_id = p.player_id
-        WHERE p.draft_year IS NOT NULL AND p.draft_year <= ?
+        WHERE (p.draft_year IS NOT NULL AND p.draft_year <= ?)
+           OR (COALESCE(p.is_international, 0) = 1
+               AND (SELECT MIN(s2.season_year) FROM season_stats s2
+                    WHERE s2.player_id = p.player_id
+                      AND s2.level != 'MLB') <= ?)
         """,
-        (max_draft_year,),
+        (max_draft_year, max_draft_year),
     ).fetchall()
     con.close()
     return sorted(r[0] for r in rows)

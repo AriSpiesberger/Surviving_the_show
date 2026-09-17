@@ -215,10 +215,13 @@ def main():
                     help="Drop players with > this many years of service "
                          "(snap_offset). Default 3 — we only buy through yip 3. "
                          "Pass -1 to disable the cap.")
-    ap.add_argument("--include-ifa", action="store_true",
-                    help="Keep IFA (ifa_*) prospects in the buy list. Off by "
-                         "default: IFAs aren't in the draft-keyed training "
-                         "panel, so their scores are untrustworthy extrapolation.")
+    ap.add_argument("--include-ifa", dest="include_ifa", action="store_true",
+                    default=True,
+                    help="Keep IFA (ifa_*) prospects in the buy list (default). "
+                         "IFAs are ~45%% of the joint XGB's training rows and, "
+                         "since 2026-09-10, part of the held-out val split.")
+    ap.add_argument("--exclude-ifa", dest="include_ifa", action="store_false",
+                    help="Drop IFA (ifa_*) prospects from the buy list.")
     ap.add_argument("--yip-thresholds", default=None,
                     help="JSON file {yip: P(debut) threshold} for per-yip "
                          "precision-calibrated cutoffs. This is the proper "
@@ -326,10 +329,11 @@ def main():
         df = _join_prices(df, args.prices)
 
     # Universe filters
-    # Drop IFAs by default: the training panel is draft-keyed, so IFAs were
-    # never in training — scoring them is extrapolation and their probabilities
-    # aren't trustworthy (they dominated an early buy list spuriously). Opt back
-    # in with --include-ifa once IFAs are trained on.
+    # IFAs are in by default (2026-09-10). The old exclusion rested on two
+    # things that are no longer true: the joint XGB trains on the OOF stacked
+    # long, which carries ~14k international players; and the "IFAs dominate
+    # the list" failure was a NULL birth_date imputing age to AGE_CENTER=22,
+    # fixed by ifa_backfill writing birth_date. --exclude-ifa opts out.
     if not args.include_ifa:
         n_ifa = len(df)
         df = df[~df["player_id"].astype(str).str.startswith("ifa_")].copy()

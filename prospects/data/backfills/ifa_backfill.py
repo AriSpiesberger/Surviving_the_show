@@ -110,7 +110,10 @@ def run_backfill(db_path: str, all_rows: bool = False, apply: bool = False) -> d
     ``apply`` writes the updates (otherwise dry-run). Returns a small stats dict.
     """
     conn = sqlite3.connect(db_path)
-    where = "p.is_international = 1"
+    # The ifa_ bucket also holds rows reclassified to is_international=0; they
+    # still need birth_date, so target on the id prefix too.
+    where = ("(p.is_international = 1 OR (CAST(p.player_id AS TEXT) LIKE 'ifa_%' "
+             "AND p.birth_date IS NULL))")
     if not all_rows:
         where += (" AND p.player_id IN (SELECT DISTINCT player_id FROM "
                   "season_stats WHERE season_year >= 2024)")
@@ -143,6 +146,7 @@ def run_backfill(db_path: str, all_rows: bool = False, apply: bool = False) -> d
         time.sleep(0.25)
 
     n_draft = n_udfa = n_intl = n_origin = n_age = n_phys = 0
+    n_bday = 0
     updates: list[tuple] = []
     sample = {"drafted": [], "udfa": [], "intl": []}
     for r in targets:
@@ -174,10 +178,16 @@ def run_backfill(db_path: str, all_rows: bool = False, apply: bool = False) -> d
             if country and len(sample["intl"]) < 6:
                 sample["intl"].append((r["name"], country))
 
-        if r["age_at_signing"] is None and r["signing_year"] and r["birth_date"]:
+        # birth_date drives age_at_snap; when it is NULL the model falls back to
+        # AGE_CENTER (22) and every such player scores like an average-aged one.
+        bday = r["birth_date"]
+        if bday is None and p.get("birthDate"):
+            bday = str(p["birthDate"])[:10]
+            sets.append("birth_date = ?"); vals.append(bday); n_bday += 1
+        if r["age_at_signing"] is None and r["signing_year"] and bday:
             try:
                 sets.append("age_at_signing = ?")
-                vals.append(round(int(r["signing_year"]) - int(str(r["birth_date"])[:4]), 1))
+                vals.append(round(int(r["signing_year"]) - int(str(bday)[:4]), 1))
                 n_age += 1
             except (ValueError, TypeError):
                 pass
@@ -196,6 +206,7 @@ def run_backfill(db_path: str, all_rows: bool = False, apply: bool = False) -> d
             updates.append((sets, vals, r["player_id"]))
 
     print(f"\nresolved people for {len(people):,}. Classification:")
+    print(f"  birth_date filled (was NULL; age had defaulted to 22): {n_bday:,}")
     print(f"  DRAFTED   (in draft roster) -> set draft cols, is_intl=0: {n_draft:,}")
     print(f"  UDFA      (domestic, undrafted) -> is_intl=0:             {n_udfa:,}")
     print(f"  INTL      (foreign, kept is_intl=1):                      {n_intl:,}")
@@ -205,7 +216,8 @@ def run_backfill(db_path: str, all_rows: bool = False, apply: bool = False) -> d
             print(f"  sample {tag}: " + " | ".join(str(x) for x in items[:6]))
 
     stats = {"drafted": n_draft, "udfa": n_udfa, "intl": n_intl,
-             "resolved": len(people), "updates": len(updates)}
+             "resolved": len(people), "updates": len(updates),
+             "birth_date": n_bday}
     if not apply:
         print("\nDRY-RUN — re-run with --apply to write.")
         conn.close()
