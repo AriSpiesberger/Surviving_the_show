@@ -53,6 +53,16 @@ EXCLUDE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Aftermarket signatures. A certified 1st Bowman Chrome auto is signed for Topps
+# and pack-inserted; a base card signed in person / through the mail / at a show
+# is a different, far cheaper item that sellers still title "1st Bowman ... Auto".
+# Without this the base tier filled with "Non-Chrome Auto Signed IP" listings at
+# $2-5 and they became the quoted lowest buy-now (2026-09-17: Jared Thomas "$5"
+# against a $30 median). Third-party authentication (JSA, PSA/DNA, a COA) is the
+# same tell: pack-certified autos do not need one.
+# "Non-Chrome" / paper: not the Chrome product, and \bchrome\b matches inside it.
+NON_CHROME_RE = re.compile(r"\bnon[- ]?chrome\b|\bpaper\b", re.IGNORECASE)
+
 # Graded slabs — user trades raw only. Match a TPG paired with a grade
 # number or "gem mint" only; standalone TPG names are too false-positive-prone
 # (e.g., "PSA-worthy", random three-letter player initials).
@@ -89,11 +99,22 @@ def _denominators_in_title(title: str) -> list[int]:
     return [int(d) for d in NUMBER_RE.findall(title)]
 
 
+_AFTERMARKET_CI_RE = re.compile(
+    r"\bin[- ]?person\b|\bttm\b|\bthrough the mail\b|\bhand[- ]?signed\b"
+    r"|\bgtp\b|\bjsa\b|\bpsa\s*/?\s*dna\b|\bbeckett auth\w*|\bbas\b|\bcoa\b"
+    r"|\bsigned at\b|\bauto(?:graph)?ed by\b", re.IGNORECASE)
+_IP_TOKEN_RE = re.compile(r"(?<![A-Za-z])IP(?![A-Za-z])")   # case-sensitive on purpose
+
+
+def _is_aftermarket_signature(title: str) -> bool:
+    return bool(_IP_TOKEN_RE.search(title) or _AFTERMARKET_CI_RE.search(title))
+
+
 def parse_title(title: str, player_full_name: str) -> ParsedListing:
     t = title or ""
     is_auto = bool(AUTO_RE.search(t))
     is_bowman = bool(BOWMAN_RE.search(t))
-    is_chrome = bool(CHROME_RE.search(t))
+    is_chrome = bool(CHROME_RE.search(t)) and not NON_CHROME_RE.search(t)
 
     # Lightweight name presence check (last-name token only — eBay sellers
     # spell names wildly; first-name match is too brittle).
@@ -103,6 +124,12 @@ def parse_title(title: str, player_full_name: str) -> ParsedListing:
     if EXCLUDE_RE.search(t):
         return ParsedListing(t, False, None, is_auto, is_bowman, is_chrome,
                              "lot/break/custom/graded-flaw")
+    if _is_aftermarket_signature(t):
+        return ParsedListing(t, False, None, is_auto, is_bowman, is_chrome,
+                             "aftermarket signature (IP/TTM/authenticated)")
+    if NON_CHROME_RE.search(t):
+        return ParsedListing(t, False, None, is_auto, is_bowman, is_chrome,
+                             "non-chrome / paper")
     if GRADED_RE.search(t):
         return ParsedListing(t, False, None, is_auto, is_bowman, is_chrome,
                              "graded slab (raw-only scope)")
