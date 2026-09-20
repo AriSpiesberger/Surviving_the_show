@@ -123,6 +123,8 @@ def run_origin(Y, X_lm, pids, S_yrs, joined, stats_by_pid, entry_by_pid,
     with open(REPO_ROOT / "runs" / "current" / "models"
               / "joint_xgb_v2.3.pkl", "rb") as fh:
         keep_raw = list(pickle.load(fh)["keep_raw"])
+    from prospects.features.scouting import FEATURE_NAMES as _FN   # drop retired names
+    keep_raw = [c for c in keep_raw if c in {f"rw_{n}" for n in _FN}]
     feats = list(FEAT2) + keep_raw
 
     fit_base = prep_base(pd.read_csv(fit_csv), DB, max_entry=Y)
