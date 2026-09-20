@@ -1,4 +1,20 @@
 card_id,player_id,name,denominator,grade,buy_date,buy_price_usd,ebay_item_id,notes
+ebay-08-15167-17224,draft_2025_nate_snead_r3p105,Nate Snead,0,raw,2026-09-13,7.64,,2025 Bowman Draft Chrome 1st Auto CPA-NSN Angels
+ebay-08-15146-48775,draft_2025_max_williams_r3p78,Max Williams,0,raw,2026-09-08,12.1,,2025 Bowman Draft Chrome 1st On Card Auto CPA-MWI Marlins
+ebay-24-15127-59307,draft_2023_jake_cunningham_r5p154,Jake Cunningham,50,raw,2026-09-07,17.81,,2023 Bowman Draft Chrome Auto CDA-JCU Gold Refractor /50 (seller listed as 2012; MLBAM 801507)
+ebay-21-15113-12183,draft_2024_rafe_schlesinger_r4p113,Rafe Schlesinger,0,raw,2026-09-06,7.13,,2024 Bowman Draft Chrome Prospect Auto CPA-RSC
+ebay-23-15076-24258,draft_2024_caden_kendle_r5p159,Caden Kendle,150,raw,2026-08-30,12.37,,2025 Bowman Chrome 1st Auto Mojo Refractor /150 Twins
+ebay-10-15075-85243,draft_2023_jared_dickey_r11p319,Jared Dickey,0,raw,2026-08-24,4.1,,2024 Bowman Chrome Prospects Auto CPA-JDI 1st
+ebay-12-15025-87878,draft_2023_quinn_mcdaniel_r5p153,Quinn McDaniel,25,PSA 9 / auto 10,2026-08-13,35.91,,"2023 Bowman Draft Chrome Auto Orange Refractor 1st /25 Giants — PSA 9, auto 10 (slabbed)"
+ebay-15-14920-84153,draft_2024_aaron_parker_r6p187,Aaron Parker,199,raw,2026-07-22,12.37,,2024 Bowman Draft Chrome Auto Aqua Lava Refractor /199 1st
+ebay-13-14901-94473,draft_2023_nehomar_ochoa_r11p344,Nehomar Ochoa,75,raw,2026-07-16,34.43,,2024 Bowman Chrome Prospect Auto CPA-NOC Yellow (/75)
+ebay-02-14781-30091,ifa_805117,Jean Carlos Sio,125,raw,2026-06-13,21.6,,2026 Bowman Chrome Auto Aqua Refractor /125 1st Giants
+ebay-08-14749-55821,draft_2025_trevor_cohen_r3p85,Trevor Cohen,150,raw,2026-06-08,18.38,,2025 Bowman Chrome 1st Auto Mojo Refractor /150
+ebay-14-14724-89320,draft_2024_gage_miller_r3p92,Gage Miller,99,raw,2026-06-05,21.03,,2024 Bowman Chrome Draft 1st Green Lava Auto /99
+ebay-20-14712-02226,ifa_808129,Juan Flores,150,raw,2026-06-04,23.35,,2024 Bowman Chrome 1st Blue Reptilian Auto /150 CPA-JF
+ebay-01-14733-96100,draft_2024_ty_southisene_r4p120,Ty Southisene,250,raw,2026-06-02,17.77,,2024 Bowman Draft CPA-TS Auto Purple Refractor /250 Cubs
+ebay-21-14698-43940,draft_2023_gino_groover_r2p48,Gino Groover,0,raw,2026-06-01,27.89,,2024 Bowman CPA-GG 1st Bowman Auto
+ebay-03-14714-23775,draft_2023_mitch_jebb_r2p42,Mitch Jebb,0,raw,2026-05-29,3.88,,2024 Bowman Chrome 1st Bowman CPA-MJ Auto Pirates
 ebay-10-14675-80411,draft_2023_ethan_pecko_r6p194,Ethan Pecko,0,raw,2026-05-21,17.22,,2025 Bowman Chrome 1st Prospect Auto CPA-EPE Astros
 ebay-14-14663-18584,draft_2024_khal_stephen_r2p59,Khal Stephen,0,raw,2026-05-21,26.09,,2024 Bowman Chrome 1st Prospect Auto CPA-KS Blue Jays
 ebay-07-14670-31745,draft_2023_brock_rodden_r5p160,Brock Rodden,0,raw,2026-05-20,10.32,,2023 Bowman Chrome Draft Auto Mariners
@@ -12,7 +28,7 @@ ebay-04-14670-29665,draft_2023_ethan_odonnell_r6p168,Ethan O'Donnell,250,raw,202
 ebay-10-14658-74489,draft_2024_joshua_kuroda-grauer_r3p75,Joshua Kuroda-Grauer,0,raw,2026-05-19,32.64,,2024 Bowman Draft Chrome Auto 1st Prospect CPA-JK Athletics
 ebay-12-14655-55039,draft_2024_cole_messina_r3p77,Cole Messina,0,raw,2026-05-19,6.65,,2024 Bowman Draft Chrome Prospect Auto CPA-CME
 ebay-23-14638-41977,draft_2023_joe_whitman_r2p69,Joe Whitman,0,raw,2026-05-19,12.01,,2023 Bowman Draft 1st Chrome Auto CDA-JWH
-ebay-12-14655-51416,draft_2025_aaron_walton_r2p66,Aaron Walton,0,raw,2026-05-19,33.10,,2025 Bowman Chrome Draft 1st Bowman Auto CPA-AWA
+ebay-12-14655-51416,draft_2025_aaron_walton_r2p66,Aaron Walton,0,raw,2026-05-19,33.1,,2025 Bowman Chrome Draft 1st Bowman Auto CPA-AWA
 ebay-16-14645-00749,draft_2023_ethan_pecko_r6p194,Ethan Pecko,0,raw,2026-05-18,21.02,,2025 Bowman Chrome 1st Prospect Auto CPA-EPE Astros (second copy)
 ebay-09-14655-81921,draft_2022_david_sandlin_r11p325,David Sandlin,0,raw,2026-05-18,7.36,,2025 1st Bowman Chrome Auto CPA-DSA
 ebay-15-14646-40903,draft_2023_sean_sullivan_r2p46,Sean Sullivan,499,raw,2026-05-18,17.71,,2023 Bowman Draft 1st Chrome Refractor Auto /499 CDA-SS
