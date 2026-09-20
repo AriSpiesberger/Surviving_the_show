@@ -150,10 +150,18 @@ def main():
 
     md = f"""# Held-out validation — v2.4 (raw-feature bag + recent-cohort augmentation)
 
-Reproducible evaluation of the v2.4 stack against the **10% val player
-slice** of the v1.17 seed=42 split — players neither the landmark hazards nor
-the joint XGBoost head trained on. Validation universe: drafted players with
-`draft_year ≤ 2020` (plus IFAs). The numbers below are the **deployable
+Reproducible evaluation of the v2.4 stack against the **15% val player
+slice** (`model/train/make_split`, seed=42) — players neither the landmark
+hazards nor the joint XGBoost head trained on. Validation universe: drafted
+players with `draft_year ≤ 2020` **and international signees whose first
+non-MLB season is ≤ 2020** (IFAs entered the split on 2026-09-10; before that
+the joint layer trained on ~14k of them but val held none, so they were never
+held-out-evaluated).
+
+**The sheet is scored by v2.5, not by the model evaluated here.** v2.5 is this
+same recipe refit on 100% of players (fit + val). It therefore has no held-out
+number of its own; v2.4 below is the recipe's report card, and the per-yip buy
+thresholds are computed on THIS held-out run and passed to v2.5 as a file. The numbers below are the **deployable
 calibrated probabilities** (calibrators applied before metrics), and the
 calibrators were fit on cross-fitted OOF predictions — never on this val
 slice.
@@ -166,10 +174,38 @@ inflated (the v2.1c baseline read 0.647 debut@3; its honest value is 0.557).
 `stage_partition` now hard-verifies zero val overlap and purges stale
 partitions. The tables below are from the rebuilt, verified-clean split.
 
+**LABEL-LEAK CORRECTION (2026-09-17).** Two inputs were leaking the debut
+label and both are cut:
+
+1. `scout_servicetime` — MLB service time *as of the scrape date*, stamped
+   onto every historical season of the "point-in-time" scouting file (99.8% of
+   players carry one value across all their seasons; 2,573 scouting rows dated
+   BEFORE the player's debut show service time > 0). Both layers keyed on it.
+   Held-out rows carry the stamp too, so validation looked excellent while the
+   live board — where nobody has service time yet — was inverted: 2026 AA/AAA
+   players aged 23.5+ scored p3y **0.06 if org-ranked vs 0.30 if unranked**
+   (history: 0.63 vs 0.40). After the fix: **0.57 vs 0.29**.
+2. Signing-bonus *presence* — on file for ~9% of 2005–2016 draftees who never
+   debuted vs ~60% of those who did. Rule now enforced in
+   `features/pedigree_rules.py`: a field is usable only where its coverage does
+   not depend on outcome. The bonus survives only for drafts 2017+, rounds 1–10
+   (100% covered every year, identical for debuted and never-debuted).
+
+Cost of honesty, same split: debut@3 AP **0.593 → 0.525**, debut@6 **0.611 →
+0.569**. Every number below is post-fix. `tools/leak_audit.py` re-runs the
+model-free checks (future-blindness of all features, outcome-dependent
+coverage, source stamping, identity across the split, banned features and
+staleness inside the promoted bundles) and gates the weekly sheet.
+
+A third defect surfaced on the way: `model.train.hazards` exits 0 with "already
+exist" unless forced, so the production hazards that score the live sheet had
+sat frozen at 2026-09-08 through two "full" retrains. `refresh` and the weekly
+now force it, and the audit checks its feature contract and freshness.
+
 **What survived the correction:** the joint-layer gains (raw features,
-monotone-h, full coverage, era calibration) are real — honest debut@3
-**0.614 vs 0.557** baseline (+10%), corroborated throughout by the val-free
-internal screens. What did NOT survive: the apparent hazard-capacity gains —
+monotone-h, full coverage, era calibration) were measured before the label-leak fix (debut@3 0.614 vs 0.557). On the
+clean data the margin is small: at h=6 the v2.1c-recipe OOF model reads **0.561**
+against v2.4's **0.569**. Treat the older +10% as inflated. What did NOT survive: the apparent hazard-capacity gains —
 `hz3_max` HP (kept, harmless) measures within noise of default HP on the
 clean split; its dramatic "wins" were the leak rewarding memorization.
 
@@ -177,10 +213,13 @@ clean split; its dramatic "wins" were the leak rewarding memorization.
 post-cutoff entry cohorts' (2021+) resolved short-horizon (row, h) pairs,
 scored with val-excluded hazards (`model/train/score_recent_cohorts`). The
 random-split val below CANNOT see this gain (it holds only ≤2020 entries) —
-the walk-forward A/B measured it where it matters: **+0.04..+0.07 out-of-era
-debut@3 AP and roughly a third of the era-drift over-prediction removed**
-(`model/train/exp_walkforward3`) — the recent cohorts carry the current
-promotion regime.
+the original walk-forward A/B (`model/train/exp_walkforward3`) reported
++0.04..+0.07 out-of-era debut@3 AP, but that figure predates the label-leak fix
+AND used a harness that stacked the joint layer on in-sample hazard features
+(see the era section). **It has not been re-measured and should be treated as
+unverified.** The augmentation is kept — it is the only route by which post-2020
+entrants reach the model, and lifting the entry cap inside the hazard layer as
+well was tested fairly on 2026-09-19 and adds nothing on top of it.
 
 **Conditional refinement, un-bottlenecked (v2.2, retained).** The joint
 layer is a *conditional refinement* of the hazard trajectory: given a
@@ -222,9 +261,14 @@ opinion, not the XGB's (no extrapolation).
 
 **Data integrity:** birthdates backfilled for 2024–25 draft classes, FG/TWTC
 crosswalk 89%→96%, trade-aware `current_org`, IFA entry-year anchors,
-signing-bonus backfill. Point-in-time scouting (FanGraphs Board 2017–26 +
-Trouble-With-The-Curve 2013–19): 76 grade/physical/velo/rank/ETA columns in the
-hazard panel (no-lookahead, season ≤ snapshot) + a 5-col current-snapshot
+signing bonus gated to the completely-covered block (2017+, rounds 1–10),
+IFA birth dates backfilled from the MLB people endpoint (a NULL birth date used
+to impute age 22 and inflate scores), `age_during_season` derived for 20k rows,
+252 false-negative debut labels repaired from strict-mlbam MLB rows.
+Point-in-time scouting (FanGraphs Board 2017–26 + Trouble-With-The-Curve
+2013–19): 73 grade/physical/velo/rank/ETA columns in the hazard panel
+(no-lookahead, season ≤ snapshot; `servicetime`, `contact_style` and
+`versatility_count` banned) + a 5-col current-snapshot
 summary (`scout_fv, scout_ovr_rank, scout_eta_gap, scout_risk,
 scout_is_scouted`) fed to the XGB. HOF_TRAJECTORY dropped from the event set.
 
@@ -232,9 +276,10 @@ scout_is_scouted`) fed to the XGB. HOF_TRAJECTORY dropped from the event set.
 
 | Layer | Model | Trained on |
 |---|---|---|
-| Hazards (per-fold OOF, eval) | `runs/hz0_default/scratch/oof/fold[0-5]_hazards.pkl` | Each fold trained on the OTHER 5 (val pids excluded, partition verified). HistGBT, default HP (capacity retune measured NEUTRAL on the clean split), 327 features. Survival → censoring-aware. |
-| Hazards (production) | `runs/current/models/hazards.pkl` | 100% of ≤2020 data, default HP. Scores the 2026 cohort (entry 2024–26 — not in training, so no leakage). |
-| Conditional joint XGB | `runs/current/models/joint_xgb_v2.4.pkl` (`model/joint2.py`; trained via `model/train/exp_cdf_timing5.py`, incl. recent-cohort augmentation) | OOF stacked, resolved `(row, h)` pairs h=1..10, 252 features incl. 160 raw panel features (full coverage). 5-seed bag, depth 8 / mcw 100 / colsample 0.6 / lr 0.03, monotone in h. |
+| Hazards (per-fold OOF, eval) | `runs/hz0_default/scratch/oof/fold[0-5]_hazards.pkl` | Each fold trained on the OTHER 5 (val pids excluded, partition verified). HistGBT, default HP (capacity retune measured NEUTRAL on the clean split), 325 features + the landmark offset k. Survival → censoring-aware. |
+| Hazards (production) | `runs/current/models/hazards.pkl` | 100% of ≤2020 data, default HP, **force-retrained on every refresh and weekly run** (it was silently frozen at 2026-09-08 until 2026-09-17). Scores the 2026 cohort. |
+| Conditional joint XGB | `runs/current/models/joint_xgb_v2.4.pkl` (`model/joint2.py`; trained via `model/train/exp_cdf_timing5.py`, incl. recent-cohort augmentation) | OOF stacked, resolved `(row, h)` pairs h=1..10, 251 features incl. 159 raw panel features (full coverage); ~45% of rows are international signees. 5-seed bag, depth 8 / mcw 100 / colsample 0.6 / lr 0.03, monotone in h. |
+| **Sheet scorer** | `runs/current/models/joint_xgb_v2.5.pkl` + `calibrators_v2.5.pkl` | The row above refit on 100% of players (fit + val). No held-out metric by construction; agreement with v2.4 on the 2026 pool: p3y correlation 0.994. |
 | Calibrators | `runs/current/models/calibrators_v2.4.pkl` | Per-event logistic over `[logit(p), h, yip, …]`, fit on 3-fold cross-fitted OOF predictions, snaps ≥ 2008 only (val never used). |
 | Timing | derived — calibrated debut CDF (`joint2.cdf_timing`) | No separate model: `pmf_j = F(j) − F(j−1)` off the calibrated trajectory. Clean-val debutees: median-MAE **1.04 yr** (Spearman 0.61); mean-MAE 1.13 (0.63). Lasso baseline: 1.29 / 0.56. |
 
@@ -243,7 +288,12 @@ scout_is_scouted`) fed to the XGB. HOF_TRAJECTORY dropped from the event set.
 column all use the 3-year debut slice; ceiling events reported at h={H}
 (`p_MLB_DEBUT_6y` carried alongside). `time_to_debut` = calibrated-CDF median,
 with a `debut_eta_lo`/`debut_eta_hi` (q25–q75) window. Universe filters: EXIT
-washouts, point-in-time top-100 drop, currently-MLB drop, R1 kept.
+washouts, point-in-time top-100 drop, currently-MLB drop, R1 kept, **IFAs
+included**, and a years-in-pro ≤ 3 cap that applies **only to players aged 23+**
+(an IFA signed at 16 is in his 5th pro year at 21). Selection = per-yip
+thresholds at 60% held-out precision. Prices: raw base 1st Bowman Chrome autos
+only — in-person / TTM / third-party-authenticated signatures and non-Chrome
+cards are rejected (they were 5% of listings but set the quoted lowest buy-now).
 
 **Calibration finding (v2.3, clean split).** The Reliability section below
 is the source of truth: probabilities are calibrated on cross-fitted OOF
@@ -255,15 +305,48 @@ bucket tables, and expect high-probability buckets to be thin (small n) on a
 10% val sample — bucket wobble of ±5–10pts at n≈100 is sampling noise, not
 miscalibration. STAR_PLUS_ELITE below h=4 is a ranking signal, not a rate.
 
+**Measured on the clean split (2026-09-17):** everything above the per-yip bars
+— the actual buy rule — printed **0.609** and realized **0.602** on 1,040
+held-out rows. Below 0.70 the printed debut probabilities are trustworthy as
+written; **above 0.70 they run 5–8 points hot** (printed 0.85 → realized ~0.79),
+in every slice. Six alternative calibrators (spline hinges, isotonic, fits on
+bag-matched cross-fit predictions; `model/train/exp_cal_topend`) all tie the
+deployed one to the fourth decimal, so the residual is a held-out-population
+difference, not the calibrator's shape.
+
 **Era-shift bound (full-stack walk-forward, `model/train/exp_walkforward2`).**
-Scoring never-seen entry cohorts with label-frozen models at three historical
-origins: ranking holds (AP 0.48–0.73, AUC 0.87–0.96 out-of-era) but absolute
-probabilities swing **0.7×–2× by era** (COVID, draft-size and minors-
-restructuring shocks) — and neither the calibration layer nor recency
-weighting can remove it, because the shocks aren't learnable from history.
+Re-measured 2026-09-19 on leak-free features with a corrected harness
+(`model/train/exp_walkforward_h`). The earlier harness scored the joint layer's
+training rows with hazards fit on those same players — in-sample hazard
+features in training, out-of-sample at evaluation — which handicapped every
+stacked model; production stacks out-of-fold and so does the corrected harness.
+Train on everything known at origin Y, score the entry-(Y, Y+6] cohort at Y+6,
+judge on debuts within 3 more years:
+
+| origin → scored cohort | AP | AUC | pred ÷ actual |
+|---|---|---|---|
+| 2016 → 2022 | 0.634 | 0.950 | 1.21 |
+| 2014 → 2020 (no MiLB season) | 0.374 | 0.869 | 0.30 |
+| 2012 → 2018 | 0.645 | 0.954 | 1.17 |
+
+In the two normal origins ranking holds, levels over-predict by ~1.2×, and the
+top of the range is honest out of era (printed 0.86 → realized 0.90; 0.87 →
+0.91). The 2020 snapshot — every current-season feature stale — is
+under-predicted 3–4× by **every** model tried; a missing season is the one
+consistent failure, and it also applies to any player who loses a year.
 Read the sheet accordingly: rank-order and relative comparisons are robust;
-absolute probabilities are honest to the historical average with era-level
-uncertainty around them.
+absolute probabilities carry era-level uncertainty.
+
+**Is the two-stage stack the right macro?** Tested on the same harness, paired
+bootstrap on the mean over origins: a single-stage GBM with no hazard inputs
+(all 325 raw features, recency-weighted) **+0.008** [+0.000, +0.016]; a 50/50
+logit blend of the stack and that model **+0.011** [+0.007, +0.016], positive
+at every origin, and a tie in era. Training the hazard layer on every resolved
+landmark cell instead of capping entry at Y: **−0.008** [−0.015, −0.001] (a
+tie in normal years, worse at the 2020 origin). An online era intercept:
+nothing. The production architecture stands; the blend is a small, optional
+gain. An earlier same-day reading (+0.04 for the blend, "the stack is
+overconfident out of era") was the harness flaw and is retracted.
 
 ## Headline (ALL bucket, h={H}, threshold = 0.60)
 
