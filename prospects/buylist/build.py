@@ -215,6 +215,12 @@ def main():
                     help="Drop players with > this many years of service "
                          "(snap_offset). Default 3 — we only buy through yip 3. "
                          "Pass -1 to disable the cap.")
+    ap.add_argument("--yip-cap-age", type=float, default=23.0,
+                    help="The --max-yip cap applies only to players aged >= this "
+                         "at the snap (default 23). Younger players are kept "
+                         "regardless of years in pro: an IFA signed at 16 is in "
+                         "his 5th pro year at 21, a college draftee of the same "
+                         "age in his 1st. Pass -1 to cap everyone.")
     ap.add_argument("--include-ifa", dest="include_ifa", action="store_true",
                     default=True,
                     help="Keep IFA (ifa_*) prospects in the buy list (default). "
@@ -361,10 +367,16 @@ def main():
     df = df[df["cur_level_2026"] != "MLB"].copy()
     print(f"Drop currently-MLB: {n2:,} -> {len(df):,}  "
           f"({n2-len(df):,} removed)")
-    if args.max_yip is not None and args.max_yip >= 0 \
-            and "snap_offset" in df.columns:
+    if args.max_yip is not None and args.max_yip >= 0             and "snap_offset" in df.columns:
         n3 = len(df)
-        df = df[df["snap_offset"] <= args.max_yip].copy()
+        over_cap = df["snap_offset"] > args.max_yip
+        if args.yip_cap_age is not None and args.yip_cap_age >= 0                 and "age_at_snap" in df.columns:
+            # 2026-09-19: the cap is about org veterans, not early starters.
+            exempt = (df["age_at_snap"] < args.yip_cap_age) & over_cap
+            over_cap &= ~exempt
+            print(f"  yip cap exempts players under {args.yip_cap_age:g}: "
+                  f"{int(exempt.sum()):,} kept")
+        df = df[~over_cap].copy()
         print(f"Drop >{args.max_yip} yrs service (snap_offset): "
               f"{n3:,} -> {len(df):,}  ({n3-len(df):,} removed)")
 

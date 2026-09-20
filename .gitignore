@@ -127,3 +127,9 @@ runs/exp_*/**/*.npz
 runs/exp_*/**/*_long.csv
 runs/exp_*/**/*_partial/
 reference/*.bak*
+
+# Walk-forward / bake-off caches: regeneratable, 100MB+ each (2026-09-20)
+runs/exp_*/**/oof_fold*.csv
+runs/exp_*/**/*_long.csv
+runs/exp_*/**/*_partial/
+runs/exp_*_leaky_*/
