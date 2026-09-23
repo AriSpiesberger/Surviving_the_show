@@ -210,13 +210,21 @@ def main():
     ap.add_argument("--end", type=int, default=2026)
     ap.add_argument("--sleep", type=float, default=3.0)
     ap.add_argument("--force", action="store_true",
-                    help="Re-fetch even if board.html cache exists")
+                    help="Re-fetch even if board.html cache exists (current season only: finished "
+                         "seasons are frozen, see tools/fetch_fangraphs_board_browser.frozen_years)")
     ap.add_argument("--parse-only", action="store_true",
                     help="Re-parse cached board.html without hitting network")
     args = ap.parse_args()
 
     RAW_DIR.mkdir(parents=True, exist_ok=True)
     PARSED_DIR.mkdir(parents=True, exist_ok=True)
+    if args.force and not args.parse_only:
+        from datetime import date
+        yrs = [args.year] if args.year else list(range(args.start, args.end + 1))
+        past = [y for y in yrs if y < date.today().year and (RAW_DIR / str(y) / "board.html").exists()]
+        if past:
+            raise SystemExit(f"refusing to --force re-fetch finished season(s) {past}: FanGraphs "
+                             f"prunes graduates from past boards, which leaks the debut label")
 
     if args.parse_only:
         _parse_only()

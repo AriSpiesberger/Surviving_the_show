@@ -21,6 +21,8 @@ import sqlite3
 import unicodedata
 from pathlib import Path
 
+import json
+
 import numpy as np
 import pandas as pd
 
@@ -86,12 +88,37 @@ def gnum(df, col):
         else pd.Series(np.nan, index=df.index)
 
 
+CODES_JSON = config.FANGRAPHS_DIR / "category_codes.json"
+_CODES: dict = {}
+
+
+def _load_codes() -> dict:
+    global _CODES
+    if not _CODES and CODES_JSON.exists():
+        _CODES = json.loads(CODES_JSON.read_text(encoding="utf-8"))
+    return _CODES
+
+
 def gcode(df, col):
-    """Stable integer code for a nominal column; NaN stays NaN."""
+    """Stable integer code for a nominal column; NaN stays NaN.
+
+    Codes come from an APPEND-ONLY vocabulary persisted in category_codes.json: a value keeps
+    its code forever and new values are appended. (2026-09-22: this used pandas category
+    codes, which are assigned by sorted order over the whole frame, so one new category
+    anywhere renumbered every row — player_type 4/5 became 2/3 after a board refresh. Models
+    trained on one build would have been scored with the other build's meanings.)"""
     if col not in df.columns:
         return pd.Series(np.nan, index=df.index)
-    cc = df[col].astype("category").cat.codes.astype(float)
-    return cc.where(cc >= 0)
+    vocab = _load_codes().setdefault(col, {})
+    vals = df[col]
+    for v in sorted({str(x) for x in vals.dropna().unique()} - set(vocab)):
+        vocab[v] = len(vocab)
+    return vals.map(lambda x: np.nan if pd.isna(x) else float(vocab[str(x)])).astype(float)
+
+
+def save_codes() -> None:
+    if _CODES:
+        CODES_JSON.write_text(json.dumps(_CODES, indent=1, sort_keys=True), encoding="utf-8")
 
 
 def build_fg():
@@ -193,6 +220,7 @@ def main():
             .dropna(subset=["season"]))
     allg["season"] = allg["season"].astype(int)
     allg.to_csv(OUT, index=False)
+    save_codes()
 
     txt = pd.concat([fg_txt, tw_txt], ignore_index=True).dropna(subset=["season"])
     txt["season"] = txt["season"].astype(int)

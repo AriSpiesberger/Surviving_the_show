@@ -178,6 +178,13 @@ def _feature_sig(db_path: str | None = None) -> str:
     bl = REPO_ROOT / "reference" / "milb_baselines.json"
     if bl.exists():
         parts.append(bl.read_bytes())
+    # 2026-09-22: the scouting grades feed ~74 panel features but were not part of the
+    # signature, so a board refresh left the panel cache (and every model built on it)
+    # silently stale while live scoring read the new file.
+    from prospects import config as _cfg
+    for f in (_cfg.SCOUTING_GRADES, _cfg.FANGRAPHS_DIR / "category_codes.json"):
+        if Path(f).exists():
+            parts.append(Path(f).read_bytes())
     code = hashlib.sha1(b"".join(parts)).hexdigest()[:10]
 
     names = list(scouting.FEATURE_NAMES) + list(windowed.FEATURE_NAMES)
