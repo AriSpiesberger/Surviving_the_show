@@ -83,7 +83,7 @@ NON_BLOCKING = {"evaluate"}
 #     prospects-refresh --from split --skip hazards --skip prod \
 #                       --skip calibrators --skip buylist
 STEP_ORDER = ["tests", "backup", "pull", "repair", "mlb_seasons", "outcomes",
-              "birthdates", "biometrics", "woba", "percentiles", "snapshot",
+              "birthdates", "ages", "biometrics", "woba", "percentiles", "snapshot",
               "baselines", "split", "oof", "evaluate", "hazards", "prod",
               "calibrators", "buylist"]
 
@@ -200,6 +200,11 @@ def build_plan(args) -> list[tuple[str, str, object]]:
         ("birthdates", "backfill birth_date + derive age_during_season",
          _py("prospects.data.backfills.birthdate_backfill_people",
              "--db", "prospects.db", "--apply")),
+        # Needs birth dates + ages: deletes careers welded onto a young namesake (a debut
+        # at 12, AAA at 11). They were fake positives in training and hid real prospects
+        # from the sheet as "already debuted" (Tony Blanco Jr., Jose Pirela, ...).
+        ("ages", "remove impossible-age careers welded onto namesakes",
+         _py("prospects.data.backfills.repair_impossible_ages", "--db", "prospects.db")),
         # height / weight / bats / throws. Same story as the birthdates:
         # the script existed and had never been wired in, leaving bats_L,
         # bats_S and throws_L dead and height/weight at 43%.

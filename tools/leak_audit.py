@@ -193,6 +193,18 @@ mlb_side = [n for n in FEATURE_NAMES
             and not n.lower().startswith(("career_milb_", "career_max_"))]
 report(not mlb_side, "MLB-side feature names", f"{mlb_side or 'none'}")
 
+# ---- 3b. impossible ages (welded namesake careers) ------------------------
+_c = sqlite3.connect(DB)
+young = _c.execute("SELECT COUNT(*) FROM season_stats WHERE age_during_season < 15").fetchone()[0]
+early = _c.execute(
+    "SELECT COUNT(*) FROM career_outcomes o JOIN prospects p USING(player_id) "
+    "WHERE o.mlb_debut_year IS NOT NULL AND p.birth_date IS NOT NULL "
+    "AND o.mlb_debut_year < CAST(substr(p.birth_date,1,4) AS INTEGER) + 17").fetchone()[0]
+_c.close()
+report(young == 0 and early == 0, "impossible ages",
+       f"season rows before age 15: {young}; MLB debuts before age 17: {early} "
+       f"(fix: data/backfills/repair_impossible_ages)")
+
 # ---- 4. identity across the split ------------------------------------------
 con = sqlite3.connect(DB)
 P = pd.read_sql("select player_id, name, birth_date, mlbam_id from prospects", con)
