@@ -75,11 +75,12 @@ def norm_name(name: str) -> str:
         return ""
     return f"{toks[0]} {toks[-1]}" if len(toks) >= 2 else toks[0]
 
-RANKINGS_CSV = ROOT / "data" / "baseballcube_team_rankings.csv"
-XREF_CSV = ROOT / "data" / "baseballcube_player_xref.csv"
+RANKINGS_CSV = ROOT / "reference" / "baseballcube" / "team_rankings.csv"
+XREF_CSV = ROOT / "reference" / "baseballcube" / "player_xref.csv"
 PROSPECTS_CSV = ROOT / "db_dump" / "prospects.csv"
 PROSPECTS_DB = ROOT / "prospects.db"
-OUT_CSV = ROOT / "data" / "baseballcube_rankings_history.csv"
+# The file data/sources/rankings.py loads into rankings_history.
+OUT_CSV = ROOT / "reference" / "baseballcube" / "rankings_history.csv"
 
 OUT_FIELDS = [
     "player_id", "as_of", "source", "overall_rank", "org_rank", "list_size",

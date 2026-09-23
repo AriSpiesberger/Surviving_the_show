@@ -67,7 +67,9 @@ SOURCE_NAMES = {
     "FG": "FanGraphs",
 }
 
-DEFAULT_CSV = REPO_ROOT / "data" / "baseballcube_team_rankings.csv"
+# 2026-09-21: was data/baseballcube_team_rankings.csv (pre-runs/ layout), which
+# nothing downstream read — data/sources/rankings.py loads the reference/ copy.
+DEFAULT_CSV = REPO_ROOT / "reference" / "baseballcube" / "team_rankings.csv"
 
 # CSV schema. tbc_player_id is TBC's internal id (for later MLBAM mapping).
 FIELDNAMES = [
