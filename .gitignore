@@ -133,3 +133,7 @@ runs/exp_*/**/oof_fold*.csv
 runs/exp_*/**/*_long.csv
 runs/exp_*/**/*_partial/
 runs/exp_*_leaky_*/
+
+# local restore points written before data repairs
+*.bak_*.csv
+*.bak_*
