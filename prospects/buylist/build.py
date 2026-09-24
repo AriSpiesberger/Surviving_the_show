@@ -174,6 +174,10 @@ def main():
     ap.add_argument("--long", "--snap-long", dest="long",
                     default=DEFAULT_LONG)
     ap.add_argument("--xgb", default=DEFAULT_XGB)
+    ap.add_argument("--thresholds-out", default=None,
+                    help="where computed per-yip thresholds are written (default: the "
+                         "production yip_thresholds_p<NN>.json). Side-by-side builds (v3) "
+                         "write their own file so they never overwrite production's.")
     ap.add_argument("--xgb-ceiling", default=None,
                     help="Legacy: single model for both est+star.")
     ap.add_argument("--xgb-est", default=None,
@@ -401,7 +405,8 @@ def main():
                 target=args.precision, calibrators=args.calibrators,
                 db=args.db, verbose=False)
             ymap = {int(k): float(v) for k, v in thr.items()}
-            out = _RUN.yip_thresholds(int(round(args.precision * 100)))
+            out = (Path(args.thresholds_out) if args.thresholds_out
+                   else _RUN.yip_thresholds(int(round(args.precision * 100))))
             out.parent.mkdir(parents=True, exist_ok=True)
             _json.dump(thr, open(out, "w"), indent=2)
             src = (f"P{int(round(args.precision*100))} per-yip, computed on "

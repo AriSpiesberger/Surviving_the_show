@@ -228,11 +228,19 @@ report(len(fit & val) == 0 and straddle == 0, "identity across fit/val",
 
 # ---- 5. deployed bundles ----------------------------------------------------
 banned = {f"scout_{c}" for c in getattr(grades, "_BANNED_COLS", set())}
-for f in sorted(RUN.models.glob("joint_xgb_v2.[45].pkl")):
+for f in sorted(RUN.models.glob("joint_xgb_v2.[45].pkl")) + sorted(RUN.models.glob("v3*.pkl")):
     with open(f, "rb") as fh:
         bundle = pickle.load(fh)
-    hit = [n for n in bundle.get("keep_raw", []) if n.replace("rw_", "", 1) in banned]
+    names = set(bundle.get("keep_raw", [])) | set(bundle.get("feature_names", []))
+    hit = sorted(n for n in names if n.replace("rw_", "", 1) in banned)
     report(not hit, f"bundle {f.name}", f"banned features inside: {hit or 'none'}")
+    if bundle.get("kind") == "v3_seq_gbm":
+        # the sequence encoder reads season_stats directly: it must see no MLB rows and no
+        # outcome columns (Tokens selects level != 'MLB' and only the per-season stat NUM list)
+        from prospects.model.train.exp_seq_d import NUM
+        bad = [c for c in NUM if any(k in c for k in ("debut", "mlb", "service", "war"))]
+        report(not bad, f"{f.name} encoder inputs", f"outcome-like encoder columns: {bad or 'none'}")
+        report(Path(bundle["base_xgb"]).exists(), f"{f.name} base bundle", bundle["base_xgb"])
 hz = RUN.models / "hazards.pkl"
 if hz.exists():
     with open(hz, "rb") as fh:

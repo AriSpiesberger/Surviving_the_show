@@ -66,8 +66,8 @@ EMB = HMAX_ENC if SEQ_OUT == "logits" else LATENT
 class Tokens:
     """All non-MLB season rows, sorted by (player, year, level); as-of slicing by year."""
 
-    def __init__(self):
-        con = sqlite3.connect(DB)
+    def __init__(self, db=None):
+        con = sqlite3.connect(db or DB)
         cols = ", ".join(NUM)
         df = pd.read_sql(f"SELECT player_id, season_year, level, {cols} FROM season_stats "
                          "WHERE level != 'MLB' AND season_year IS NOT NULL", con)

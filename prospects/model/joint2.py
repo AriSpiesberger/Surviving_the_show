@@ -265,6 +265,9 @@ def score_trajectory(xgb_pkl: str | Path, df: pd.DataFrame,
     legacy v2.1c scaler bundles. Returns (scored_df, bundle)."""
     with open(xgb_pkl, "rb") as fh:
         bundle = pickle.load(fh)
+    if bundle.get("kind") == "v3_seq_gbm":   # v3: encoder + per-event bags over a base bundle
+        from prospects.model.v3 import score_v3
+        return score_v3(bundle, df, db)
     if is_bag_bundle(bundle):
         keep_raw = list(bundle.get("keep_raw", []))
         if keep_raw:
