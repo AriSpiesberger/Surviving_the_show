@@ -200,10 +200,15 @@ early = _c.execute(
     "SELECT COUNT(*) FROM career_outcomes o JOIN prospects p USING(player_id) "
     "WHERE o.mlb_debut_year IS NOT NULL AND p.birth_date IS NOT NULL "
     "AND o.mlb_debut_year < CAST(substr(p.birth_date,1,4) AS INTEGER) + 17").fetchone()[0]
+from prospects.data.backfills.repair_impossible_rankings import _BAD_RH, MIN_RANK_AGE
+bad_rank = len(_c.execute(_BAD_RH, {"age": MIN_RANK_AGE}).fetchall())
 _c.close()
 report(young == 0 and early == 0, "impossible ages",
        f"season rows before age 15: {young}; MLB debuts before age 17: {early} "
        f"(fix: data/backfills/repair_impossible_ages)")
+report(bad_rank == 0, "impossible rankings",
+       f"list rankings before age {MIN_RANK_AGE} or on/before the draft year: {bad_rank} "
+       f"(fix: data/backfills/repair_impossible_rankings)")
 
 # ---- 4. identity across the split ------------------------------------------
 con = sqlite3.connect(DB)

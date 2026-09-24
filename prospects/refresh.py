@@ -83,7 +83,7 @@ NON_BLOCKING = {"evaluate"}
 #     prospects-refresh --from split --skip hazards --skip prod \
 #                       --skip calibrators --skip buylist
 STEP_ORDER = ["tests", "backup", "pull", "repair", "mlb_seasons", "outcomes",
-              "birthdates", "ages", "biometrics", "woba", "percentiles", "snapshot",
+              "birthdates", "ages", "rankings_ages", "biometrics", "woba", "percentiles", "snapshot",
               "baselines", "split", "oof", "evaluate", "hazards", "prod",
               "calibrators", "buylist"]
 
@@ -205,6 +205,11 @@ def build_plan(args) -> list[tuple[str, str, object]]:
         # from the sheet as "already debuted" (Tony Blanco Jr., Jose Pirela, ...).
         ("ages", "remove impossible-age careers welded onto namesakes",
          _py("prospects.data.backfills.repair_impossible_ages", "--db", "prospects.db")),
+        # Same failure in the rankings linker: a veteran's list rankings on a young namesake
+        # (Tony Blanco Jr. wore his father's 2001 top-100). Drops rankings dated before age 15
+        # or on/before the draft year, then rebuilds the top-100 / top-25 labels.
+        ("rankings_ages", "remove rankings welded onto namesakes; rebuild top-100 labels",
+         _py("prospects.data.backfills.repair_impossible_rankings", "--db", "prospects.db")),
         # height / weight / bats / throws. Same story as the birthdates:
         # the script existed and had never been wired in, leaving bats_L,
         # bats_S and throws_L dead and height/weight at 43%.
