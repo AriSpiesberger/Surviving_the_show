@@ -132,8 +132,18 @@ def run_step(label: str, cmd: list[str], cwd: Path,
     return proc.returncode
 
 
+def publish_cmd(extra: list[str] | None = None) -> list[str]:
+    """The PUBLISHED buy list (2026-09-23): scored by v3.5 when its bundle exists (sequence
+    encoder + per-event component blends over v2.5, recalibrated, v3's own held-out per-yip
+    thresholds), else by v2.5 (sheet_cmd). `extra` may override --out-all / --out-final."""
+    if (_RUN.models / "v3.5.pkl").exists():
+        from prospects.deploy.v3_sidebyside import v3_sheet_cmd
+        return v3_sheet_cmd(_RUN.buy_list_all, _RUN.buy_list_final, extra)
+    return sheet_cmd(extra)
+
+
 def sheet_cmd(extra: list[str] | None = None) -> list[str]:
-    """The production buy list: scored by v2.5 (the v2.4 recipe refit on 100% of
+    """The v2.5 buy list (published until 2026-09-23, now the fallback): scored by v2.5 (the v2.4 recipe refit on 100% of
     players, val included), filtered by the per-yip thresholds computed on the
     HELD-OUT v2.4 run (recomputing them with v2.5 would be in-sample), priced
     from the latest daily pull when there is one."""
@@ -208,9 +218,19 @@ def run_retrain() -> int:
         ("retrain/v2.5-promote", [py, "-m", "prospects.model.train.promote_v22",
                                   "--source", v25_dir, "--bag-name", "joint_xgb_exp5_bag.pkl",
                                   "--version", "v2.5"], None),
-        # Gate: no sheet from a model that fails the leak / freshness audit.
+    ]
+    # v3 (adopted 2026-09-23): encoder + per-event component blends over v2.4 (held-out, for
+    # thresholds) and v2.5 (100%, for the sheet). Adds ~2.5 h to the retrain.
+    from prospects.deploy.v3_sidebyside import v3_build_steps
+    steps += [(f"retrain/{label}", cmd, None) for label, cmd in v3_build_steps(threads="16")]
+    steps += [
+        # Gate: no sheet from a model that fails the leak / freshness audit (covers v3*.pkl).
         ("retrain/leak-audit", [py, str(REPO_ROOT / "tools" / "leak_audit.py")], None),
-        ("retrain/v2.5-buylist", sheet_cmd(), None),
+        # v2.5 fallback sheet, written next to the published one
+        ("retrain/v2.5-buylist", sheet_cmd([
+            "--out-all", str(_RUN.buy_list_all).replace("all_scored", "all_scored_v25"),
+            "--out-final", str(_RUN.buy_list_final).replace("final", "final_v25")]), None),
+        ("retrain/v3-buylist", publish_cmd(), None),
     ]
     for label, cmd, threads in steps:
         rc = run_step(label, cmd, REPO_ROOT, threads=threads)
@@ -292,7 +312,7 @@ def main():
         if rc != 0:
             sys.exit(1)
         if not args.score_only:
-            rc = run_step("buylist", sheet_cmd([
+            rc = run_step("buylist", publish_cmd([
                 "--long", str(snap_long),
                 "--out-all", str(_RUN.buy_list_all),
                 "--out-final", str(_RUN.buy_list_final),
@@ -308,7 +328,7 @@ def main():
         # The weekly buy list is scored with the promoted v2.3 bag +
         # calibrators (timing comes from the calibrated debut CDF inside
         # buylist.build; the Lasso --timing path is legacy-bundle only).
-        rc = run_step("buylist", sheet_cmd([
+        rc = run_step("buylist", publish_cmd([
             "--long", str(snap_long),
             "--out-all", str(_RUN.buy_list_all),
             "--out-final", str(_RUN.buy_list_final),
