@@ -83,7 +83,7 @@ NON_BLOCKING = {"evaluate"}
 #     prospects-refresh --from split --skip hazards --skip prod \
 #                       --skip calibrators --skip buylist
 STEP_ORDER = ["tests", "backup", "pull", "repair", "mlb_seasons", "outcomes",
-              "birthdates", "ages", "rankings_ages", "biometrics", "woba", "percentiles", "snapshot",
+              "birthdates", "ages", "rankings_ages", "biometrics", "woba", "percentiles", "pre2005_context", "snapshot",
               "baselines", "split", "oof", "evaluate", "hazards", "prod",
               "calibrators", "buylist"]
 
@@ -220,6 +220,12 @@ def build_plan(args) -> list[tuple[str, str, object]]:
          _py("prospects.data.backfills.woba_backfill")),
         ("percentiles", "rank each row within its (level, year) cohort",
          _py("prospects.data.backfills.percentile_backfill")),
+        # The 1996-2004 draft classes (production since 2026-09-25) are a cohort, not whole
+        # leagues: re-rank their pct_* against the full-league cached splits after the
+        # in-DB ranking above overwrote them.
+        ("pre2005_context", "league-context percentiles for the 1996-2004 rows",
+         [sys.executable, "-u", str(REPO_ROOT / "tools" / "build_pre2005_context.py"),
+          "--start", "1996", "--db", "prospects.db"]),
         ("snapshot", "refresh prospects_snapshot.db", step_snapshot),
         # Baselines are league medians per level, read from the SNAPSHOT, so
         # they have to be rebuilt after the copy and before any feature is

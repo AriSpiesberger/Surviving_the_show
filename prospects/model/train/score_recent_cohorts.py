@@ -28,9 +28,10 @@ from prospects.model.pipelines import oof as oof_mod
 from prospects.model.pipelines.oof import _entry_year
 
 _RUN = config.run()
-DB = str(REPO_ROOT / "prospects_snapshot.db")
-DEFAULT_HAZARDS = (REPO_ROOT / "runs" / "hz0_fvfix2" / "scratch" / "oof"
-                   / "fold0_hazards.pkl")  # 328-contract (2026-09-08 fixes)
+DB = str(__import__("prospects.config", fromlist=["model_db"]).model_db())   # PROSPECT_MODEL_DB-aware (production: the snapshot)
+# this run's own val-excluded fold-0 hazards (the old runs/experiments/hz0_fvfix2 default was a stale
+# 329-feature contract and failed against the 326-feature builder, 2026-09-24)
+DEFAULT_HAZARDS = _RUN.scratch / "oof" / "fold0_hazards.pkl"
 OUT_CSV = _RUN.training / "recent_long.csv"
 
 

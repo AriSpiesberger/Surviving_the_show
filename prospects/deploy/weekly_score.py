@@ -172,7 +172,7 @@ def run_retrain() -> int:
     print(f"\n{'#'*70}\n# WEEKLY RETRAIN (held-out v2.4 for metrics, "
           f"100% v2.5 for the sheet)\n{'#'*70}", flush=True)
     py = sys.executable
-    scratch = REPO_ROOT / "runs" / "current" / "scratch"
+    scratch = _RUN.scratch
     v24_dir, v25_dir = str(scratch / "v24_build"), str(scratch / "v25_full_build")
     aug_long = str(_RUN.training / "recent_long.csv")
     all_long = str(_RUN.training / "oof_all_long.csv")

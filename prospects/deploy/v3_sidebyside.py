@@ -33,7 +33,7 @@ DEFAULT_ENCODER = "transformer_rank"   # adopted 2026-09-23 (full-size screen, e
 def v3_build_steps(encoder=DEFAULT_ENCODER, seeds=5, threads="16", spec=None, build=True):
     """(label, cmd) steps: held-out v3 (base v2.4), v3.5 (base v2.5), recalibration, v3's own
     per-yip thresholds. Shared by this runner and prospects.deploy.weekly_score."""
-    py, models, scratch = sys.executable, _RUN.models, REPO_ROOT / "runs" / "current" / "scratch"
+    py, models, scratch = sys.executable, _RUN.models, _RUN.scratch
     aug = str(_RUN.training / "recent_long.csv")
     all_long = str(_RUN.training / "oof_all_long.csv")
     ev = (["--spec", *spec] if spec else []) + ["--seeds", str(seeds), "--threads", str(threads),

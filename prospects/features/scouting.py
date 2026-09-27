@@ -372,7 +372,9 @@ def compute_baselines(
         }
     """
     with db._connect() as conn:
-        rows = [dict(r) for r in conn.execute("SELECT * FROM season_stats").fetchall()]
+        # 2005+ only: the 1996-2004 draft-class layer (tools/build_pre2005_ext.py, 2026-09-25) holds
+        # just the draftee cohort, not whole leagues, so it would bias league medians
+        rows = [dict(r) for r in conn.execute("SELECT * FROM season_stats WHERE season_year >= 2005").fetchall()]
 
     hit_by_level: dict[str, dict[str, list[float]]] = {}
     pit_by_level: dict[str, dict[str, list[float]]] = {}

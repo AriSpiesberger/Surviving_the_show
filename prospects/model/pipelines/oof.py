@@ -70,6 +70,12 @@ from prospects.model.pipelines.stage_a import (
 # ---- paths ----
 from prospects import config
 from prospects.config import REPO_ROOT
+
+# First landmark (snapshot) year of the OOF panel: 1998 = two seasons after the first 1996 draft
+# class in the DB (tools/build_pre2005_ext.py, production since 2026-09-25; 2007 before that).
+# PROSPECT_MIN_LANDMARK overrides it for experiments.
+MIN_LANDMARK_YEAR = int(__import__("os").environ.get("PROSPECT_MIN_LANDMARK", "1998"))
+
 _RUN = config.run()
 SCRATCH = _RUN.scratch / "oof"
 TRAIN_DIR = _RUN.training
@@ -361,7 +367,7 @@ def stage_panel(db_path: str, max_draft_year: int,
         if p.get("draft_year") is None and sy > max_draft_year:
             n_ifa_capped += 1
             continue
-        lo = max(sy + 1, 2007)
+        lo = max(sy + 1, MIN_LANDMARK_YEAR)
         hi = MAX_OBS_YEAR - 1
         if lo > hi:
             continue
