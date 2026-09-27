@@ -45,8 +45,8 @@ if (Test-Path $EnvPath) {
 $env:DATA_DIR          = $RepoRoot
 $env:PROSPECT_DB       = Join-Path $RepoRoot 'prospects.db'
 $env:PRICES_DIR        = Join-Path $RepoRoot 'prices'
-$env:HOLDINGS_PATH     = Join-Path $RepoRoot 'holdings.csv'
-$env:ALERTS_STATE_PATH = Join-Path $RepoRoot 'alerts_state.json'
+$env:HOLDINGS_PATH     = Join-Path $RepoRoot 'portfolio\holdings.csv'
+$env:ALERTS_STATE_PATH = Join-Path $RepoRoot 'portfolio\alerts_state.json'
 # Force UTF-8 stdout/stderr so debut-alert subject lines containing
 # emojis / accented names don't crash on cp1252 consoles.
 $env:PYTHONIOENCODING  = 'utf-8'

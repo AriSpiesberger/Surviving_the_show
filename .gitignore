@@ -137,3 +137,25 @@ runs/exp_*_leaky_*/
 # local restore points written before data repairs
 *.bak_*.csv
 *.bak_*
+
+# =============================================================================
+# 2026-09-27 layout: runs/{current,backups,experiments}. Backups are local
+# restore points; experiments keep only their small result files.
+# =============================================================================
+runs/backups/
+runs/experiments/**/*.pkl
+runs/experiments/**/*.npz
+runs/experiments/**/*.pt
+runs/experiments/**/*_long.csv
+runs/experiments/**/*_partial/
+
+# Re-fetchable API caches behind the derived reference features (the derived
+# *_features.csv files and the pre-2005 rankings / debuts are tracked).
+reference/transactions/raw/
+reference/awards/raw/
+reference/showcase/futures/
+reference/showcase/winter/
+reference/pre2005/seasons/
+reference/pre2005/drafts/
+# experiment output (kNN comps screen, negative 2026-09-24)
+reference/knn/

@@ -33,7 +33,7 @@ from prospects.core.schema import SeasonStats
 from prospects.core.storage import ProspectDB
 
 
-MILB_CSV_PATH = "milb_season_stats.csv"  # tee-output sidecar for crash recovery
+MILB_CSV_PATH = "logs/pull_sidecars/milb_season_stats.csv"  # tee-output sidecar for crash recovery
 
 
 class _CsvAppender:

@@ -81,7 +81,7 @@ def phase_draft(db: ProspectDB, start: int, end: int) -> None:
     try:
         from prospects.data.sources.draft_align import pull_draft_aligned
         pull_draft_aligned(db, start_year=start, end_year=end, verbose=True,
-                           report_path="draft_align_audit.csv")
+                           report_path="logs/pull_sidecars/draft_align_audit.csv")
     except FileNotFoundError as e:
         # No cache (ncaa_bbStats not installed): fall back to cache-less paths.
         print(f"[draft] aligned pull unavailable ({e}); trying pybaseball scrape")

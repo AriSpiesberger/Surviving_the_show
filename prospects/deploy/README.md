@@ -33,8 +33,8 @@ Four scheduled jobs:
 
 ```
 python -m prospects.deploy.daily_data --season 2026 --db prospects.db
-python -m prospects.deploy.daily_prices --buy-list buy_list_v1.17_FINAL.csv --db prospects.db --out-dir prices --holdings holdings.csv
-python -m prospects.deploy.alerts --holdings holdings.csv --prices-dir prices --state alerts_state.json --dry-run
+python -m prospects.deploy.daily_prices --buy-list buy_list_v1.17_FINAL.csv --db prospects.db --out-dir prices --holdings portfolio/holdings.csv
+python -m prospects.deploy.alerts --holdings portfolio/holdings.csv --prices-dir prices --state portfolio/alerts_state.json --dry-run
 ```
 
 ## What scope the pricing covers

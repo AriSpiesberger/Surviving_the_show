@@ -1,7 +1,7 @@
 """Promote the exp4 champion ("F") to v2.2 artifacts under runs/current/models.
 
 - Backs up runs/current/{models,evaluation,buy_lists} to
-  runs/backup_v2.1c_<date>/ first (ground state restorable by copying back).
+  runs/backups/backup_v2.1c_<date>/ first (ground state restorable by copying back).
 - Writes models/joint_xgb_v2.2.pkl  (5-seed monotone bag + raw-feature list)
   and models/calibrators_v2.2.pkl   (per-event h/yip calibrators, re-homed
   from the experiment module to prospects.model.joint2 so prod never imports
@@ -27,9 +27,9 @@ _RUN = config.run()
 # exp5 = the exp4 recipe retrained with FULL-coverage raw features (the
 # deployable variant — exp4's panel-cache attachment left pre-2007 and
 # post-panel snaps NaN, which deployment cannot reproduce).
-SOURCE = REPO_ROOT / "runs" / "exp_cdf_timing5"
+SOURCE = REPO_ROOT / "runs" / "experiments" / "exp_cdf_timing5"
 BAG_PKL = "joint_xgb_exp5_bag.pkl"
-BACKUP = REPO_ROOT / "runs" / f"backup_v2.1c_{time.strftime('%Y%m%d')}"
+BACKUP = REPO_ROOT / "runs" / "backups" / f"backup_v2.1c_{time.strftime('%Y%m%d')}"
 
 
 def main():

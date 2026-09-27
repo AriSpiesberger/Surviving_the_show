@@ -18,7 +18,7 @@ Usage (local):
         --buy-list results/buy_lists/buy_list_v1.18_FINAL.csv \\
         --db prospects.db \\
         --out-dir prices \\
-        --holdings holdings.csv
+        --holdings portfolio/holdings.csv
 """
 from __future__ import annotations
 

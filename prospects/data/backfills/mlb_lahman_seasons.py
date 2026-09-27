@@ -77,7 +77,7 @@ def _split(full: str) -> tuple[str, str]:
 
 def pull_mlb_seasons_from_lahman(
     db: ProspectDB,
-    csv_path: Optional[str] = "mlb_season_stats.csv",
+    csv_path: Optional[str] = "logs/pull_sidecars/mlb_season_stats.csv",
     verbose: bool = True,
 ) -> int:
     """
