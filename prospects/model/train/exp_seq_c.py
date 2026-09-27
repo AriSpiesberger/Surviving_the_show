@@ -199,7 +199,7 @@ def main():
     args = ap.parse_args()
     torch.set_num_threads(args.threads)
     tag = f"{args.arch}{'_rank' if args.rank_tokens else ''}"
-    out = Path(args.out or REPO_ROOT / "runs" / "exp_seq_c" / f"embeddings_{tag}.npz")
+    out = Path(args.out or REPO_ROOT / "runs" / "experiments" / "exp_seq_c" / f"embeddings_{tag}.npz")
     t0 = time.time()
     tick = lambda m: print(f"[C:{tag}] {m}  [{(time.time() - t0) / 60:.1f}m]", flush=True)
 

@@ -23,7 +23,7 @@ calibrators, labeled OPTIMISTIC in the output). Experiment C trains on the
 same FEAT_COND rows; early stopping uses an internal 10% player slice of fit
 (never val), then refits on 100% of fit at that round count.
 
-Writes to runs/exp_cdf_timing/ (models + metric CSVs + summary.json).
+Writes to runs/experiments/exp_cdf_timing/ (models + metric CSVs + summary.json).
 Touches nothing under runs/current/.
 
 Usage:
@@ -61,7 +61,7 @@ EPS = 1e-6
 
 _RUN = config.run()
 DB = str(config.model_db())
-OUT_DIR = REPO_ROOT / "runs" / "exp_cdf_timing"
+OUT_DIR = REPO_ROOT / "runs" / "experiments" / "exp_cdf_timing"
 
 XGB_PARAMS_BASE = {
     "tree_method": "hist",

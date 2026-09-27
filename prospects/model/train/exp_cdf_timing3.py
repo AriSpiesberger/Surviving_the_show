@@ -24,7 +24,7 @@ Stages:
 Raw columns are prefixed "rw_" (names like years_in_pro collide with
 FEAT_BASE). Rows with no panel-cache match keep NaN (XGB routes missing).
 
-Writes runs/exp_cdf_timing3/. Touches nothing under runs/current/.
+Writes runs/experiments/exp_cdf_timing3/. Touches nothing under runs/current/.
 
 Usage:
     python -m prospects.model.train.exp_cdf_timing3            # full
@@ -62,8 +62,8 @@ from prospects.model.train.exp_cdf_timing2 import (
 
 _RUN = config.run()
 DB = str(config.model_db())
-OUT_DIR = REPO_ROOT / "runs" / "exp_cdf_timing3"
-EXP2_DIR = REPO_ROOT / "runs" / "exp_cdf_timing2"
+OUT_DIR = REPO_ROOT / "runs" / "experiments" / "exp_cdf_timing3"
+EXP2_DIR = REPO_ROOT / "runs" / "experiments" / "exp_cdf_timing2"
 PANEL_CACHE = REPO_ROOT / "runs" / "current" / "scratch" / "oof" / "panel_cache.npz"
 
 

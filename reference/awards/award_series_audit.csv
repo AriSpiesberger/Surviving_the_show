@@ -1,0 +1,320 @@
+award,name,min,max,nunique,coverage,kept
+AAACMVP,Bobby Murcer Triple-A Championship MVP,2008,2025,16,0.88,False
+AAAEPOMP,INT Pitcher of the Month,2021,2026,6,0.31,False
+AAAWPOMP,PCL Pitcher of the Month,2021,2026,6,0.31,False
+AACPOMP,TEX Pitcher of the Month,2021,2026,6,0.31,False
+AANEPOMP,EAS Pitcher of the Month,2021,2026,6,0.31,False
+AASPOMP,SOU Pitcher of the Month,2021,2026,6,0.31,False
+ABLFMVP,ABL Finals MVP,2024,2025,2,0.12,False
+ACLPOMP,ACL Pitcher of the Month,2021,2026,6,0.31,False
+ACLPOWH,ACL Player of the Week,2021,2026,6,0.31,False
+ACLPOWP,ACL Pitcher of the Week,2021,2026,6,0.31,False
+ACLPOY,ACL Pitcher of the Year,2022,2026,5,0.25,False
+ACLPROSPECT,ACL Top MLB Prospect,2023,2026,4,0.19,False
+AFLBOY,AFL Breakout Player of the Year,2021,2025,5,0.31,False
+AFLDOY,AFL Defensive Player of the Year,2021,2025,5,0.31,False
+AFLHOY,AFL Hitter of the Year,2021,2025,5,0.31,False
+AFLMVP,AFL Most Valuable Player,2002,2025,23,0.94,True
+AFLPOWH,AFL Player of the Week,2005,2025,20,0.94,True
+AFLPOWP,AFL Pitcher of the Week,2005,2025,18,0.81,False
+AFLPOY,AFL Pitcher of the Year,2021,2025,5,0.31,False
+AFLPSAS,AFL All-Prospect Team,2005,2018,14,0.56,False
+AFLROY,AFL Reliever of the Year,2021,2025,5,0.31,False
+AFLRS,AFL Rising Stars,2006,2025,19,0.94,True
+AFLRSMVP,AFL Rising Stars MVP,2010,2025,15,0.94,True
+AFLSPORT,AFL Dernell Stenson Sportsmanship Award,2004,2025,21,0.94,True
+ALPBEOSAS,ALPB End-of-Season All-Star,2015,2025,9,0.56,False
+ALPBGG,ALPB Defensive Player of the Year,2015,2023,8,0.5,False
+ALPBMOY,ALPB Manager the Year,2015,2023,8,0.5,False
+ALPBMSAS,ALPB Mid-Season All-Star,2010,2023,11,0.69,False
+ALPBPIOM,ALPB Pitcher of the Month,2018,2023,5,0.31,False
+ALPBPIOY,ALPB Pitcher the Year,1998,2023,25,0.81,False
+ALPBPLOM,ALPB Player of the Month,2018,2023,5,0.31,False
+ALPBPLOY,ALPB Player the Year,1998,2023,25,0.81,False
+ALPBRWBADT,"ALPB Red, White & Blue All-Defensive Team",2021,2023,3,0.19,False
+APPMOY,APP Manager of the Year,2004,2019,16,0.62,False
+APPPIOY,APP Pitcher of the Year,2004,2018,15,0.56,False
+APPPLOY,APP Player of the Year,2004,2018,15,0.56,False
+APPPOM,MiLB.com APP Player of the Month,2011,2019,8,0.5,False
+APPPOWH,APP Player of the Week,2005,2019,15,0.62,False
+APPPOWP,APP Pitcher of the Week,2005,2019,15,0.62,False
+APPPSAS,APP Post-Season All-Star,2004,2019,16,0.62,False
+AZLMOY,ACL Manager of the Year,2004,2026,22,0.94,True
+AZLMVP,ACL Most Valuable Player,2004,2026,22,0.94,True
+AZLPOM,ACL Player of the Month,2011,2026,14,0.81,False
+AZLPSAS,ACL Post-Season All-Star,2004,2026,22,0.94,True
+BAAAAAS,Baseball America Triple-A All-Star,2005,2025,16,0.75,False
+BAAAXAS,Baseball America Double-A All-Star,2005,2025,16,0.75,False
+BADSLAS,Baseball America DSL All-Star,2017,2019,3,0.19,False
+BAHAXXAS,Baseball America High Class A All-Star,2005,2025,16,0.75,False
+BALAXXAS,Baseball America Low Class A All-Star,2005,2025,16,0.75,False
+BAMAAABH,MiLB.com Triple-A Best Hitter of the Year,2009,2011,2,0.06,False
+BAMAAABP,MiLB.com Triple-A Breakthrough Performer,2005,2005,1,0.0,False
+BAMAAAOP,MiLB.com Triple-A Offensive Player of the Year,2005,2008,4,0.0,False
+BAMAAAPP,MiLB.com Triple-A Best Playoff Performer,2005,2006,2,0.0,False
+BAMAAARP,MiLB.com Triple-A Relief Pitcher of the Year,2005,2011,6,0.06,False
+BAMAAASGP,MiLB.com Triple-A Best Single-Game Performer,2005,2011,6,0.06,False
+BAMAAASP,MiLB.com Triple-A Starting Pitcher of the Year,2005,2011,6,0.06,False
+BAMAAXBP,MiLB.com Double-A Breakthrough Performer,2005,2005,1,0.0,False
+BAMAAXOP,MiLB.com Double-A Offensive Player of the Year,2005,2008,4,0.0,False
+BAMAAXPP,MiLB.com Double-A Best Playoff Performer,2005,2006,2,0.0,False
+BAMAAXRP,MiLB.com Double-A Relief Pitcher of the Year,2005,2011,6,0.06,False
+BAMAAXSGP,MiLB.com Double-A Best Single-Game Performer,2005,2011,6,0.06,False
+BAMAAXSP,MiLB.com Double-A Starting Pitcher of the Year,2005,2011,6,0.06,False
+BAROAS,Baseball America Rookie All-Star,2005,2025,15,0.69,False
+BASSAS,Baseball America Short-Season All-Star,2005,2019,11,0.44,False
+BTSDMVP,Bricktown Showdown Most Valuable Player,2006,2007,2,0.0,False
+CALCOY,CAL Coach of the Year,2011,2019,7,0.44,False
+CALCSMVP,CAL Championship Series Most Valuable Player,2010,2017,7,0.44,False
+CALMOY,CAL Manager of the Year,2004,2026,22,0.94,True
+CALMSAS,CAL Mid-Season All-Star,2005,2019,15,0.62,False
+CALMVP,CAL Most Valuable Player,2004,2026,22,0.94,True
+CALPITCHOM,CAL Pitcher of the Month,2021,2026,6,0.31,False
+CALPOM,CAL Player of the Month,2011,2026,14,0.81,False
+CALPOWH,CAL Player of the Week,2005,2026,21,0.94,True
+CALPOWP,CAL Pitcher of the Week,2005,2026,21,0.94,True
+CALPOY,CAL Pitcher of the Year,2005,2026,20,0.88,False
+CALPROSPECT,CAL Top MLB Prospect,2021,2026,6,0.31,False
+CALPSAS,CAL Post-Season All-Star,2004,2026,22,0.94,True
+CALROY,CAL Rookie of the Year,2004,2019,15,0.62,False
+CALTOPS,CAL All-Star Game Top Star,2005,2019,12,0.44,False
+CARCSMVP,CAR Championship Series Most Valuable Player,2005,2016,9,0.31,False
+CARMOY,CAR Manager of the Year,2004,2026,22,0.94,True
+CARMSAS,CAR Mid-Season All-Star,2005,2019,15,0.62,False
+CARMVP,CAR Most Valuable Player,2004,2026,22,0.94,True
+CARPITCHOM,CAR Pitcher of the Month,2021,2026,6,0.31,False
+CARPOM,CAR Player of the Month,2009,2026,15,0.81,False
+CARPOWH,CAR Player of the Week,2005,2026,21,0.94,True
+CARPOWP,CAR Pitcher of the Week,2005,2026,21,0.94,True
+CARPOY,CAR Pitcher of the Year,2004,2026,22,0.94,True
+CARPROSPECT,CAR Top MLB Prospect,2021,2026,6,0.31,False
+CARPSAS,CAR Post-Season All-Star,2004,2026,22,0.94,True
+CARTOPS,CAR All-Star Game Top Star,2005,2019,10,0.31,False
+CSAS,Caribbean Series All-Star,2007,2025,18,0.94,True
+CSMOY,Caribbean Series Manager of the Year,2007,2025,18,1.0,True
+CSMVP,Caribbean Series MVP,1949,2025,66,0.94,True
+DSLMOY,DSL Manager of the Year,2004,2026,22,0.94,True
+DSLMSAS,DSL Mid-Season All-Star,2009,2026,10,0.5,False
+DSLMVP,DSL Most Valuable Player,2004,2026,22,0.94,True
+DSLPOMH,DSL Player of the Month,2021,2026,6,0.31,False
+DSLPOMP,DSL Pitcher of the Month,2021,2026,6,0.31,False
+DSLPOWH,DSL Player of the Week,2021,2026,6,0.31,False
+DSLPOWP,DSL Pitcher of the Week,2021,2026,6,0.31,False
+DSLPOY,DSL Pitcher of the Year,2004,2026,20,0.81,False
+DSLPROSPECT,DSL Top MLB Prospect,2023,2026,4,0.19,False
+DSLPSAS,DSL Post-Season All-Star,2004,2026,22,0.94,True
+DWLFMVP,DWL Finals MVP,2021,2025,5,0.31,False
+DWLMOY,DWL Manager of the Year,2007,2025,18,0.94,True
+DWLMVP,DWL Most Valuable Player,2007,2025,18,0.94,True
+DWLPOY,DWL Pitcher of the Year,2007,2025,18,0.94,True
+DWLROY,DWL Rookie of the Year,2007,2025,18,0.94,True
+EASPOM,EAS Player of the Month,2010,2026,16,0.94,True
+EASPOWH,EAS Player of the Week,2005,2026,21,0.94,True
+EASPOWP,EAS Pitcher of the Week,2005,2026,21,0.94,True
+ELMOY,EAS Manager of the Year,1998,2026,28,0.94,True
+ELMSAS,EAS Mid-Season All-Star,2005,2019,15,0.62,False
+ELMVP,EAS Most Valuable Player,1998,2026,28,0.94,True
+ELPMVP,EAS Playoffs Most Valuable Player,2005,2019,14,0.62,False
+ELPOY,EAS Pitcher of the Year,1998,2026,27,0.94,True
+ELPROSPECT,EAS Top MLB Prospect,2021,2026,6,0.31,False
+ELPSAS,EAS Post-Season All-Star,1998,2026,28,0.94,True
+ELROY,EAS Rookie of the Year,1998,2019,21,0.62,False
+ELTOPS,EAS All-Star Game Top Star,2005,2019,14,0.62,False
+FCLPOMP,FCL Pitcher of the Month,2021,2026,6,0.31,False
+FCLPOWH,FCL Player of the Week,2021,2026,6,0.31,False
+FCLPOWP,FCL Pitcher of the Week,2021,2026,6,0.31,False
+FCLPOY,FCL Pitcher of the Year,2022,2026,5,0.25,False
+FCLPROSPECT,FCL Top MLB Prospect,2023,2026,4,0.19,False
+FSLCOY,FSL Coach of the Year,2009,2019,10,0.56,False
+FSLMOY,FSL Manager of the Year,2009,2026,17,0.94,True
+FSLMSAS,FSL Mid-Season All-Star,2005,2019,15,0.62,False
+FSLMVP,FSL Most Valuable Player,2004,2026,22,0.94,True
+FSLMVPI,FSL Pitcher of the Year,2004,2026,22,0.94,True
+FSLPITCHOM,FSL Pitcher of the Month,2021,2026,6,0.31,False
+FSLPOM,FSL Player of the Month,2011,2026,14,0.81,False
+FSLPOWH,FSL Player of the Week,2005,2026,21,0.94,True
+FSLPOWP,FSL Pitcher of the Week,2005,2026,21,0.94,True
+FSLPROSPECT,FSL Top MLB Prospect,2021,2026,6,0.31,False
+FSLPSAS,FSL Post-Season All-Star,2004,2026,22,0.94,True
+FSLTOPS,FSL All-Star Game Top Star,2005,2019,12,0.44,False
+GCLMOY,FCL Manager of the Year,2004,2026,21,0.94,True
+GCLMVP,FCL Most Valuable Player,2008,2026,17,0.94,True
+GCLPOM,FCL Player of the Month,2011,2026,14,0.81,False
+GCLPSAS,FCL Post-Season All-Star,2004,2026,21,0.94,True
+HWBDPOY,HWB Defensive Player of the Year,2007,2008,2,0.0,False
+HWBMVP,HWB Most Valuable Player,2007,2008,2,0.0,False
+HWBOPOY,HWB Offensive Player of the Year,2007,2008,2,0.0,False
+HWBPOWH,HWB Player of the Week,2006,2006,1,0.0,False
+HWBPOWP,HWB Pitcher of the Week,2006,2006,1,0.0,False
+HWBPOY,HWB Pitcher of the Year,2007,2008,2,0.0,False
+HWBPSAS,HWB Post-Season All-Star,2006,2008,3,0.0,False
+ILMOY,INT Manager of the Year,1998,2025,26,0.88,False
+ILMSAS,INT Mid-Season All-Star,2005,2019,15,0.62,False
+ILMVP,INT Most Valuable Player,1998,2025,27,0.94,True
+ILMVPI,INT Pitcher of the Year,1998,2025,27,0.94,True
+ILPSAS,INT Post-Season All-Star,1998,2025,27,0.94,True
+ILROY,INT Rookie of the Year,1998,2019,22,0.62,False
+ILTOPS,"Triple-A All-Star Game Top Star, INT",2005,2019,15,0.62,False
+INTPOM,INT Player of the Month,2011,2026,14,0.81,False
+INTPOWH,INT Player of the Week,2005,2026,21,0.94,True
+INTPOWP,INT Pitcher of the Week,2005,2026,21,0.94,True
+INTPROSPECT,INT Top MLB Prospect,2021,2025,5,0.31,False
+LMPFMVP,Mexican Pacific League Finals MVP,2018,2025,8,0.5,False
+LMPMOY,Mexican Pacific League Manager of the Year,2008,2023,16,0.88,False
+LMPMVP,Mexican Pacific League MVP,2006,2024,19,0.94,True
+LMPPOY,Mexican Pacific League Pitcher of the Year,2006,2023,18,0.88,False
+LMPRELY,Mexican Pacific Relief Pitcher of the Year,2022,2023,2,0.12,False
+LMPROY,Mexican Pacific League Rookie of the Year,2006,2023,18,0.88,False
+MEXASMVP,MEX All-Star Game Most Valuable Player,2005,2026,20,0.88,False
+MEXCPOY,MEX Comeback Player of the Year,2002,2025,19,0.88,False
+MEXDOY,MEX Defensive Player of the Year,2021,2025,5,0.31,False
+MEXMOY,MEX Manager of the Year,2005,2025,20,0.94,True
+MEXMSAS,MEX Mid-Season All-Star,2006,2026,17,0.75,False
+MEXMVP,MEX Most Valuable Player,2005,2025,20,0.94,True
+MEXPOY,MEX Pitcher of the Year,2005,2025,20,0.94,True
+MEXPSAS,MEX Post-Season All-Star,2005,2005,1,0.0,False
+MEXPSMVP,MEX Finals Most Valuable Player,2005,2026,21,0.94,True
+MEXREOY,MEX Reliever of the Year,2005,2025,20,0.94,True
+MEXROY,MEX Rookie of the Year,2002,2025,20,0.88,False
+MIDPIOY,MID Pitcher of the Year ,2014,2026,7,0.38,False
+MIDPITCHOM,MID Pitcher of the Month,2021,2026,6,0.31,False
+MIDPOM,MID Player of the Month,2011,2026,14,0.81,False
+MIDPOWH,MID Player of the Week,2005,2026,21,0.94,True
+MIDPOWP,MID Pitcher of the Week,2005,2026,21,0.94,True
+MILBHRAAA,MiLB Joe Bauman Home Run Award Triple A,2013,2019,7,0.44,False
+MILBHRAAX,MiLB Joe Bauman Home Run Award Double A,2013,2019,7,0.44,False
+MILBHRAFX,MiLB Joe Bauman Home Run Award Single A,2014,2019,6,0.38,False
+MILBHRASX,MiLB Joe Bauman Home Run Award Short Season,2014,2019,6,0.38,False
+MILBHRROK,MiLB Joe Bauman Home Run Award Rookie,2014,2014,1,0.06,False
+MILBMSPAAA,"MiLB Most Spectacular Pitcher, Triple-A",2006,2008,3,0.0,False
+MILBMSPAAX,"MiLB Most Spectacular Pitcher, Double A",2006,2008,3,0.0,False
+MILBRTAAA,"MiLB Round Tripper Award, Triple-A",2004,2009,5,0.0,False
+MILBRTAAX,"MiLB Round Tripper Award, Double A",2002,2011,10,0.12,False
+MWLMOY,MID Manager of the Year,2004,2026,21,0.88,False
+MWLMSAS,MID Mid-Season All-Star,2005,2019,15,0.62,False
+MWLMVP,MID Most Valuable Player,2004,2026,21,0.88,False
+MWLPROY,MID Prospect of the Year,2004,2026,22,0.94,True
+MWLPSAS,MID Post-Season All-Star,2004,2026,22,0.94,True
+MWLTOPS,MID All-Star Game Top Star,2005,2019,12,0.44,False
+NORMSAS,NWL Mid-Season All-Star,2013,2019,7,0.44,False
+NORPITCHOM,NWL Pitcher of the Month,2021,2026,6,0.31,False
+NORPOM,NWL Player of the Month,2011,2026,14,0.81,False
+NORPOWH,NWL Player of the Week,2005,2026,21,0.94,True
+NORPOWP,NWL Pitcher of the Week,2005,2026,21,0.94,True
+NORTOPS,NWL Top Star,2013,2019,6,0.38,False
+NWLMOY,NWL Manager of the Year,2004,2026,22,0.94,True
+NWLMVP,NWL Most Valuable Player,2005,2026,21,0.94,True
+NWLPOY,NWL Pitcher of the Year,2015,2026,11,0.62,False
+NWLPROSPECT,NWL Top MLB Prospect,2021,2026,6,0.31,False
+NWLPSAS,NWL Post-Season All-Star,2004,2026,20,0.81,False
+NWLROY,NWL Rookie of the Year,2017,2017,1,0.06,False
+NYPMOY,NYP Manager of the Year,2004,2004,1,0.0,False
+NYPMSAS,NYP Mid-Season All-Star,2005,2018,14,0.56,False
+NYPMVP,NYP Most Valuable Player,2004,2004,1,0.0,False
+NYPPOM,MiLB.com NYP Player of the Month,2011,2019,8,0.5,False
+NYPPOWH,NYP Player of the Week,2005,2019,15,0.62,False
+NYPPOWP,NYP Pitcher of the Week,2005,2019,15,0.62,False
+NYPPSAS,NYP Post-Season All-Star,2004,2004,1,0.0,False
+NYPROY,NYP Rookie of the Year,2004,2004,1,0.0,False
+NYPTOPS,NYP All-Star Game Top Star,2005,2018,13,0.5,False
+PCLLCMVP,PCL League Championship Most Valuable Player,2005,2008,4,0.0,False
+PCLMOY,PCL Manager of the Year,1998,2025,26,0.94,True
+PCLMSAS,PCL Mid-Season All-Star,2005,2019,15,0.62,False
+PCLMVP,PCL Most Valuable Player,1998,2025,27,0.94,True
+PCLPOM,PCL Player of the Month,2010,2026,15,0.88,False
+PCLPOWH,PCL Player of the Week,2005,2026,21,0.94,True
+PCLPOWP,PCL Pitcher of the Week,2005,2026,21,0.94,True
+PCLPOY,PCL Pitcher of the Year,2001,2025,23,0.94,True
+PCLPROSPECT,PCL Top MLB Prospect,2021,2025,5,0.31,False
+PCLPSAS,PCL Post-Season All-Star,1998,2025,27,0.94,True
+PCLROY,PCL Rookie of the Year,1998,2019,21,0.56,False
+PCLTOPS,"Triple-A All-Star Game Top Star, PCL",2005,2019,15,0.62,False
+PIOLGAS,PIO Mid-Season All-Star,2015,2019,5,0.31,False
+PIOMOY,PIO Manager of the Year,2004,2019,14,0.56,False
+PIOMVP,PIO Most Valuable Player,2004,2019,16,0.62,False
+PIOPOM,MiLB.com PIO Player of the Month,2011,2019,8,0.5,False
+PIOPOWH,PIO Player of the Week,2005,2019,15,0.62,False
+PIOPOWP,PIO Pitcher of the Week,2005,2019,15,0.62,False
+PIOPOY,PIO Pitcher of the Year,2004,2019,16,0.62,False
+PIOPSAS,PIO Post-Season All-Star,2004,2019,16,0.62,False
+PIOTOPS,PIO Top Star,2015,2019,3,0.19,False
+PWLCPOY,PWL Comeback Player of the Year,2008,2022,14,0.75,False
+PWLFMVP,PWL Finals Most Valuable Player,2010,2025,6,0.38,False
+PWLIPY,PWL Import Player of the Year,2023,2025,2,0.12,False
+PWLMOY,PWL Manager of the Year,2008,2025,18,1.0,True
+PWLMVP,PWL Most Valuable Player,2008,2025,18,1.0,True
+PWLPOY,PWL Pitcher of the Year,2008,2025,18,1.0,True
+PWLPSAS,PWL Post-Season All-Star,2008,2020,8,0.38,False
+PWLROY,PWL Rookie of the Year,2008,2025,18,1.0,True
+PWLRPY,PWL - Reliever of the Year,2023,2025,3,0.19,False
+SALCOY,SAL Coach of the Year,2009,2019,10,0.56,False
+SALMOMLP,SAL Top MLB Prospect,2004,2026,22,0.94,True
+SALMOP,SAL Pitcher of the Year,2004,2026,22,0.94,True
+SALMOY,SAL Manager of the Year,2009,2026,17,0.94,True
+SALMSAS,SAL Mid-Season All-Star,2005,2019,15,0.62,False
+SALMVP,SAL Most Valuable Player,2004,2026,22,0.94,True
+SALPITCHOM,SAL Pitcher of the Month,2021,2026,6,0.31,False
+SALPOM,SAL Player of the Month,2011,2026,14,0.81,False
+SALPOWH,SAL Player of the Week,2005,2026,21,0.94,True
+SALPOWP,SAL Pitcher of the Week,2005,2026,21,0.94,True
+SALPSAS,SAL Post-Season All-Star,2004,2026,22,0.94,True
+SALTOPS,SAL All-Star Game Top Star,2005,2019,12,0.44,False
+SLBHUS,SOU Best Hustler,1998,2019,22,0.62,False
+SLBUTL,SOU Best Utility Player,2005,2019,11,0.62,False
+SLCSMVP,SOU Championship Series Most Valuable Player,2007,2019,9,0.44,False
+SLMOP,SOU Pitcher of the Year,1998,2026,28,0.94,True
+SLMOY,SOU Manager of the Year,1998,2026,27,0.94,True
+SLMSAS,SOU Mid-Season All-Star,2005,2019,15,0.62,False
+SLMVP,SOU Most Valuable Player,1998,2026,28,0.94,True
+SLPROSPECT,SOU Top MLB Prospect,2021,2026,6,0.31,False
+SLPSAS,SOU Post-Season All-Star,1998,2026,28,0.94,True
+SLTOPS,SOU All-Star Game Top Star,2005,2019,11,0.38,False
+SOUAVGTITLE,SOU Batting Champion Award,2011,2025,14,0.88,False
+SOUERATITLE,SOU League ERA Title,2012,2024,12,0.75,False
+SOUPOM,SOU Player of the Month,2011,2026,14,0.81,False
+SOUPOWH,SOU Player of the Week,2005,2026,21,0.94,True
+SOUPOWP,SOU Pitcher of the Week,2005,2026,21,0.94,True
+TEXPOM,TEX Player of the Month,2010,2026,15,0.88,False
+TEXPOWH,TEX Player of the Week,2005,2026,21,0.94,True
+TEXPOWP,TEX Pitcher of the Week,2005,2026,21,0.94,True
+TLCOY,TEX Coach of the Year,2010,2019,10,0.62,False
+TLMOY,TEX Manager of the Year,1998,2026,28,0.94,True
+TLMSAS,TEX Mid-Season All-Star,2005,2019,15,0.62,False
+TLPIOY,TEX Pitcher of the Year,1998,2026,28,0.94,True
+TLPLOY,TEX Most Valuable Player,1998,2026,28,0.94,True
+TLPROSPECT,TEX Top MLB Prospect,2021,2026,6,0.31,False
+TLPSAS,TEX Post-Season All-Star,1998,2026,28,0.94,True
+TLTOPS,TEX All-Star Game Top Star,2005,2019,15,0.62,False
+TOPAAAAS,Topps Triple-A All-Star,2009,2013,5,0.25,False
+TOPAAXAS,Topps Double-A All-Star,2009,2013,5,0.25,False
+TOPAPPPOY,Topps APP Player of the Year,2009,2013,3,0.12,False
+TOPAZLPOY,Topps AZL Player of the Year,2009,2013,3,0.12,False
+TOPCALPOY,Topps CAL Player of the Year,2009,2013,3,0.12,False
+TOPCARPOY,Topps CAR Player of the Year,2009,2013,3,0.12,False
+TOPEASPOY,Topps EAS Player of the Year,2009,2013,4,0.19,False
+TOPFSLPOY,Topps FSL Player of the Year,2009,2013,3,0.12,False
+TOPGCLPOY,Topps GCL Player of the Year,2009,2013,3,0.12,False
+TOPINTPOY,Topps INT Player of the Year,2009,2013,3,0.12,False
+TOPMIDPOY,Topps MID Player of the Year,2009,2013,3,0.12,False
+TOPNORPOY,Topps NWL Player of the Year,2009,2013,3,0.12,False
+TOPNYPPOY,Topps NYP Player of the Year,2009,2013,3,0.12,False
+TOPPCLPOY,Topps PCL Player of the Year,2009,2013,3,0.12,False
+TOPPIOPOY,Topps PIO Player of the Year,2009,2013,3,0.12,False
+TOPROAS,Topps Short-Season/Rookie All-Star,2008,2013,6,0.25,False
+TOPSALPOY,Topps SAL Player of the Year,2009,2013,3,0.12,False
+TOPSOUPOY,Topps SOU Player of the Year,2009,2013,3,0.12,False
+TOPTEXPOY,Topps TEX Player of the Year,2009,2013,4,0.19,False
+VSLCMVP,VSL Championship Most Valuable Player,2006,2006,1,0.0,False
+VSLMVP,VSL Most Valuable Player,2006,2006,1,0.0,False
+VSLMVPI,VSL Most Valuable Pitcher,2006,2006,1,0.0,False
+VSLPSAS,VSL Post-Season All-Star,2006,2006,1,0.0,False
+VWLCPOY,VWL Comeback Player of the Year,2006,2025,19,0.94,True
+VWLFMVP,VWL Finals MVP,2005,2024,19,0.88,False
+VWLMOY,VWL Manager of the Year,2006,2025,19,0.94,True
+VWLMVP,VWL Most Valuable Player,2006,2025,18,0.88,False
+VWLOPOY,VWL Offensive Player of the Year,2006,2025,17,0.81,False
+VWLPOY,VWL Pitcher of the Year,2006,2025,19,0.94,True
+VWLRLOY,VWL Reliever of the Year,2006,2025,20,1.0,True
+VWLROY,VWL Rookie of the Year,2006,2025,19,0.94,True
+VWLSUPOY,VWL Setup Pitcher of the Year,2008,2025,17,0.94,True
+WBCTT,WBC All-Tournament Team,2006,2026,6,0.19,False

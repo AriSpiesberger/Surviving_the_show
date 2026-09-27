@@ -34,8 +34,8 @@ from prospects.model.train.exp_cdf_timing2 import stamp_extra_cols
 
 _RUN = config.run()
 DB = str(config.model_db())
-CAL_DIR = REPO_ROOT / "runs" / "exp_cal_bagfit"
-OUT = REPO_ROOT / "runs" / "exp_cal_bagfit" / "null_test.json"
+CAL_DIR = REPO_ROOT / "runs" / "experiments" / "exp_cal_bagfit"
+OUT = REPO_ROOT / "runs" / "experiments" / "exp_cal_bagfit" / "null_test.json"
 
 # Observed on val (v2.3 cals, debut h=3, 2008+, snap rows with p>=0.40):
 # pooled predicted ~0.703, realized ~0.814 -> gap +11.1pts. Recomputed

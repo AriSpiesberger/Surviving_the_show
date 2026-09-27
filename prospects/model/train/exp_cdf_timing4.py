@@ -18,7 +18,7 @@ calib at h3/h6 and STAR per-h.
 
 Also fixes exp3's fragmented per-column inserts (pd.concat once).
 
-Writes runs/exp_cdf_timing4/. Touches nothing under runs/current/.
+Writes runs/experiments/exp_cdf_timing4/. Touches nothing under runs/current/.
 """
 from __future__ import annotations
 
@@ -55,8 +55,8 @@ from prospects.model.train.exp_cdf_timing3 import (
 
 _RUN = config.run()
 DB = str(config.model_db())
-OUT_DIR = REPO_ROOT / "runs" / "exp_cdf_timing4"
-EXP3_DIR = REPO_ROOT / "runs" / "exp_cdf_timing3"
+OUT_DIR = REPO_ROOT / "runs" / "experiments" / "exp_cdf_timing4"
+EXP3_DIR = REPO_ROOT / "runs" / "experiments" / "exp_cdf_timing3"
 
 DEEP = {"max_depth": 8, "min_child_weight": 100}
 

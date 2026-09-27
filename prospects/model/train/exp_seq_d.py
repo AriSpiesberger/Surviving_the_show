@@ -46,8 +46,8 @@ from prospects.model.train.exp_macro_bc import OUT_DIR as BC_DIR, feature_sets, 
 from prospects.model.train.exp_walkforward2 import DB, EVAL_H, GAP
 from prospects.model.train.joint_xgb import _assemble
 
-WFH = REPO_ROOT / "runs" / "exp_walkforward_h"
-OUT_DIR = REPO_ROOT / "runs" / "exp_seq_d"
+WFH = REPO_ROOT / "runs" / "experiments" / "exp_walkforward_h"
+OUT_DIR = REPO_ROOT / "runs" / "experiments" / "exp_seq_d"
 LEVELS = {"RK": 1, "A-": 2, "A": 3, "A+": 4, "AA": 5, "AAA": 6}
 NUM = ["age_during_season", "pa", "ip", "avg", "obp", "slg", "woba", "iso", "k_pct", "bb_pct",
        "babip", "home_runs", "stolen_bases", "era", "fip", "whip", "k9", "bb9", "hr9"]

@@ -58,13 +58,13 @@ EVAL_H = (3, 6)
 CEILING = ("ESTABLISHED_MLB", "STAR_PLUS_ELITE")
 
 
-def fit(X, y, feats, seed, mcw_scale):
+def fit(X, y, feats, seed, mcw_scale, w=None):
     p = dict(BASE_PARAMS)
     p.update(PARAMS)
     p["min_child_weight"] = PARAMS["min_child_weight"] * mcw_scale
     p["seed"] = seed
     p["monotone_constraints"] = _mono_string(feats)
-    d = xgb.QuantileDMatrix(X, label=y, feature_names=feats)
+    d = xgb.QuantileDMatrix(X, label=y, weight=w, feature_names=feats)
     return xgb.train(p, d, num_boost_round=ROUNDS, verbose_eval=False)
 
 
@@ -75,7 +75,7 @@ def main():
     ap.add_argument("--aug-long", default=str(_RUN.training / "recent_long.csv"))
     ap.add_argument("--bag", default=str(_RUN.scratch / "v24_build" / "joint_xgb_exp5_bag.pkl"))
     ap.add_argument("--cal", default=str(_RUN.scratch / "v24_build" / "calibrators_hyip2.pkl"))
-    ap.add_argument("--emb-cache", nargs="+", default=[str(REPO_ROOT / "runs" / "exp_v3_inera" / f"embeddings_{SEQ_OUT}.npz")],
+    ap.add_argument("--emb-cache", nargs="+", default=[str(REPO_ROOT / "runs" / "experiments" / "exp_v3_inera" / f"embeddings_{SEQ_OUT}.npz")],
                     help="one or more embedding caches; several are concatenated as features")
     ap.add_argument("--max-entry", type=int, default=2020)
     ap.add_argument("--cal-min-snap-year", type=int, default=2008)
@@ -86,11 +86,22 @@ def main():
     ap.add_argument("--n-boot", type=int, default=300)
     ap.add_argument("--depth", type=int, default=None, help="override max_depth for every v3 component")
     ap.add_argument("--rounds", type=int, default=None, help="override the round count for every v3 component")
+    ap.add_argument("--db", default=None, help="model DB override (e.g. prospects_aug.db with synthetic twins)")
+    ap.add_argument("--extra-fit", default=None, help="extra landmark rows appended to the fit set (twins_long.csv)")
+    ap.add_argument("--twin-weight", type=float, default=1.0,
+                    help="sample weight of a synthetic twin row (real rows 1); 1/(K+1) keeps a player's total weight")
+    ap.add_argument("--no-emb", action="store_true", help="no encoder features (e.g. twins have no embeddings)")
+    ap.add_argument("--augment", type=int, default=0, help="noisy copies of every training row")
+    ap.add_argument("--oversample", type=int, default=0,
+                    help="extra noisy copies of rows of players with an established/star outcome")
+    ap.add_argument("--aug-noise", type=float, default=0.15, help="noise sd as a fraction of the feature's std")
     ap.add_argument("--haz", action="store_true", help="add the discrete-time hazard arms (haz, mix_haz)")
     ap.add_argument("--only-haz", action="store_true", help="hazard arms only (skip v3 / v3cond)")
-    ap.add_argument("--out-dir", default=str(REPO_ROOT / "runs" / "exp_v3_all"))
+    ap.add_argument("--out-dir", default=str(REPO_ROOT / "runs" / "experiments" / "exp_v3_all"))
     args = ap.parse_args()
-    global ROUNDS
+    global ROUNDS, DB
+    if args.db:
+        DB = args.db
     if args.depth:
         PARAMS["max_depth"] = args.depth
     if args.rounds:
@@ -109,7 +120,7 @@ def main():
     keep_raw = [c for c in bagA["keep_raw"] if c in live]
     fs = feature_sets(keep_raw)
     featsA = list(bagA["feature_names"])
-    zs_emb = [np.load(f, allow_pickle=True) for f in args.emb_cache]
+    zs_emb = [] if args.no_emb else [np.load(f, allow_pickle=True) for f in args.emb_cache]
     emb_cols = [f"seq_emb_{j}_{i}" if len(zs_emb) > 1 else f"seq_emb_{i}"
                 for j, z in enumerate(zs_emb) for i in range(z["emb"].shape[1])]
     feats = fs["B"] + emb_cols
@@ -122,7 +133,15 @@ def main():
         k = np.random.default_rng(args.sample_seed).choice(u, int(len(u) * frac), replace=False)
         return df[df["player_id"].isin(k)]
 
-    fit_base = _prep_train(sample(pd.read_csv(args.fit, low_memory=False)), DB, args.max_entry)
+    fit_raw = sample(pd.read_csv(args.fit, low_memory=False))
+    if args.extra_fit:
+        # synthetic twins (tools/build_twins.py): only twins of the SAMPLED players are kept
+        xf = pd.read_csv(args.extra_fit, low_memory=False)
+        xf = xf[xf.player_id.str.replace(r"^tw\d+_", "", regex=True).isin(set(fit_raw.player_id))]
+        fit_raw = pd.concat([fit_raw, xf], ignore_index=True)
+        print(f"[v3all] + {xf.player_id.nunique():,} synthetic twins ({len(xf):,} landmark rows)", flush=True)
+    fit_base = _prep_train(fit_raw, DB, args.max_entry)
+    del fit_raw
     if Path(args.aug_long).exists():
         aug = prep_base(pd.read_csv(args.aug_long, low_memory=False), DB)
         for ev in ("TOP_100_PROSPECT", DEBUT):
@@ -144,10 +163,11 @@ def main():
         part = part.drop_duplicates(["player_id", "snap_year"])
         emb_df = part if emb_df is None else emb_df.merge(part, on=["player_id", "snap_year"], how="inner")
         off += w
-    fit_base = fit_base.merge(emb_df, on=["player_id", "snap_year"], how="left")
-    val_base = val_base.merge(emb_df, on=["player_id", "snap_year"], how="left")
-    cov_f = fit_base[emb_cols[0]].notna().mean()
-    cov_v = val_base[emb_cols[0]].notna().mean()
+    if emb_df is not None:
+        fit_base = fit_base.merge(emb_df, on=["player_id", "snap_year"], how="left")
+        val_base = val_base.merge(emb_df, on=["player_id", "snap_year"], how="left")
+    cov_f = fit_base[emb_cols[0]].notna().mean() if emb_cols else 1.0
+    cov_v = val_base[emb_cols[0]].notna().mean() if emb_cols else 1.0
     tick(f"fit {fit_base.player_id.nunique():,} players (frac {frac}), val {val_base.player_id.nunique():,}; "
          f"embedding coverage fit {cov_f:.1%} / val {cov_v:.1%}")
     if cov_f < 0.98 or cov_v < 0.98:
@@ -166,11 +186,16 @@ def main():
     elig = {ev: ((fl[f"eligible_{ev}"] == 1).to_numpy() if f"eligible_{ev}" in fl.columns
                  else np.ones(len(fl), bool)) for ev in EVENTS}
     del fl
-    uniq = np.unique(pids)
+    # a twin takes its original's fold, so cross-fitting never trains on a player's twin while
+    # scoring the player (the base id is the pid with any tw<k>_ prefix removed)
+    base_pid = pd.Series(pids).str.replace(r"^tw\d+_", "", regex=True).to_numpy()
+    is_twin = base_pid != pids
+    uniq = np.unique(base_pid[~is_twin]) if is_twin.any() else np.unique(pids)
     rng = np.random.default_rng(7)
     fold_of = {p: i % 3 for i, p in enumerate(rng.permutation(uniq))}
-    fold = np.array([fold_of[p] for p in pids])
-    tick(f"{len(X):,} fit rows, {len(feats)} features")
+    fold = np.array([fold_of.get(p, 0) for p in base_pid])
+    W = np.where(is_twin, args.twin_weight, 1.0).astype(np.float32)
+    tick(f"{len(X):,} fit rows ({int(is_twin.sum()):,} synthetic, weight {args.twin_weight:g}), {len(feats)} features")
 
     # val design matrices per horizon, control trajectories
     subs = [stamp_extra_cols(add_cond_cols(val_base, h))[feats].values.astype(np.float32)
@@ -201,10 +226,10 @@ def main():
                              num_boost_round=nr, verbose_eval=False)
         oofj = np.full(Y.shape, np.nan)
         for f in range(3):
-            b = fitj(fold != f, 700 + f)
+            b = fitj((fold != f) & ~is_twin, 700 + f)       # the control is the recipe on REAL players
             oofj[fold == f] = b.predict(xgb.DMatrix(XA[fold == f], feature_names=featsA))
             del b
-        bj = fitj(np.ones(len(Y), bool), 777)
+        bj = fitj(~is_twin, 777)
         rawj = {h: bj.predict(xgb.DMatrix(stamp_extra_cols(add_cond_cols(val_base, h))[featsA]
                                           .values.astype(np.float32), feature_names=featsA))
                 for h in range(1, H_MAX + 1)}
@@ -230,11 +255,11 @@ def main():
         oof = np.full(len(y), np.nan)
         for f in range(3):
             tr = m & (fold != f)
-            b = fit(X[tr], y[tr], feats, 300 + f, frac)
+            b = fit(X[tr], y[tr], feats, 300 + f, frac, w=W[tr])
             ho = fold == f
             oof[ho] = b.predict(xgb.DMatrix(X[ho], feature_names=feats))
             del b
-        bag = [fit(X[m], y[m], feats, 1100 + s, frac) for s in range(args.seeds)]
+        bag = [fit(X[m], y[m], feats, 1100 + s, frac, w=W[m]) for s in range(args.seeds)]
         rawv = np.column_stack([np.mean([b.predict(xgb.DMatrix(s_, feature_names=feats)) for b in bag], axis=0)
                                 for s_ in subs])
         with open(out / f"bag_{tag}.pkl", "wb") as fh:
@@ -243,7 +268,7 @@ def main():
         return oof, rawv
 
     def fit_cal(score, y, m):
-        ok = m & era_ok & np.isfinite(score)
+        ok = m & era_ok & np.isfinite(score) & is_orig
         return HYip2Calibrator().fit(np.clip(score[ok], 1e-7, 1 - 1e-7), h_arr[ok], yip_arr[ok], y[ok].astype(int))
 
     # ---- discrete-time hazard form (architecture A, 2026-09-23) ----------------------------
@@ -255,6 +280,50 @@ def main():
     iprev = kdf.merge(prv, on=["pid", "snap", "h"], how="left")["iprev"].to_numpy()
     has_prev = np.isfinite(iprev)
     ip = np.where(has_prev, iprev, 0).astype(int)
+    is_orig = ~is_twin                   # calibrators are fit on real players only
+
+    # ---- data augmentation (user idea, 2026-09-24): noisy player copies + rare-outcome oversampling
+    # Copies keep labels, age, level and pedigree; performance-rate features get Gaussian noise
+    # (alpha x the feature's std), approximating a resampled season. A player's copies share his
+    # fold, so cross-fitting never sees him on both sides; calibrators use original rows only.
+    if args.augment or args.oversample:
+        rate_keys = ("woba", "iso", "obp", "slg", "avg", "k_pct", "bb_pct", "babip", "era", "fip", "whip",
+                     "k9", "bb9", "hr9", "_vs_level", "delta", "accel", "k_bb", "bb_k", "per_pa", "vs_best")
+        noisy = np.array([any(k in f for k in rate_keys) and f.startswith("rw_") for f in feats])
+        sd = np.nanstd(X[:, noisy], axis=0)
+        n0 = len(X)
+        star_k, est_k = EVENTS.index("STAR_PLUS_ELITE"), EVENTS.index("ESTABLISHED_MLB")
+        ceil_players = set(pids[(Y[:, star_k] > 0) | (Y[:, est_k] > 0)])
+        rare = np.isin(pids, list(ceil_players))
+        blocks = [np.arange(n0)] * args.augment + [np.where(rare)[0]] * args.oversample
+        arng = np.random.default_rng(args.sample_seed + 99)
+        Xs, adds = [X], []
+        for src in blocks:
+            Xc = X[src].copy()
+            Xc[:, noisy] += (arng.standard_normal((len(src), noisy.sum())) * sd * args.aug_noise).astype(np.float32)
+            Xs.append(Xc)
+            adds.append(src)
+        src_all = np.concatenate([np.arange(n0)] + adds)
+        # previous-horizon links for the hazard arm: a copy points at the same copy of the row before
+        offs, cur = [], n0
+        for src in adds:
+            pos = np.full(n0, -1)
+            pos[src] = cur + np.arange(len(src))
+            offs.append(pos)
+            cur += len(src)
+        X = np.vstack(Xs)
+        Y, h_arr, yip_arr, era_ok = Y[src_all], h_arr[src_all], yip_arr[src_all], era_ok[src_all]
+        pids, fold, W = pids[src_all], fold[src_all], W[src_all]
+        elig = {ev: v[src_all] for ev, v in elig.items()}
+        new_ip, new_has = [ip], [has_prev]
+        for pos, src in zip(offs, adds):
+            pi = pos[ip[src]]
+            new_has.append(has_prev[src] & (pi >= 0))
+            new_ip.append(np.where(pi >= 0, pi, 0))
+        ip, has_prev = np.concatenate(new_ip), np.concatenate(new_has)
+        is_orig = np.arange(len(X)) < n0
+        tick(f"augmented: {n0:,} -> {len(X):,} rows ({args.augment} noisy copies of all, {args.oversample} extra of "
+             f"{len(ceil_players):,} established/star players; noise {args.aug_noise} sd on {int(noisy.sum())} features)")
 
     def hazard_arm(y_cum, m, tag):
         y_prev = np.where(has_prev, y_cum[ip], 0.0)
@@ -263,7 +332,7 @@ def main():
         tr_m = m & at_risk
         q = np.full(len(y_cum), np.nan)
         for f in range(3):
-            b = fit(X[tr_m & (fold != f)], y_h[tr_m & (fold != f)], feats, 800 + f, frac)
+            b = fit(X[tr_m & (fold != f)], y_h[tr_m & (fold != f)], feats, 800 + f, frac, w=W[tr_m & (fold != f)])
             q[fold == f] = b.predict(xgb.DMatrix(X[fold == f], feature_names=feats))
             del b
         surv = np.full(len(q), np.nan)
@@ -272,7 +341,7 @@ def main():
             prev_s = np.ones(len(idx)) if h == 1 else np.where(has_prev[idx], surv[ip[idx]], np.nan)
             surv[idx] = (1 - q[idx]) * prev_s
         cal = fit_cal(1 - surv, y_cum, m)
-        bag = [fit(X[tr_m], y_h[tr_m], feats, 1500 + s, frac) for s in range(args.seeds)]
+        bag = [fit(X[tr_m], y_h[tr_m], feats, 1500 + s, frac, w=W[tr_m]) for s in range(args.seeds)]
         qv = np.column_stack([np.mean([b.predict(xgb.DMatrix(s_, feature_names=feats)) for b in bag], axis=0)
                               for s_ in subs])
         del bag
@@ -305,11 +374,11 @@ def main():
             oofc = np.full(len(y), np.nan)
             for f in range(3):
                 tr = md & (fold != f)
-                b = fit(X[tr], y[tr], feats, 500 + f, frac)
+                b = fit(X[tr], y[tr], feats, 500 + f, frac, w=W[tr])
                 ho = fold == f
                 oofc[ho] = b.predict(xgb.DMatrix(X[ho], feature_names=feats))
                 del b
-            bagc = [fit(X[md], y[md], feats, 1300 + s, frac) for s in range(args.seeds)]
+            bagc = [fit(X[md], y[md], feats, 1300 + s, frac, w=W[md]) for s in range(args.seeds)]
             rawc = np.column_stack([np.mean([b.predict(xgb.DMatrix(s_, feature_names=feats)) for b in bagc], axis=0)
                                     for s_ in subs])
             with open(out / f"bag_{ev}_cond.pkl", "wb") as fh:

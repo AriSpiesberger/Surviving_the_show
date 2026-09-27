@@ -14,8 +14,8 @@ players, h=3 rows, never the eval cohort); the winner is chosen by mean inner AP
 then is its out-of-era AP read, with paired bootstrap against production (A_oof_capY) and
 against the 4-target B1+emb arm.
 
-Fair walk-forward throughout (runs/exp_walkforward_h/Y*/capY; embeddings stacked
-out-of-fold exactly as in exp_seq_d, and cached to runs/exp_seq_d/emb_Y<origin>.npz).
+Fair walk-forward throughout (runs/experiments/exp_walkforward_h/Y*/capY; embeddings stacked
+out-of-fold exactly as in exp_seq_d, and cached to runs/experiments/exp_seq_d/emb_Y<origin>.npz).
 
     python -m prospects.model.train.exp_ap_opt
 """
@@ -44,7 +44,7 @@ from prospects.model.train.exp_seq_d import (
 from prospects.model.train.exp_walkforward2 import DB, EVAL_H, GAP
 from prospects.model.train.joint_xgb import _assemble
 
-OUT_DIR = REPO_ROOT / "runs" / "exp_ap_opt"
+OUT_DIR = REPO_ROOT / "runs" / "experiments" / "exp_ap_opt"
 K = EVENTS.index("MLB_DEBUT")
 EMB_COLS = [f"seq_emb_{i}" for i in range(EMB)]
 

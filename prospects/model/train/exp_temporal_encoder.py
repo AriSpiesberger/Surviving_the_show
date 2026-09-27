@@ -10,7 +10,7 @@ multi-task on debut/establishment horizons using FIT players only (val
 players' labels never touch the encoder), then the embedding is concatenated
 into the v2.4 joint feature set and A/B'd on the clean val.
 
-Stages (each cached under runs/exp_temporal_encoder/):
+Stages (each cached under runs/experiments/exp_temporal_encoder/):
   1. stint table from season_stats (14-dim vectors, sorted, per player)
   2. (pid, snap) sequences (last 10 stints with year <= snap)
   3. GRU encoder trained on fit+aug snaps, masked BCE over
@@ -48,7 +48,7 @@ from prospects.model.train.exp_cdf_timing4 import predict_rows, train_one
 
 _RUN = config.run()
 DB = str(config.model_db())
-OUT_DIR = REPO_ROOT / "runs" / "exp_temporal_encoder"
+OUT_DIR = REPO_ROOT / "runs" / "experiments" / "exp_temporal_encoder"
 G3_SLOW = {"max_depth": 8, "min_child_weight": 100,
            "colsample_bytree": 0.6, "learning_rate": 0.03}
 V24_REF = {"deb_ap_h1": 0.4421, "deb_ap_h3": 0.6120, "deb_ap_h6": 0.6683,

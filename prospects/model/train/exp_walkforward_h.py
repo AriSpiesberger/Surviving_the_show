@@ -50,7 +50,7 @@ from prospects.model.train.exp_macro_bc import OUT_DIR as BC_DIR, feature_sets, 
 from prospects.model.train.exp_walkforward2 import DB, EVAL_H, GAP, _metrics, bucket_rows
 from prospects.model.train.joint_xgb import _assemble
 
-OUT_DIR = REPO_ROOT / "runs" / "exp_walkforward_h"
+OUT_DIR = REPO_ROOT / "runs" / "experiments" / "exp_walkforward_h"
 
 
 def build_longs(Y, regime, cap, K, X_lm, pids, S_yrs, joined, stats_by_pid, entry_by_pid,

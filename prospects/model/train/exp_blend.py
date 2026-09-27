@@ -9,7 +9,7 @@ honest. Averages the RAW trajectories (pre-calibration), cummaxes the blend,
 scores per_h_metrics on the val slice. Prediction-first readout: debut AP at
 h=1/2/3/6 and the h=6 weighted composite.
 
-Writes runs/exp_blend/blend_metrics.csv. Read-only wrt all other artifacts.
+Writes runs/experiments/exp_blend/blend_metrics.csv. Read-only wrt all other artifacts.
 """
 from __future__ import annotations
 
@@ -32,11 +32,11 @@ from prospects.model.train.exp_cdf_timing4 import sweep_val as sweep_raw
 
 _RUN = config.run()
 DB = str(config.model_db())
-OUT_DIR = REPO_ROOT / "runs" / "exp_blend"
+OUT_DIR = REPO_ROOT / "runs" / "experiments" / "exp_blend"
 BAGS = {
-    "D": REPO_ROOT / "runs" / "exp_cdf_timing2" / "joint_xgb_exp2_bag.pkl",
-    "E": REPO_ROOT / "runs" / "exp_cdf_timing3" / "joint_xgb_exp3_bag.pkl",
-    "F": REPO_ROOT / "runs" / "exp_cdf_timing4" / "joint_xgb_exp4_bag.pkl",
+    "D": REPO_ROOT / "runs" / "experiments" / "exp_cdf_timing2" / "joint_xgb_exp2_bag.pkl",
+    "E": REPO_ROOT / "runs" / "experiments" / "exp_cdf_timing3" / "joint_xgb_exp3_bag.pkl",
+    "F": REPO_ROOT / "runs" / "experiments" / "exp_cdf_timing4" / "joint_xgb_exp4_bag.pkl",
 }
 
 

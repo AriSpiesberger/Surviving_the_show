@@ -35,8 +35,8 @@ from prospects.model.train.exp_walkforward2 import (
     DB, G3_SLOW, GAP, EVAL_H, NROUNDS, _metrics, bucket_rows,
 )
 
-WF2 = REPO_ROOT / "runs" / "exp_walkforward2"
-OUT_DIR = REPO_ROOT / "runs" / "exp_walkforward3"
+WF2 = REPO_ROOT / "runs" / "experiments" / "exp_walkforward2"
+OUT_DIR = REPO_ROOT / "runs" / "experiments" / "exp_walkforward3"
 
 
 def run_origin(Y, keep_raw, feats, t0):

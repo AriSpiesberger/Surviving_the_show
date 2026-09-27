@@ -43,7 +43,7 @@ from prospects.model.train.exp_cdf_timing2 import FEAT2, MONO_UP, stamp_extra_co
 
 _RUN = config.run()
 DB = str(config.model_db())
-OUT_DIR = REPO_ROOT / "runs" / "exp_rank_debut"
+OUT_DIR = REPO_ROOT / "runs" / "experiments" / "exp_rank_debut"
 # g3_slow minus min_child_weight: pairwise-rank hessians are tiny, so the
 # logloss-tuned mcw=100 blocks every split (constant margins, AUC 0.5).
 G3 = {"max_depth": 8, "min_child_weight": 1,

@@ -157,7 +157,7 @@ def main():
     ap.add_argument("--fold-seeds", type=int, default=3,
                     help="models averaged per cross-fit fold for the bag-matched OOF")
     ap.add_argument("--seed", type=int, default=42)
-    ap.add_argument("--out-dir", default=str(REPO_ROOT / "runs" / "exp_cal_topend"))
+    ap.add_argument("--out-dir", default=str(REPO_ROOT / "runs" / "experiments" / "exp_cal_topend"))
     ap.add_argument("--from-oof", action="store_true",
                     help="skip the cross-fit; load <out-dir>/oof.npz from a previous run")
     args = ap.parse_args()

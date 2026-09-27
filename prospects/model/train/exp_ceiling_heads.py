@@ -77,7 +77,7 @@ def main():
     ap.add_argument("--quick", action="store_true", help="25%% of fit players, 1 seed, 200 bootstraps")
     ap.add_argument("--sample-frac", type=float, default=None)
     ap.add_argument("--sample-seed", type=int, default=7)
-    ap.add_argument("--out-dir", default=str(REPO_ROOT / "runs" / "exp_ceiling_heads"))
+    ap.add_argument("--out-dir", default=str(REPO_ROOT / "runs" / "experiments" / "exp_ceiling_heads"))
     args = ap.parse_args()
     if args.quick:
         args.sample_frac = args.sample_frac or 0.25

@@ -22,7 +22,7 @@ The val-scoring hazards refit passes hazard_hp too (the stock Stage 5
 refit would silently use default HP).
 
 Sequential configs; each ~1-2h. All stages resume from checkpoints if the
-process dies — just re-run. Writes runs/hz_*/ + runs/exp_hazard_hp/.
+process dies — just re-run. Writes runs/experiments/hz_*/ + runs/experiments/exp_hazard_hp/.
 Touches nothing under runs/current/.
 
 Usage:
@@ -56,8 +56,8 @@ from prospects.model.train.exp_cdf_timing4 import (
 )
 
 CUR = config.run()
-OUT_DIR = REPO_ROOT / "runs" / "exp_hazard_hp"
-EXP4_BAG = REPO_ROOT / "runs" / "exp_cdf_timing4" / "joint_xgb_exp4_bag.pkl"
+OUT_DIR = REPO_ROOT / "runs" / "experiments" / "exp_hazard_hp"
+EXP4_BAG = REPO_ROOT / "runs" / "experiments" / "exp_cdf_timing4" / "joint_xgb_exp4_bag.pkl"
 CUR_SCRATCH = CUR.scratch / "oof"
 
 # F (exp4 champion) honest-val reference, for the printout.

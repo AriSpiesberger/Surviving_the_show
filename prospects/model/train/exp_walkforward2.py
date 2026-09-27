@@ -16,7 +16,7 @@ production stack's upper layers absorb, per origin Y in {2012, 2014, 2016}:
      hazard-raw vs joint-raw vs joint-cal vs joint-cal-recency:
      AP / AUC / calib + buckets.
 
-Everything caches under runs/exp_walkforward2/Y<origin>/ — reruns resume.
+Everything caches under runs/experiments/exp_walkforward2/Y<origin>/ — reruns resume.
 
     python -m prospects.model.train.exp_walkforward2
 """
@@ -43,7 +43,7 @@ from prospects.model.train.joint_xgb import _assemble
 from prospects.model.train.exp_cdf_timing2 import FEAT2, stamp_extra_cols
 from prospects.model.train.exp_cdf_timing4 import predict_rows, train_one
 
-OUT_DIR = REPO_ROOT / "runs" / "exp_walkforward2"
+OUT_DIR = REPO_ROOT / "runs" / "experiments" / "exp_walkforward2"
 DB = str(REPO_ROOT / "prospects_snapshot.db")
 GAP, EVAL_H = 6, 3
 G3_SLOW = {"max_depth": 8, "min_child_weight": 100,

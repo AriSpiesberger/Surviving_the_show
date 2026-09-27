@@ -30,9 +30,9 @@ timing/coherence). This round goes after the scores themselves:
     dependent bias, a yip covariate can.
 
 Baselines in the final table: A = stored v2.1c artifacts; C = experiment 1
-metrics (read from runs/exp_cdf_timing/per_event_h_metrics.csv, not re-run).
+metrics (read from runs/experiments/exp_cdf_timing/per_event_h_metrics.csv, not re-run).
 
-Writes runs/exp_cdf_timing2/. Touches nothing under runs/current/.
+Writes runs/experiments/exp_cdf_timing2/. Touches nothing under runs/current/.
 
 Usage:
     python -m prospects.model.train.exp_cdf_timing2            # full
@@ -67,8 +67,8 @@ from prospects.model.train.exp_cdf_timing import (
 
 _RUN = config.run()
 DB = str(config.model_db())
-OUT_DIR = REPO_ROOT / "runs" / "exp_cdf_timing2"
-EXP1_DIR = REPO_ROOT / "runs" / "exp_cdf_timing"
+OUT_DIR = REPO_ROOT / "runs" / "experiments" / "exp_cdf_timing2"
+EXP1_DIR = REPO_ROOT / "runs" / "experiments" / "exp_cdf_timing"
 
 # ---- expanded feature set -------------------------------------------------
 CURVE_EVS = ["TOP_100_PROSPECT", "MLB_DEBUT", "ESTABLISHED_MLB",

@@ -12,7 +12,7 @@ cross-fitting BY PLAYER inside val — each half is scored by a stacker that nev
 the comparison with the fixed mix on the same rows is honest. Only ~6 coefficients per
 (event, h), so the half-sample fits are stable.
 
-    python -m prospects.model.train.exp_stacker --preds runs/exp_v3_all/val_preds.npz
+    python -m prospects.model.train.exp_stacker --preds runs/experiments/exp_v3_all/val_preds.npz
 """
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ def logit(p):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--preds", nargs="+", default=[str(REPO_ROOT / "runs" / "exp_v3_all" / "val_preds.npz")],
+    ap.add_argument("--preds", nargs="+", default=[str(REPO_ROOT / "runs" / "experiments" / "exp_v3_all" / "val_preds.npz")],
                     help="one or more exp_v3_all val_preds.npz; components are merged by name "
                          "(the control must be identical across files)")
     ap.add_argument("--components", nargs="*", default=["control", "v3", "v3cond", "haz"])

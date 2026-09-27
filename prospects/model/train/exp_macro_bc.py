@@ -49,8 +49,8 @@ from prospects.model.train.exp_walkforward2 import (
 )
 from prospects.model.train.joint_xgb import _assemble
 
-WF2 = REPO_ROOT / "runs" / "exp_walkforward2"
-OUT_DIR = REPO_ROOT / "runs" / "exp_macro_bc"
+WF2 = REPO_ROOT / "runs" / "experiments" / "exp_walkforward2"
+OUT_DIR = REPO_ROOT / "runs" / "experiments" / "exp_macro_bc"
 HAZARD_TOKENS = ("p_", "hk", "haz_cum", "mean_t", "sd_t", "h_minus_mean_t", "z_h_debut",
                  "_x_yip_centered")
 K = EVENTS.index("MLB_DEBUT")

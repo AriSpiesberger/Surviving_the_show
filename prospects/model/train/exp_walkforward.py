@@ -34,7 +34,7 @@ from prospects.config import REPO_ROOT
 from prospects.model.hazards import landmark as lm
 from prospects.model.pipelines.oof import _entry_year, stage_panel
 
-OUT_DIR = REPO_ROOT / "runs" / "exp_walkforward"
+OUT_DIR = REPO_ROOT / "runs" / "experiments" / "exp_walkforward"
 DB = str(REPO_ROOT / "prospects_snapshot.db")
 GAP = 6           # label cutoff -> scoring snap gap (2020 -> 2026)
 EVAL_H = 3        # debut horizon evaluated

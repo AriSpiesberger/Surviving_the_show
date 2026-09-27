@@ -57,7 +57,7 @@ def main():
     ap.add_argument("--half-life", type=float, default=4.0)
     ap.add_argument("--bag-seeds", type=int, default=3)
     ap.add_argument("--folds", type=int, default=3)
-    ap.add_argument("--out-dir", default=str(REPO_ROOT / "runs" / "exp_macro_inera"))
+    ap.add_argument("--out-dir", default=str(REPO_ROOT / "runs" / "experiments" / "exp_macro_inera"))
     args = ap.parse_args()
     out = Path(args.out_dir)
     out.mkdir(parents=True, exist_ok=True)

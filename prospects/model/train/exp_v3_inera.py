@@ -81,7 +81,7 @@ def main():
     ap.add_argument("--epochs", type=int, default=8)
     ap.add_argument("--seeds", type=int, default=5)
     ap.add_argument("--threads", type=int, default=16)
-    ap.add_argument("--out-dir", default=str(REPO_ROOT / "runs" / "exp_v3_inera"))
+    ap.add_argument("--out-dir", default=str(REPO_ROOT / "runs" / "experiments" / "exp_v3_inera"))
     args = ap.parse_args()
     torch.set_num_threads(args.threads)
     out = Path(args.out_dir)

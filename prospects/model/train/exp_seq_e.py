@@ -222,7 +222,7 @@ def main():
     args = ap.parse_args()
     torch.set_num_threads(args.threads)
     tag = args.tag or (f"n{args.noise:g}_c{args.crop:g}_m{args.mask:g}_L{args.layers}_d{args.dmodel}_{args.pool}")
-    out = REPO_ROOT / "runs" / "exp_seq_e" / f"embeddings_{tag}.npz"
+    out = REPO_ROOT / "runs" / "experiments" / "exp_seq_e" / f"embeddings_{tag}.npz"
     t0 = time.time()
     tick = lambda m: print(f"[E:{tag}] {m}  [{(time.time() - t0) / 60:.1f}m]", flush=True)
     arch_kw = {"layers": args.layers, "d": args.dmodel, "pool": args.pool}

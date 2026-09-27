@@ -47,7 +47,7 @@ from prospects.model.train.exp_cdf_timing2 import FEAT2, stamp_extra_cols
 
 _RUN = config.run()
 DB = str(config.model_db())
-OUT_DIR = REPO_ROOT / "runs" / "exp_hazard_form"
+OUT_DIR = REPO_ROOT / "runs" / "experiments" / "exp_hazard_form"
 
 G3_SLOW = {"max_depth": 8, "min_child_weight": 100,
            "colsample_bytree": 0.6, "learning_rate": 0.03}

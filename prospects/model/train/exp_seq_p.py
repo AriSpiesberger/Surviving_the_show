@@ -121,7 +121,7 @@ def main():
     args = ap.parse_args()
     torch.set_num_threads(args.threads)
     tag = args.tag or f"pre_L{args.layers}_d{args.dmodel}_n{args.noise:g}_c{args.crop:g}_m{args.mask:g}"
-    out = REPO_ROOT / "runs" / "exp_seq_p" / f"embeddings_{tag}.npz"
+    out = REPO_ROOT / "runs" / "experiments" / "exp_seq_p" / f"embeddings_{tag}.npz"
     t0 = time.time()
     tick = lambda m: print(f"[P:{tag}] {m}  [{(time.time() - t0) / 60:.1f}m]", flush=True)
 

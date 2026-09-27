@@ -106,7 +106,7 @@ def main():
     ap.add_argument("--events", nargs="*", default=["ESTABLISHED_MLB", "STAR_PLUS_ELITE", "MLB_DEBUT"])
     ap.add_argument("--arms", nargs="*", default=ALL_ARMS)
     ap.add_argument("--n-boot", type=int, default=200)
-    ap.add_argument("--out-dir", default=str(REPO_ROOT / "runs" / "exp_ceiling_grid"))
+    ap.add_argument("--out-dir", default=str(REPO_ROOT / "runs" / "experiments" / "exp_ceiling_grid"))
     args = ap.parse_args()
     global MCW_SCALE
     MCW_SCALE = args.sample_frac if args.sample_frac and args.sample_frac < 1 else 1.0

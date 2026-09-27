@@ -48,6 +48,11 @@ def main():
     ap.add_argument("--aug-long", default=str(_RUN.training / "recent_long.csv"))
     ap.add_argument("--bag", default=str(_RUN.scratch / "v24_build" / "joint_xgb_exp5_bag.pkl"))
     ap.add_argument("--add", nargs="*", default=None, help="raw panel features to add (default: ranking)")
+    ap.add_argument("--extra-csv", default=None,
+                    help="CSV keyed by player_id, snap_year with NEW features (e.g. transactions); "
+                         "every other column is added to the 'plus' arm")
+    ap.add_argument("--extra-fill-from", type=int, default=None,
+                    help="first snapshot year of complete coverage: missing extras from then on -> 0")
     ap.add_argument("--max-entry", type=int, default=2020)
     ap.add_argument("--sample-frac", type=float, default=0.25)
     ap.add_argument("--sample-seed", type=int, default=7)
@@ -64,10 +69,13 @@ def main():
         bag = pickle.load(fh)
     featsA = list(bag["feature_names"])
     live = {f"rw_{n}" for n in FEATURE_NAMES}
-    add = [f for f in (args.add if args.add is not None else RANK_EXTRA) if f in live and f not in featsA]
-    featsB = featsA + add
+    add = [f for f in (args.add if args.add is not None else ([] if args.extra_csv else RANK_EXTRA))
+           if f in live and f not in featsA]
+    extra = pd.read_csv(args.extra_csv) if args.extra_csv else None
+    extra_cols = [c for c in extra.columns if c not in ("player_id", "snap_year")] if extra is not None else []
+    featsB = featsA + add + extra_cols
     keep = sorted(set(bag["keep_raw"]) | set(add))
-    tick(f"adding {len(add)} features: {add}")
+    tick(f"adding {len(add)} panel features {add} + {len(extra_cols)} extra")
 
     def sample(df):
         if frac == 1.0:
@@ -86,6 +94,17 @@ def main():
     val = prep_base(pd.read_csv(args.val, low_memory=False), DB, max_entry=args.max_entry)
     fit_base = attach_raw_features(fit_base, DB, keep, verbose=False)
     val = attach_raw_features(val, DB, keep, verbose=False)
+    if extra is not None:
+        fit_base = fit_base.merge(extra, on=["player_id", "snap_year"], how="left")
+        val = val.merge(extra, on=["player_id", "snap_year"], how="left")
+        if args.extra_fill_from:
+            # inside the complete-coverage era, "no record" means "nothing happened" -> 0;
+            # before it, records are missing, not absent -> stay NaN
+            for fr in (fit_base, val):
+                m = fr["snap_year"] >= args.extra_fill_from
+                fr.loc[m, extra_cols] = fr.loc[m, extra_cols].fillna(0.0)
+        tick(f"extra features {extra_cols}: coverage fit {fit_base[extra_cols[0]].notna().mean():.1%}, "
+             f"val {val[extra_cols[0]].notna().mean():.1%}")
     fl, Y = _assemble(fit_base, H_MAX)
     fl = stamp_extra_cols(fl)
     del fit_base

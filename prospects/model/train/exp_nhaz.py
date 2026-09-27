@@ -14,8 +14,8 @@ end to end on the survival objective for all four sheet events:
             predictions over the fit players (snaps >= 2008), like every other component.
 
 Held-out val scoring comes from the full-fit net (never saw a val player). Writes
-runs/exp_nhaz/val_preds.npz in exp_v3_all's format ("<event>__nhaz") and scores D alone and as
-an extra component of each event's DEFAULT_SPEC blend (components from runs/exp_v3_all_trf).
+runs/experiments/exp_nhaz/val_preds.npz in exp_v3_all's format ("<event>__nhaz") and scores D alone and as
+an extra component of each event's DEFAULT_SPEC blend (components from runs/experiments/exp_v3_all_trf).
 
     python -m prospects.model.train.exp_nhaz
 """
@@ -153,11 +153,11 @@ def main():
     ap.add_argument("--val", default=str(_RUN.oof_val_long))
     ap.add_argument("--aug-long", default=str(_RUN.training / "recent_long.csv"))
     ap.add_argument("--bag", default=str(_RUN.scratch / "v24_build" / "joint_xgb_exp5_bag.pkl"))
-    ap.add_argument("--components", default=str(REPO_ROOT / "runs" / "exp_v3_all_trf" / "val_preds.npz"))
+    ap.add_argument("--components", default=str(REPO_ROOT / "runs" / "experiments" / "exp_v3_all_trf" / "val_preds.npz"))
     ap.add_argument("--max-entry", type=int, default=2020)
     ap.add_argument("--epochs", type=int, default=8)
     ap.add_argument("--threads", type=int, default=16)
-    ap.add_argument("--out-dir", default=str(REPO_ROOT / "runs" / "exp_nhaz"))
+    ap.add_argument("--out-dir", default=str(REPO_ROOT / "runs" / "experiments" / "exp_nhaz"))
     args = ap.parse_args()
     torch.set_num_threads(args.threads)
     out = Path(args.out_dir)

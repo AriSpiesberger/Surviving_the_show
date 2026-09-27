@@ -16,7 +16,7 @@ depth 8 / mcw 100 / colsample 0.6 / lr 0.03, monotone h + margins, ES on the
 internal seed-7 player split, 5-seed bag on 100% fit, 3-fold cross-fit ->
 HYip2 h/yip calibrators.
 
-Writes runs/exp_cdf_timing5/. Touches nothing under runs/current/ except
+Writes runs/experiments/exp_cdf_timing5/. Touches nothing under runs/current/ except
 reading the panel cache.
 """
 from __future__ import annotations
@@ -45,8 +45,8 @@ from prospects.model.train.exp_cdf_timing4 import (
 
 _RUN = config.run()
 DB = str(config.model_db())
-OUT_DIR = REPO_ROOT / "runs" / "exp_cdf_timing5"
-EXP4_DIR = REPO_ROOT / "runs" / "exp_cdf_timing4"
+OUT_DIR = REPO_ROOT / "runs" / "experiments" / "exp_cdf_timing5"
+EXP4_DIR = REPO_ROOT / "runs" / "experiments" / "exp_cdf_timing4"
 
 G3_SLOW = {"max_depth": 8, "min_child_weight": 100,
            "colsample_bytree": 0.6, "learning_rate": 0.03}

@@ -126,7 +126,7 @@ def main():
     ap.add_argument("--max-entry", type=int, default=2020)
     ap.add_argument("--epochs", type=int, default=8)
     ap.add_argument("--threads", type=int, default=16)
-    ap.add_argument("--out", default=str(REPO_ROOT / "runs" / "exp_seq_mt" / "embeddings_mt.npz"))
+    ap.add_argument("--out", default=str(REPO_ROOT / "runs" / "experiments" / "exp_seq_mt" / "embeddings_mt.npz"))
     args = ap.parse_args()
     torch.set_num_threads(args.threads)
     t0 = time.time()

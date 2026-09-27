@@ -9,7 +9,7 @@ the held fold; fit the HYip2 map (2008+ snaps) on those — calibration data
 now comes from the deployed model class.
 
 Uses the promoted v2.3 recipe verbatim (hz3 longs, g3_slow HP, 342 rounds,
-FEAT2 + 160 raw full-coverage). Writes runs/exp_cal_bagfit/ and prints the
+FEAT2 + 160 raw full-coverage). Writes runs/experiments/exp_cal_bagfit/ and prints the
 before/after val calib per h and per era against the CURRENT v2.3 bundle —
 promotion (overwriting calibrators_v2.3.pkl) is a separate explicit step.
 """
@@ -80,7 +80,7 @@ def bucket_table(p, y, label):
 
 _RUN = config.run()
 DB = str(config.model_db())
-OUT_DIR = REPO_ROOT / "runs" / "exp_cal_bagfit"
+OUT_DIR = REPO_ROOT / "runs" / "experiments" / "exp_cal_bagfit"
 G3_SLOW = {"max_depth": 8, "min_child_weight": 100,
            "colsample_bytree": 0.6, "learning_rate": 0.03}
 
