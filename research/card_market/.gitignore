@@ -1,0 +1,9 @@
+# Derived from prospects.db — rebuild on the machine with the current DB
+raw/light_panel.npz
+raw/light_preds.csv
+raw/*_positions.csv
+# scratch
+raw/search.jsonl
+names_pipe.txt
+logs/
+__pycache__/
