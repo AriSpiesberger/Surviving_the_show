@@ -259,7 +259,7 @@ def main():
     ap.add_argument("--skip-downstream", action="store_true",
                     help="Skip the lasso_logits + time_to_debut refit")
     ap.add_argument("--max-draft-year", type=int, default=2020)
-    ap.add_argument("--min-landmark-year", type=int, default=1998)   # 1996-2004 classes in production since 2026-09-25
+    ap.add_argument("--min-landmark-year", type=int, default=1990)   # 1988-2004 classes in production since 2026-10-01
     ap.add_argument("--max-landmark-year", type=int, default=MAX_OBS_YEAR - 1)
     ap.add_argument("--max-entry-year", type=int, default=2020)
     ap.add_argument("--max-offset", type=int, default=10)

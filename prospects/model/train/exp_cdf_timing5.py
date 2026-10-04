@@ -84,9 +84,13 @@ def main():
 
     # Raw-feature list: prefer the promoted bundle (stable prod dependency);
     # fall back to the exp4 experiment artifact it originally came from.
-    _kr_src = _RUN.models / "joint_xgb_v2.3.pkl"
-    if not _kr_src.exists():
-        _kr_src = EXP4_DIR / "joint_xgb_exp4_bag.pkl"
+    # v2.4 carries the same list (after dropping retired features), so it is the fallback if the
+    # v2.3 bundle is ever cleaned away (it was, 2026-09-27, and broke this step)
+    # a fresh run tag has neither, so production's promoted bundles are the next fallback
+    _cur = config.run("current").models
+    _kr_src = next((f for f in (_RUN.models / "joint_xgb_v2.3.pkl", _RUN.models / "joint_xgb_v2.4.pkl",
+                                _cur / "joint_xgb_v2.3.pkl", _cur / "joint_xgb_v2.4.pkl",
+                                EXP4_DIR / "joint_xgb_exp4_bag.pkl") if f.exists()), _RUN.models / "joint_xgb_v2.3.pkl")
     with open(_kr_src, "rb") as fh:
         b4 = pickle.load(fh)
     keep_raw = list(b4["keep_raw"])

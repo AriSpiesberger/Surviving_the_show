@@ -63,6 +63,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--start", type=int, default=1996, help="first draft class / MiLB season")
     ap.add_argument("--db", default=str(EXT))
+    ap.add_argument("--undrafted-first-from", type=int, default=0,
+                    help="also add never-drafted signees (mostly international) whose FIRST stateside MiLB season is "
+                         "in [this year, 2004]; their pre-2006 DSL / VSL seasons are not in any free source (2026-10-01)")
     args = ap.parse_args()
     EXT = Path(args.db) if Path(args.db).is_absolute() else ROOT / args.db
     if not EXT.exists():
@@ -78,6 +81,21 @@ def main():
     played = {(s.get("player") or {}).get("id") for v in splits.values() for s in v}
     keep = {m for m in picks if m in played}
     print(f"[ext] {args.start}-2004 draftees who played {args.start}-2004 MiLB: {len(keep):,}")
+    undrafted = set()
+    if args.undrafted_first_from:
+        ever = set()
+        for f in glob.glob(str(PRE / "drafts" / "*.json")):
+            for rd in json.loads(Path(f).read_text(encoding="utf-8")).get("drafts", {}).get("rounds", []):
+                ever |= {(k.get("person") or {}).get("id") for k in rd.get("picks", [])}
+        first = {}
+        for (y, _sid, _g), sp in splits.items():
+            for s_ in sp:
+                m_ = (s_.get("player") or {}).get("id")
+                if m_ and m_ > 0:
+                    first[m_] = min(first.get(m_, 9999), y)
+        undrafted = {m_ for m_, y in first.items() if m_ not in ever and args.undrafted_first_from <= y <= 2004}
+        keep |= undrafted
+        print(f"[ext] + never-drafted signees first seen stateside {args.undrafted_first_from}-2004: {len(undrafted):,}")
 
     con = sqlite3.connect(EXT)
     have = {}
@@ -96,9 +114,25 @@ def main():
         for p in r.get("people", []):
             bio[p["id"]] = p
         time.sleep(0.1)
+    # Many never-drafted signees have no API biography (no birth date / country), and a missing birth
+    # date would be imputed as age 22 -- presence that tracks the outcome (big leaguers have full bios).
+    # Every API season split carries the player's age, so estimate the birth year from those instead:
+    # baseball age is age on June 30, so birth falls in (Jul 1 of season-age-1, Jun 30 of season-age];
+    # Jan 1 of season-age is the midpoint.
+    from collections import Counter
+    split_age = {}
+    for (y, _sid, _g), sp in splits.items():
+        for s_ in sp:
+            m_, a_ = (s_.get("player") or {}).get("id"), (s_.get("stat") or {}).get("age")
+            if m_ in keep and a_ is not None:
+                split_age.setdefault(m_, Counter())[y - int(a_)] += 1
     rows = []
+    n_est = 0
     for m in new:
         p = bio.get(m, {})
+        if not p.get("birthDate") and m in split_age:
+            p = dict(p, birthDate=f"{split_age[m].most_common(1)[0][0]}-01-01")
+            n_est += 1
         pos = (p.get("primaryPosition") or {}).get("abbreviation") or ""
         h = p.get("height") or ""
         try:
@@ -106,10 +140,13 @@ def main():
             hin = int(ft) * 12 + int(inch)
         except ValueError:
             hin = None
-        y, rnd, pk = picks[m]
+        y, rnd, pk = picks.get(m, (None, None, None))
+        intl = int(m in undrafted and p.get("birthCountry") != "USA")    # unknown country: treated as international
         rows.append((f"ifa_{m}", p.get("fullName") or f"mlbam_{m}", int(pos in ("P", "RHP", "LHP", "SP", "RP")),
-                     pos, p.get("birthDate"), y, rnd, pk, 0, p.get("birthCountry"), str(m), hin,
-                     p.get("weight"), (p.get("batSide") or {}).get("code"), (p.get("pitchHand") or {}).get("code")))
+                     pos, p.get("birthDate"), y, rnd, pk, intl, p.get("birthCountry"), str(m), hin,
+                     p.get("weight"), (p.get("batSide") or {}).get("code"), (p.get("pitchHand") or {}).get("code"),
+                     "pre2005 undrafted signee (ext build)" if m in undrafted else "pre2005 draft class (ext build)"))
+    print(f"[ext] birth dates estimated from season-split ages for {n_est:,} of {len(new):,} new players")
     existing_ids = {r[0] for r in con.execute("SELECT player_id FROM prospects")}
     clash = [r[0] for r in rows if r[0] in existing_ids]
     if clash:
@@ -120,7 +157,7 @@ def main():
             "INSERT INTO prospects (player_id, name, is_pitcher, primary_position, birth_date, draft_year, "
             "draft_round, draft_pick, is_international, origin, mlbam_id, height_inches, weight_lbs, bats, throws, "
             "tj_history, has_current_injury, current_injury_type, notes, updated_at) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,0,'','pre2005 draft class (ext build)',?)",
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,0,'',?,?)",
             [r + (stamp,) for r in rows])
     con.close()
     print(f"[ext] inserted {len(rows):,} new players")

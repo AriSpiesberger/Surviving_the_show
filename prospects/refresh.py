@@ -220,12 +220,12 @@ def build_plan(args) -> list[tuple[str, str, object]]:
          _py("prospects.data.backfills.woba_backfill")),
         ("percentiles", "rank each row within its (level, year) cohort",
          _py("prospects.data.backfills.percentile_backfill")),
-        # The 1996-2004 draft classes (production since 2026-09-25) are a cohort, not whole
-        # leagues: re-rank their pct_* against the full-league cached splits after the
-        # in-DB ranking above overwrote them.
-        ("pre2005_context", "league-context percentiles for the 1996-2004 rows",
+        # The 1988-2004 draft classes (production since 2026-10-01) are a cohort, not whole
+        # leagues: re-rank their pct_* against the full-league cached splits (MLB API, plus
+        # StatsCrew for the API's 1989 / 1992 holes) after the in-DB ranking above overwrote them.
+        ("pre2005_context", "league-context percentiles for the 1988-2004 rows",
          [sys.executable, "-u", str(REPO_ROOT / "tools" / "build_pre2005_context.py"),
-          "--start", "1996", "--db", "prospects.db"]),
+          "--start", "1988", "--db", "prospects.db"]),
         ("snapshot", "refresh prospects_snapshot.db", step_snapshot),
         # Baselines are league medians per level, read from the SNAPSHOT, so
         # they have to be rebuilt after the copy and before any feature is

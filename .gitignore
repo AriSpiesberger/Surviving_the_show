@@ -159,3 +159,7 @@ reference/pre2005/seasons/
 reference/pre2005/drafts/
 # experiment output (kNN comps screen, negative 2026-09-24)
 reference/knn/
+
+# StatsCrew raw page cache (re-fetchable)
+reference/pre2005/statscrew/raw/
+runs/experiments/exp_scout_text/
