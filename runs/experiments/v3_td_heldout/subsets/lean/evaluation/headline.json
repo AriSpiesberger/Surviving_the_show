@@ -1,0 +1,32 @@
+{
+  "model": "runs\\experiments\\v3_td_heldout\\subsets\\lean\\v3.pkl",
+  "val_long": "C:\\Users\\arisp\\Documents\\Research\\Surviving_the_show\\runs\\current\\training\\oof_val_long.csv",
+  "eval_horizon": 6,
+  "weighted_ap": 0.4633605769903073,
+  "per_event": [
+    {
+      "event": "TOP_100_PROSPECT",
+      "ap": 0.4880307366991975,
+      "auc": 0.9687839161414292,
+      "ap_lift": 44.5248821469073
+    },
+    {
+      "event": "MLB_DEBUT",
+      "ap": 0.6017452262923476,
+      "auc": 0.9318838570120049,
+      "ap_lift": 7.0900500996624345
+    },
+    {
+      "event": "ESTABLISHED_MLB",
+      "ap": 0.39084675504074995,
+      "auc": 0.9420234772834897,
+      "ap_lift": 14.460921100989923
+    },
+    {
+      "event": "STAR_PLUS_ELITE",
+      "ap": 0.23443494062689355,
+      "auc": 0.9560993951028458,
+      "ap_lift": 54.19737441120164
+    }
+  ]
+}

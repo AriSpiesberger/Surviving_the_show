@@ -10,6 +10,13 @@ differing by event (DEFAULT_SPEC). Components:
     cond   v3-debut x P(event | debut), calibrated as a product
     haz    discrete-time hazard GBM, P(by h) = 1 - prod(1 - q_t), then calibrated
     nhaz   neural hazard net (exp_nhaz): transformer trunk + tabular MLP, 4 events x 10 years
+    td     v3 trained on temporal-difference soft labels: td_lambda * y + (1 - td_lambda) *
+           the event's cross-fit v3 prediction for the same player one season later (snap+1,
+           h-1); the hard label is kept when the event happens in year snap+1 (2026-09-28)
+    tdcond td-debut x P(event | debut) trained on td soft labels, calibrated as a product
+    rk     rank:map GBM, query = (snap year, horizon); margins squashed, then calibrated
+    tch    MLB playing-time teacher: GBM regression on log1p(MLB PA + BF in (snap, snap+h]),
+           trained once, calibrated per event
 
 Each covered event is published as the mean of its components' calibrated trajectories, then
 (v3_sidebyside's recalibrate step) a monotone Platt per horizon fit on the held-out build's val
@@ -76,14 +83,26 @@ def _pack(frame, e):
                       pd.DataFrame(e, columns=_emb_cols())], axis=1)
 
 
-def _fit_gbm(X, y, feats, seed):
+def _fit_gbm(X, y, feats, seed, obj=None, qid=None, mcw=None):
     from prospects.model.train.exp_cdf_timing2 import BASE_PARAMS, _mono_string
     p = dict(BASE_PARAMS)
     p.update(PARAMS)
     p["seed"] = seed
     p["monotone_constraints"] = _mono_string(feats)
-    return xgb.train(p, xgb.QuantileDMatrix(X, label=y, feature_names=feats),
+    if mcw is not None:
+        p["min_child_weight"] = mcw
+    if obj:
+        p["objective"] = obj
+        p["eval_metric"] = "map" if obj.startswith("rank") else "rmse"
+    if qid is not None:                          # xgboost wants rows grouped by query id
+        o = np.argsort(qid, kind="stable")
+        X, y, qid = X[o], y[o], qid[o]
+    return xgb.train(p, xgb.QuantileDMatrix(X, label=y, qid=qid, feature_names=feats),
                      num_boost_round=ROUNDS, verbose_eval=False)
+
+
+def _squash(a, mu, sd):
+    return 1.0 / (1.0 + np.exp(-(a - mu) / sd))
 
 
 def _state_bytes(net) -> bytes:
@@ -118,7 +137,7 @@ def _embed(encoder, net, tok, frame):
 
 def build(fit_csv, aug_csv, base_xgb, base_cal, out, out_cal, db, events, seeds=5, epochs=8,
           max_entry=2020, cal_min_snap_year=2008, threads=16, log=print, modes=None, mix=0.5,
-          encoder="gru"):
+          encoder="gru", td_lambda=0.5):
     """Train a v3 bundle on fit_csv (+ aug_csv) and write it plus the merged calibrators."""
     from prospects.model.train.exp_cdf_timing2 import stamp_extra_cols
     from prospects.model.train.exp_macro_bc import feature_sets
@@ -202,6 +221,14 @@ def build(fit_csv, aug_csv, base_xgb, base_cal, out, out_cal, db, events, seeds=
             del b
         return oof, [_fit_gbm(X[m], y[m], feats, seed0 + 900 + s) for s in range(seeds)]
 
+    def oof_only(y, m, seed0, **kw):
+        oof = np.full(len(y), np.nan)
+        for f in range(3):
+            b = _fit_gbm(X[m & (fold != f)], y[m & (fold != f)], feats, seed0 + f, **kw)
+            oof[fold == f] = b.predict(xgb.DMatrix(X[fold == f], feature_names=feats))
+            del b
+        return oof
+
     def fit_cal(score, y, m):
         ok = m & era_ok & np.isfinite(score)
         return HYip2Calibrator().fit(np.clip(score[ok], 1e-7, 1 - 1e-7), h_arr[ok], yip_arr[ok],
@@ -221,8 +248,58 @@ def build(fit_csv, aug_csv, base_xgb, base_cal, out, out_cal, db, events, seeds=
     # ["base", <mode>].
     spec = {ev: list(modes[ev]) if isinstance(modes.get(ev), (list, tuple))
             else ["base", modes.get(ev, "v3")] for ev in events}
+
+    # (player, snap, h) -> (player, snap+1, h-1): the same question one season later (td)
+    nxt = kdf.assign(snap=kdf.snap - 1, h=kdf.h + 1).rename(columns={"i": "inext"})[["pid", "snap", "h", "inext"]]
+    inext = kdf.merge(nxt, on=["pid", "snap", "h"], how="left")["inext"].to_numpy()
+    has_n = np.isfinite(inext)
+    ixn = np.where(has_n, inext, 0).astype(int)
+    qid = snap_arr.astype(np.int64) * 16 + h_arr.astype(np.int64)
+
+    def td_soft(y, v_oof, extra=None):
+        p_next, y_next = v_oof[ixn], y[ixn]
+        use = has_n & np.isfinite(p_next) & ~((y == 1) & (y_next == 0))
+        if extra is not None:
+            use &= extra
+        return np.where(use, td_lambda * y + (1 - td_lambda) * np.nan_to_num(p_next), y).astype(np.float32)
+
+    dtd = {}
+
+    def debut_td():
+        if not dtd:
+            md_ = elig("MLB_DEBUT")
+            dtd["oof"], dtd["bag"] = oof_and_bag(td_soft(yd, debut_oof), md_, 642)
+            tick(f"MLB_DEBUT td head (lambda {td_lambda}): cross-fit + {seeds}-seed bag")
+        return dtd
+
+    teacher = None
+    if any("tch" in spec[ev] for ev in events):
+        import sqlite3
+        from prospects.model.hazards.survival import MAX_OBS_YEAR
+        con = sqlite3.connect(db)
+        pt = pd.read_sql("SELECT player_id, season_year, COALESCE(pa,0) + COALESCE(p_batters_faced,0) AS v "
+                         "FROM season_stats WHERE level = 'MLB'", con)
+        con.close()
+        y0, y1 = 1985, 2031
+        cum = {}
+        for pid_, g in pt.groupby("player_id"):
+            a = np.zeros(y1 - y0 + 1)
+            yy = g.season_year.to_numpy().astype(int) - y0
+            ok_ = (yy >= 0) & (yy < len(a))
+            np.add.at(a, yy[ok_], g.v.to_numpy()[ok_])
+            cum[pid_] = np.cumsum(a)
+        lo_ = np.clip(snap_arr.astype(int) - y0, 0, y1 - y0)
+        hi_ = np.clip(snap_arr.astype(int) + h_arr - y0, 0, y1 - y0)
+        tgt = np.log1p([(cum[p_][b_] - cum[p_][a_]) if p_ in cum else 0.0
+                        for p_, a_, b_ in zip(pids, lo_, hi_)]).astype(np.float32)
+        obs = (snap_arr + h_arr) <= MAX_OBS_YEAR
+        t_oof = oof_only(tgt, obs, 1900, obj="reg:squarederror")
+        t_bag = [_fit_gbm(X[obs], tgt[obs], feats, 2100 + s, obj="reg:squarederror") for s in range(seeds)]
+        teacher = {"bag": t_bag, "mu": float(np.nanmean(t_oof)), "sd": float(np.nanstd(t_oof) + 1e-9)}
+        teacher["oof_sq"] = _squash(t_oof, teacher["mu"], teacher["sd"])
+        tick(f"MLB playing-time teacher: {int(obs.sum()):,} observed rows")
     heads, debut_oof, debut_bag = {}, None, None
-    if any(ev == "MLB_DEBUT" or "cond" in spec[ev] for ev in events):
+    if any(ev == "MLB_DEBUT" or "cond" in spec[ev] or "tdcond" in spec[ev] for ev in events):
         debut_oof, debut_bag = oof_and_bag(yd, elig("MLB_DEBUT"), 242)
         tick(f"MLB_DEBUT v3: cross-fit + {seeds}-seed bag")
     for ev in events:
@@ -253,13 +330,40 @@ def build(fit_csv, aug_csv, base_xgb, base_cal, out, out_cal, db, events, seeds=
                 heads[ev][comp] = {"bag": bagh, "cal": fit_cal(1 - surv, y, m)}
             elif comp == "nhaz":       # neural hazard net, trained once for all events above
                 heads[ev][comp] = {"cal": nhaz["cals"][ev]}
+            elif comp == "td" and ev == "MLB_DEBUT":   # shares the td debut head
+                heads[ev][comp] = {"bag": None, "cal": fit_cal(debut_td()["oof"], y, m), "td_lambda": td_lambda}
+            elif comp == "td":         # temporal-difference soft labels from the next-season v3 OOF
+                soft = td_soft(y, oof_only(y, m, 300 + 10 * k))
+                oof_t, bag_t = oof_and_bag(soft, m, 600 + 10 * k)
+                heads[ev][comp] = {"bag": bag_t, "cal": fit_cal(oof_t, y, m), "td_lambda": td_lambda}
+            elif comp == "tdcond":     # td-debut x td P(event | debut)
+                mdb = m & (yd == 1)
+                soft_c = td_soft(y, oof_only(y, mdb, 500 + 10 * k), extra=(yd[ixn] == 1))
+                oofc2, bagc2 = oof_and_bag(soft_c, mdb, 520 + 10 * k)
+                heads[ev][comp] = {"bag": bagc2, "cal": fit_cal(debut_td()["oof"] * oofc2, y, m),
+                                   "td_lambda": td_lambda}
+            elif comp == "rk":         # rank:map inside each (snap year, horizon) cohort
+                oof_r = np.full(len(y), np.nan)
+                for f in range(3):
+                    tr = m & (fold != f)
+                    b = _fit_gbm(X[tr], y[tr], feats, 900 + 10 * k + f, obj="rank:map", qid=qid[tr], mcw=1.0)
+                    oof_r[fold == f] = b.predict(xgb.DMatrix(X[fold == f], feature_names=feats))
+                    del b
+                bag_r = [_fit_gbm(X[m], y[m], feats, 1700 + 10 * k + s, obj="rank:map", qid=qid[m], mcw=1.0)
+                         for s in range(seeds)]
+                mu, sd = float(np.nanmean(oof_r)), float(np.nanstd(oof_r) + 1e-9)
+                heads[ev][comp] = {"bag": bag_r, "mu": mu, "sd": sd, "cal": fit_cal(_squash(oof_r, mu, sd), y, m)}
+            elif comp == "tch":        # shared teacher, calibrated for this event
+                heads[ev][comp] = {"cal": fit_cal(teacher["oof_sq"], y, m)}
             else:
                 raise ValueError(f"unknown component {comp!r} for {ev}")
             tick(f"{ev}: component {comp} (cross-fit calibrator + {seeds}-seed bag)")
 
     bundle = {"kind": KIND, "base_xgb": str(base_xgb), "base_cal": str(base_cal), "spec": spec,
               "events": list(events), "heads": heads, "debut_bag": debut_bag,
+              "debut_td_bag": dtd.get("bag"), "td_lambda": td_lambda,
               "nhaz": {k: v for k, v in nhaz.items() if k != "cals"} if nhaz else None,
+              "teacher": {k: v for k, v in teacher.items() if k != "oof_sq"} if teacher else None,
               "feature_names": feats, "keep_raw": raw_all,
               "encoder_state": _state_bytes(net_full), "n_static": len(sq.STATIC), "encoder": encoder,
               "tok_width": 2 * getattr(tok, "n_num", len(sq.NUM)) + 1,
@@ -464,16 +568,22 @@ def score_v3(bundle: dict, df: pd.DataFrame, db: str):
         return np.column_stack([np.mean([b.predict(xgb.DMatrix(s, feature_names=feats)) for b in bag], axis=0)
                                 for s in subs])
 
-    def cal_traj(raw, cal):
-        raw = np.maximum.accumulate(np.clip(raw, 1e-7, 1 - 1e-7), axis=1)
+    def cal_traj(raw, cal, accumulate=True):
+        raw = np.clip(raw, 1e-7, 1 - 1e-7)
+        if accumulate:                  # rank / teacher scores are not monotone in h: calibrate per h
+            raw = np.maximum.accumulate(raw, axis=1)
         P = np.column_stack([cal.predict(raw[:, h - 1], np.full(len(raw), h), yip) for h in range(1, h_max + 1)])
         return np.maximum.accumulate(P, axis=1)
 
     from prospects.model.joint2 import load_calibrators, make_cal_fn
     base_cal = make_cal_fn(load_calibrators(bundle["base_cal"]), scored)
     debut_raw = np.maximum.accumulate(bag_traj(bundle["debut_bag"]), axis=1) if bundle.get("debut_bag") else None
+    dtd_raw = (np.maximum.accumulate(bag_traj(bundle["debut_td_bag"]), axis=1)
+               if bundle.get("debut_td_bag") else None)
     nh = bundle.get("nhaz")
     nh_raw = _score_nhaz(nh, d, db) if nh else None
+    tch = bundle.get("teacher")
+    tch_sq = _squash(bag_traj(tch["bag"]), tch["mu"], tch["sd"]) if tch else None
     for ev in bundle["events"]:
         parts = []
         for comp in bundle["spec"][ev]:
@@ -486,13 +596,23 @@ def score_v3(bundle: dict, df: pd.DataFrame, db: str):
             head = bundle["heads"][ev][comp]
             if comp == "v3" and ev == "MLB_DEBUT":
                 raw_v = debut_raw
+            elif comp == "td" and ev == "MLB_DEBUT":
+                raw_v = dtd_raw
+            elif comp == "tdcond":
+                raw_v = dtd_raw * bag_traj(head["bag"])
             elif comp == "cond":
                 raw_v = debut_raw * bag_traj(head["bag"])
             elif comp == "haz":
                 raw_v = 1 - np.cumprod(1 - np.clip(bag_traj(head["bag"]), 0, 1), axis=1)
             elif comp == "nhaz":
                 raw_v = nh_raw[:, nh["events"].index(ev), :h_max]
-            else:
+            elif comp == "rk":
+                parts.append(cal_traj(_squash(bag_traj(head["bag"]), head["mu"], head["sd"]), head["cal"], False))
+                continue
+            elif comp == "tch":
+                parts.append(cal_traj(tch_sq, head["cal"], False))
+                continue
+            else:                       # v3, td
                 raw_v = bag_traj(head["bag"])
             parts.append(cal_traj(raw_v, head["cal"]))
         P = np.maximum.accumulate(np.mean(parts, axis=0), axis=1)
@@ -521,6 +641,7 @@ def main():
     b.add_argument("--encoder", choices=ENCODERS, default="gru")
     b.add_argument("--max-entry", type=int, default=2020)
     b.add_argument("--threads", type=int, default=16)
+    b.add_argument("--td-lambda", type=float, default=0.5, help="weight of the hard label in the td component")
     r = sub.add_parser("recalibrate")
     r.add_argument("--heldout-xgb", required=True)
     r.add_argument("--heldout-cal", required=True)
@@ -534,6 +655,7 @@ def main():
         spec = {kv.split("=", 1)[0]: kv.split("=", 1)[1].split(",") for kv in a.spec}
         build(a.fit, a.aug_long, a.base_xgb, a.base_cal, a.out, a.out_cal, a.db, list(spec),
               seeds=a.seeds, epochs=a.epochs, max_entry=a.max_entry, threads=a.threads, encoder=a.encoder,
+              td_lambda=a.td_lambda,
               log=lambda m: print(m, flush=True), modes=spec)
 
 

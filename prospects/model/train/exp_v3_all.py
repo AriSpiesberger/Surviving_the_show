@@ -58,13 +58,20 @@ EVAL_H = (3, 6)
 CEILING = ("ESTABLISHED_MLB", "STAR_PLUS_ELITE")
 
 
-def fit(X, y, feats, seed, mcw_scale, w=None):
+def fit(X, y, feats, seed, mcw_scale, w=None, obj=None, qid=None, mcw=None):
+    """obj / qid / mcw: the rank:map and teacher-regression arms (2026-09-27)."""
     p = dict(BASE_PARAMS)
     p.update(PARAMS)
-    p["min_child_weight"] = PARAMS["min_child_weight"] * mcw_scale
+    p["min_child_weight"] = (PARAMS["min_child_weight"] if mcw is None else mcw) * mcw_scale
     p["seed"] = seed
     p["monotone_constraints"] = _mono_string(feats)
-    d = xgb.QuantileDMatrix(X, label=y, weight=w, feature_names=feats)
+    if obj:
+        p["objective"] = obj
+        p["eval_metric"] = {"rank:map": "map", "rank:ndcg": "ndcg"}.get(obj, "rmse")
+    if qid is not None:                          # xgboost wants rows grouped by query id
+        o = np.argsort(qid, kind="stable")
+        X, y, qid, w = X[o], y[o], qid[o], None
+    d = xgb.QuantileDMatrix(X, label=y, weight=w, qid=qid, feature_names=feats)
     return xgb.train(p, d, num_boost_round=ROUNDS, verbose_eval=False)
 
 
@@ -97,6 +104,19 @@ def main():
     ap.add_argument("--aug-noise", type=float, default=0.15, help="noise sd as a fraction of the feature's std")
     ap.add_argument("--haz", action="store_true", help="add the discrete-time hazard arms (haz, mix_haz)")
     ap.add_argument("--only-haz", action="store_true", help="hazard arms only (skip v3 / v3cond)")
+    ap.add_argument("--pre96-min-landmark", type=int, default=0,
+                    help="drop fit landmarks before this year for pre-1996 draftees (incomplete history)")
+    ap.add_argument("--dup", action="store_true",
+                    help="ensemble control: a second v3 head with different seeds (v3b), so an added arm's gain "
+                         "can be told apart from plain averaging")
+    ap.add_argument("--td-iter", type=int, default=1, help="TD rounds: round k targets use round k-1's td OOF")
+    ap.add_argument("--td", type=float, default=0.0,
+                    help="temporal-difference arm: soft label = td*y + (1-td)*OOF v3 prediction at (snap+1, h-1)")
+    ap.add_argument("--rank", action="store_true", help="add rank:map arms (rk) grouped by snap year x horizon")
+    ap.add_argument("--rank-obj", default="rank:map")
+    ap.add_argument("--rank-mcw", type=float, default=1.0, help="min_child_weight for the rank arm (pre-scale)")
+    ap.add_argument("--teacher", action="store_true",
+                    help="MLB playing-time teacher: tch arm + v3t (v3 ceiling heads stacked on the teacher)")
     ap.add_argument("--out-dir", default=str(REPO_ROOT / "runs" / "experiments" / "exp_v3_all"))
     args = ap.parse_args()
     global ROUNDS, DB
@@ -134,6 +154,19 @@ def main():
         return df[df["player_id"].isin(k)]
 
     fit_raw = sample(pd.read_csv(args.fit, low_memory=False))
+    if args.pre96_min_landmark:
+        # players drafted before 1996 have no MiLB lines before 2005 (the pre-2005 layer covers the
+        # 1996-2004 classes only), so their early landmarks show an empty history: keep the old
+        # 2007 floor for them (2026-09-28)
+        import sqlite3
+        con = sqlite3.connect(DB)
+        dy = dict(con.execute("SELECT player_id, draft_year FROM prospects WHERE draft_year IS NOT NULL").fetchall())
+        con.close()
+        d_ = fit_raw.player_id.map(dy).astype(float)
+        bad = (d_ < 1996) & (fit_raw.snap_year < args.pre96_min_landmark)
+        print(f"[v3all] pre-1996 draftees: dropped {int(bad.sum()):,} fit landmark rows before "
+              f"{args.pre96_min_landmark} ({fit_raw.player_id[bad].nunique():,} players)", flush=True)
+        fit_raw = fit_raw[~bad]
     if args.extra_fit:
         # synthetic twins (tools/build_twins.py): only twins of the SAMPLED players are kept
         xf = pd.read_csv(args.extra_fit, low_memory=False)
@@ -250,16 +283,16 @@ def main():
         raw = sv[[f"xp_{ev}_h{h}" for h in range(1, H_MAX + 1)]].to_numpy(dtype=np.float64)
         return calibrate(raw, calsA[ev]) if ev in calsA else np.maximum.accumulate(raw, axis=1)
 
-    def train_event(y, m, tag):
+    def train_event(y, m, tag, seed_off=0):
         """3-fold OOF raw predictions on all rows + bagged val raw trajectory."""
         oof = np.full(len(y), np.nan)
         for f in range(3):
             tr = m & (fold != f)
-            b = fit(X[tr], y[tr], feats, 300 + f, frac, w=W[tr])
+            b = fit(X[tr], y[tr], feats, 300 + f + seed_off, frac, w=W[tr])
             ho = fold == f
             oof[ho] = b.predict(xgb.DMatrix(X[ho], feature_names=feats))
             del b
-        bag = [fit(X[m], y[m], feats, 1100 + s, frac, w=W[m]) for s in range(args.seeds)]
+        bag = [fit(X[m], y[m], feats, 1100 + s + seed_off, frac, w=W[m]) for s in range(args.seeds)]
         rawv = np.column_stack([np.mean([b.predict(xgb.DMatrix(s_, feature_names=feats)) for b in bag], axis=0)
                                 for s_ in subs])
         with open(out / f"bag_{tag}.pkl", "wb") as fh:
@@ -347,6 +380,71 @@ def main():
         del bag
         return calibrate(1 - np.cumprod(1 - qv, axis=1), cal)
 
+    def cal_noacc(score, cal):
+        """calibrate a per-horizon score that is not monotone in h (rank / teacher margins)"""
+        P = np.column_stack([cal.predict(np.clip(score[:, h - 1], 1e-7, 1 - 1e-7), np.full(len(score), h), yip_v)
+                             for h in range(1, H_MAX + 1)])
+        return np.maximum.accumulate(P, axis=1)
+
+    def squash(fit_score, *others):
+        mu, sd = np.nanmean(fit_score), np.nanstd(fit_score) + 1e-9
+        f = lambda a: 1.0 / (1.0 + np.exp(-(a - mu) / sd))
+        return [f(fit_score)] + [f(o) for o in others]
+
+    # ---- rank:map arm (2026-09-27): optimise ranking inside each (snap year, horizon) cohort
+    qid_all = (snap_arr.astype(np.int64) * 16 + h_arr.astype(np.int64))
+
+    def rank_arm(y, m, tag):
+        oof = np.full(len(y), np.nan)
+        for f in range(3):
+            tr = m & (fold != f)
+            b = fit(X[tr], y[tr], feats, 900 + f, frac, obj=args.rank_obj, qid=qid_all[tr], mcw=args.rank_mcw)
+            oof[fold == f] = b.predict(xgb.DMatrix(X[fold == f], feature_names=feats))
+            del b
+        bag = [fit(X[m], y[m], feats, 1700 + s, frac, obj=args.rank_obj, qid=qid_all[m], mcw=args.rank_mcw)
+               for s in range(args.seeds)]
+        rawv = np.column_stack([np.mean([b.predict(xgb.DMatrix(s_, feature_names=feats)) for b in bag], axis=0)
+                                for s_ in subs])
+        del bag
+        so, sv_ = squash(oof, rawv)
+        return cal_noacc(sv_, fit_cal(so, y, m))
+
+    # ---- MLB playing-time teacher (2026-09-27): dense target log1p(MLB PA + BF in (snap, snap+h])
+    t_oof = t_val = None
+    if args.teacher:
+        import sqlite3
+        con = sqlite3.connect(DB)
+        pt = pd.read_sql("SELECT player_id, season_year, COALESCE(pa,0) + COALESCE(p_batters_faced,0) AS v "
+                         "FROM season_stats WHERE level = 'MLB'", con)
+        con.close()
+        Y0, Y1 = 1985, 2031
+        cum = {}
+        for pid_, g in pt.groupby("player_id"):
+            a = np.zeros(Y1 - Y0 + 1)
+            yy = g.season_year.to_numpy().astype(int) - Y0
+            ok_ = (yy >= 0) & (yy < len(a))
+            np.add.at(a, yy[ok_], g.v.to_numpy()[ok_])
+            cum[pid_] = np.cumsum(a)
+        lo_ = np.clip(snap_arr.astype(int) - Y0, 0, Y1 - Y0)
+        hi_ = np.clip(snap_arr.astype(int) + h_arr.astype(int) - Y0, 0, Y1 - Y0)
+        T = np.array([(cum[p_][b_] - cum[p_][a_]) if p_ in cum else 0.0 for p_, a_, b_ in zip(base_pid, lo_, hi_)])
+        tgt = np.log1p(T).astype(np.float32)
+        obs = (snap_arr + h_arr) <= 2025
+        t_oof = np.full(len(tgt), np.nan)
+        for f in range(3):
+            tr = obs & (fold != f)
+            b = fit(X[tr], tgt[tr], feats, 1900 + f, frac, obj="reg:squarederror", w=W[tr])
+            t_oof[fold == f] = b.predict(xgb.DMatrix(X[fold == f], feature_names=feats))
+            del b
+        bt = [fit(X[obs], tgt[obs], feats, 2100 + s, frac, obj="reg:squarederror", w=W[obs]) for s in range(args.seeds)]
+        t_val = np.column_stack([np.mean([b.predict(xgb.DMatrix(s_, feature_names=feats)) for b in bt], axis=0)
+                                 for s_ in subs])
+        del bt
+        tick(f"teacher trained: {int(obs.sum()):,} observed rows, {float((T > 0)[obs].mean()):.1%} with MLB time")
+        feats_t = feats + ["teacher_mlb_pt"]
+        X_t = np.hstack([X, t_oof[:, None].astype(np.float32)])
+        subs_t = [np.hstack([s_, t_val[:, i:i + 1].astype(np.float32)]) for i, s_ in enumerate(subs)]
+
     kd = EVENTS.index(DEBUT)
     yd = Y[:, kd].astype(np.float32)
     debut_oof, debut_raw = None, None
@@ -369,6 +467,51 @@ def main():
         preds[(ev, "v3")] = calibrate(rawv, fit_cal(oof, y, m))
         preds[(ev, "mix_v3")] = 0.5 * preds[(ev, "control")] + 0.5 * preds[(ev, "v3")]
         tick(f"{ev}: v3 done")
+        if args.dup:
+            oofb, rawb = train_event(y, m, f"{ev}_dup", seed_off=5000)
+            preds[(ev, "v3b")] = calibrate(rawb, fit_cal(oofb, y, m))
+            tick(f"{ev}: ensemble-control v3b done")
+        if args.td > 0:
+            # (pid, snap, h) -> row (pid, snap+1, h-1): the same question asked one season later
+            nxt = kdf.assign(snap=kdf.snap - 1, h=kdf.h + 1).rename(columns={"i": "inext"})[["pid", "snap", "h", "inext"]]
+            inext = kdf.merge(nxt, on=["pid", "snap", "h"], how="left")["inext"].to_numpy()
+            has_n = np.isfinite(inext)
+            ixn = np.where(has_n, inext, 0).astype(int)
+            p_next = oof[ixn]
+            y_next = y[ixn]
+            hit_now = (y == 1) & (y_next == 0)        # event in year snap+1: known exactly
+            use = has_n & np.isfinite(p_next) & ~hit_now
+            soft = np.where(use, args.td * y + (1 - args.td) * np.nan_to_num(p_next), y).astype(np.float32)
+            oof_td, raw_td = train_event(soft, m, f"{ev}_td")
+            preds[(ev, "td")] = calibrate(raw_td, fit_cal(oof_td, y, m))
+            for it in range(2, args.td_iter + 1):
+                pn = oof_td[ixn]
+                use2 = has_n & np.isfinite(pn) & ~hit_now
+                soft2 = np.where(use2, args.td * y + (1 - args.td) * np.nan_to_num(pn), y).astype(np.float32)
+                oof_td, raw_td = train_event(soft2, m, f"{ev}_td{it}", seed_off=70 * it)
+                preds[(ev, f"td{it}")] = calibrate(raw_td, fit_cal(oof_td, y, m))
+                tick(f"{ev}: td round {it} done")
+            if ev == DEBUT:
+                dtd_oof, dtd_raw = oof_td, raw_td
+            tick(f"{ev}: td arm done ({int(has_n.sum()):,} rows with a next-season target)")
+        if args.rank:
+            preds[(ev, "rk")] = rank_arm(y, m, ev)
+            tick(f"{ev}: rank arm done")
+        if args.teacher and ev in CEILING + (DEBUT,):
+            so, sv_ = squash(t_oof, t_val)
+            preds[(ev, "tch")] = cal_noacc(sv_, fit_cal(so, y, m))
+            oof2 = np.full(len(y), np.nan)
+            for f in range(3):
+                tr = m & (fold != f)
+                b = fit(X_t[tr], y[tr], feats_t, 330 + f, frac, w=W[tr])
+                oof2[fold == f] = b.predict(xgb.DMatrix(X_t[fold == f], feature_names=feats_t))
+                del b
+            bag2 = [fit(X_t[m], y[m], feats_t, 1150 + s, frac, w=W[m]) for s in range(args.seeds)]
+            raw2 = np.column_stack([np.mean([b.predict(xgb.DMatrix(s_, feature_names=feats_t)) for b in bag2], axis=0)
+                                    for s_ in subs_t])
+            del bag2
+            preds[(ev, "v3t")] = calibrate(raw2, fit_cal(oof2, y, m))
+            tick(f"{ev}: teacher arms done")
         if ev in CEILING:
             md = m & (yd == 1)
             oofc = np.full(len(y), np.nan)
@@ -389,6 +532,23 @@ def main():
             preds[(ev, "v3cond")] = calibrate(debut_raw * rawc, cal)
             preds[(ev, "mix_cond")] = 0.5 * preds[(ev, "control")] + 0.5 * preds[(ev, "v3cond")]
             tick(f"{ev}: v3cond done")
+            if args.td > 0:
+                # TD for the conditional head: soft label from the next season's conditional OOF,
+                # among rows whose next-season row is also post-debut
+                use_c = has_n & np.isfinite(oofc[ixn]) & ~hit_now & (yd[ixn] == 1)
+                soft_c = np.where(use_c, args.td * y + (1 - args.td) * np.nan_to_num(oofc[ixn]), y).astype(np.float32)
+                oofc2 = np.full(len(y), np.nan)
+                for f in range(3):
+                    tr = md & (fold != f)
+                    b = fit(X[tr], soft_c[tr], feats, 520 + f, frac, w=W[tr])
+                    oofc2[fold == f] = b.predict(xgb.DMatrix(X[fold == f], feature_names=feats))
+                    del b
+                bagc2 = [fit(X[md], soft_c[md], feats, 1320 + s, frac, w=W[md]) for s in range(args.seeds)]
+                rawc2 = np.column_stack([np.mean([b.predict(xgb.DMatrix(s_, feature_names=feats)) for b in bagc2],
+                                                 axis=0) for s_ in subs])
+                del bagc2
+                preds[(ev, "tdcond")] = calibrate(dtd_raw * rawc2, fit_cal(dtd_oof * oofc2, y, m))
+                tick(f"{ev}: td cond done")
 
     # ---- metrics + paired player bootstrap vs control ----------------------------------
     rows, boots = [], []
