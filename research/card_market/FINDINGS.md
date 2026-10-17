@@ -20,6 +20,8 @@ python study_rankings.py               # §2    Top-100 lists
 python study_momentum.py               # §3    momentum and fundamentals
 OMP_NUM_THREADS=2 python light_model.py   # §3b  walk-forward stand-in model (~3 min on 2 threads)
 python study_model.py                  # §3b   model vs market
+OMP_NUM_THREADS=2 python light_model_as.py  # §3c  walk-forward P(All-Star within 4 seasons) (~30 s)
+python study_allstar.py                # §3c   All-Star lottery
 ```
 
 All numbers below were produced on a Mac with the 2026-08-24 copy of `prospects.db`;
@@ -243,6 +245,48 @@ over the year (n=179); below 0.02, −10% and −18% (n=540).
 100% vs 78%. In a logistic regression on the model's logit, 40-man status has a coefficient
 of 1.47 (odds ×4.3). It does not add return — the market reacts to the transaction (+11%)
 — but it belongs in the model as a feature.
+
+## 3c. All-Star lottery — `light_model_as.py`, `study_allstar.py`
+
+**Data bug found on the way (production model).** `prospects.db` takes All-Star selections
+from Lahman via pybaseball, which stops at 2021, while `survival.py` treats every event as
+observed through `MAX_OBS_YEAR = 2025`. Every 2022–2025 All-Star (Henderson, Witt, Carroll,
+Rutschman, Skenes, De La Cruz…) is therefore a *negative* in training for the All-Star,
+All-Star-3+, STAR and ELITE heads; major awards likely share the problem. The MLB Stats API
+awards endpoint (`/api/v1/awards/{ALAS,NLAS}/recipients?season=Y`) has full rosters.
+**Fixed on branch `fix/post-lahman-outcomes`**: `prospects/data/sources/mlb_awards.py`
+(cached at `reference/mlb_awards.csv`) and `outcomes.py` now fill every post-Lahman season,
+which also repairs `year_established_mlb` (685 players established 2022–2026 were missing).
+
+**The model can find All-Stars.** Walk-forward P(first All-Star within 4 seasons), not-yet-
+debuted prospects, trained only on landmarks whose four seasons were complete:
+AUC 0.94 / 0.92 / 0.95 and AP 0.22 / 0.12 / 0.07 for season-ends 2021 / 2022 / 2023, against
+a base rate near 0.25% (2023's window is still open).
+
+**But the market already prices what it finds.** 1,374 positions bought each November
+2021–2023 and held to mid-2026 (19 later All-Stars):
+
+| P(All-Star within 4 seasons) | n | Later All-Stars | Median price | Mean multiple | Net (95% CI) |
+|---|---|---|---|---|---|
+| < 0.5% | 1,162 | 6 | $4 | 0.92× | −58% (−62 to −53) |
+| 0.5–2% | 108 | 5 | $15 | 1.00× | −36% (−62 to +12) |
+| 2–5% | 51 | 2 | $34 | 0.92× | −33% (−58 to +1) |
+| 5–10% | 20 | 2 | $47 | 0.86× | −33% (−59 to −5) |
+| ≥ 10% | 33 | 4 | $55 | 0.59× | −55% (−69 to −39) |
+
+- The model's top 25 each year held 2–3 future All-Stars, yet netted −64%, −58% and −29%.
+  Its hits were already expensive and multiplied 1.4–1.8× (Crow-Armstrong, De La Cruz,
+  Wood, Merrill).
+- Log price rises with log P(All-Star) (correlation 0.54–0.67, elasticity about 0.46).
+- The real lottery tickets were cheap and invisible to the model too: Mason Miller 25×
+  (P 0.000), Drake Baldwin 34× (0.014), Misiorowski 21× (0.004), Sal Stewart 8.5× (0.031),
+  Jhoan Duran 6× (0.002) — mostly pitchers, several relievers.
+- Cheapest third for its P(All-Star) (P ≥ 0.5%): −26% net (CI −65% to +41%) vs −35% and
+  −52% for the middle and richest thirds. Same ordering as §3b, nowhere near profitable,
+  and the one positive year (2023, +8%) is Baldwin alone.
+
+**Verdict: no.** Star probability from the prospect stage is priced; the payoff sits in
+surprise breakouts the features don't see.
 
 ## 4. Dead ends
 
