@@ -108,6 +108,53 @@ def _pick_register_match(matches: list, draft_year: Optional[int]):
     return best or matches[0]
 
 
+def extend_yearly(lahman: list[tuple[int, float]], later: dict[int, float],
+                  lahman_last: int) -> list[tuple[int, float]]:
+    """Per-year values: Lahman for every year it covers, `later` (MLB Stats
+    API rows in season_stats) only for years after `lahman_last`. Old labels
+    stay exactly as Lahman built them; the API fills the years Lahman lacks."""
+    out = [(y, v) for y, v in lahman if y <= lahman_last]
+    out += [(y, v) for y, v in later.items() if y > lahman_last]
+    return sorted(out)
+
+
+def extend_years(lahman: list[int], later: list[int], lahman_last: int) -> list[int]:
+    """Event years (All-Star selections, award wins), same rule as extend_yearly."""
+    return sorted([y for y in lahman if y <= lahman_last]
+                  + [y for y in later if y > lahman_last])
+
+
+def sustained_seasons(pa_by_yr: dict[int, float], ip_by_yr: dict[int, float]) -> list[int]:
+    """MLB seasons with meaningful usage (>=100 PA or >=20 IP), sorted.
+    Role-fair: a multi-year reliever/utility career qualifies even below
+    the 200 IP / 500 PA cumulative bars."""
+    yrs = sorted(set(pa_by_yr) | set(ip_by_yr))
+    return [y for y in yrs if pa_by_yr.get(y, 0) >= 100 or ip_by_yr.get(y, 0) >= 20]
+
+
+def established_year(pa_years: list[tuple[int, float]],
+                     ip_years: list[tuple[int, float]]) -> Optional[int]:
+    """First year the player crosses ANY established path: cumulative
+    PA >= 500, cumulative IP >= 200, or the 3rd meaningful MLB season."""
+    cands: list[int] = []
+    cum_pa = 0.0
+    for yr, pa in sorted(pa_years):
+        cum_pa += pa
+        if cum_pa >= 500:
+            cands.append(yr)
+            break
+    cum_ip = 0.0
+    for yr, ip in sorted(ip_years):
+        cum_ip += ip
+        if cum_ip >= 200:
+            cands.append(yr)
+            break
+    sustained = sustained_seasons(dict(pa_years), dict(ip_years))
+    if len(sustained) >= ESTABLISHED_SUSTAINED_SEASONS:
+        cands.append(sustained[ESTABLISHED_SUSTAINED_SEASONS - 1])
+    return min(cands) if cands else None
+
+
 def pull_outcomes(
     db: ProspectDB,
     verbose: bool = True,
@@ -248,39 +295,63 @@ def pull_outcomes(
     major_award_mask = awards_lower["awardID_lc"].str.contains(
         "most valuable player|cy young|rookie of the year", na=False, regex=True
     )
-    award_year_map = (awards_lower[major_award_mask]
-                      .groupby("playerID")["yearID"].min().to_dict())
+    lahman_award_years: dict[str, list[int]] = (
+        awards_lower[major_award_mask].groupby("playerID")["yearID"]
+        .apply(lambda s: sorted(int(y) for y in s)).to_dict())
 
-    def _sustained_mlb_seasons(bbref: str) -> list[int]:
-        """MLB seasons with meaningful usage (>=100 PA or >=20 IP), sorted.
-        Role-fair: a multi-year reliever/utility career qualifies even below
-        the 200 IP / 500 PA cumulative bars."""
-        pa_by_yr = dict(bat_year_pa.get(bbref, []))
-        ip_by_yr = dict(pit_year_ip.get(bbref, []))
-        yrs = sorted(set(pa_by_yr) | set(ip_by_yr))
-        return [y for y in yrs
-                if pa_by_yr.get(y, 0) >= 100 or ip_by_yr.get(y, 0) >= 20]
+    # Lahman stops at 2021 while the model treats outcomes as observed through
+    # MAX_OBS_YEAR. Seasons after Lahman's last year come from the MLB Stats
+    # API instead: playing time from the season_stats MLB rows that
+    # backfills/mlb_seasons_stitch writes, All-Star and award recipients from
+    # sources/mlb_awards. Lahman stays authoritative for every year it covers.
+    lahman_last_play = int(max(batting["yearID"].max(), pitching["yearID"].max()))
+    lahman_last_as = int(allstar["yearID"].max())
+    lahman_last_award = int(awards["yearID"].max())
 
-    def _established_year(bbref: str) -> Optional[int]:
-        """First year the player crosses ANY established path: cumulative
-        PA >= 500, cumulative IP >= 200, or the 3rd meaningful MLB season."""
-        cands: list[int] = []
-        cum_pa = 0.0
-        for yr, pa in sorted(bat_year_pa.get(bbref, [])):
-            cum_pa += pa
-            if cum_pa >= 500:
-                cands.append(yr)
-                break
-        cum_ip = 0.0
-        for yr, ip in sorted(pit_year_ip.get(bbref, [])):
-            cum_ip += ip
-            if cum_ip >= 200:
-                cands.append(yr)
-                break
-        sustained = _sustained_mlb_seasons(bbref)
-        if len(sustained) >= ESTABLISHED_SUSTAINED_SEASONS:
-            cands.append(sustained[ESTABLISHED_SUSTAINED_SEASONS - 1])
-        return min(cands) if cands else None
+    api_pa: dict[str, dict[int, float]] = {}
+    api_ip: dict[str, dict[int, float]] = {}
+    with db._connect() as conn:
+        for pid, yr, pa, ip in conn.execute(
+                "SELECT player_id, season_year, pa, ip FROM season_stats WHERE level = 'MLB'"):
+            if pa:
+                api_pa.setdefault(pid, {})[int(yr)] = float(pa)
+            if ip:
+                api_ip.setdefault(pid, {})[int(yr)] = float(ip)
+
+    late = [y for d in (api_pa, api_ip) for ys in d.values() for y in ys if y > lahman_last_play]
+    if not late:
+        print(f"  [outcomes] WARNING: season_stats has no MLB rows after {lahman_last_play}; "
+              f"run backfills.mlb_seasons_stitch first or every later season is missing "
+              f"from established_mlb / career PA / IP")
+
+    from prospects.data.sources import mlb_awards
+    api_awards = mlb_awards.load()
+    api_as = api_awards.get("all_star", {})
+    api_kind_years = {k: api_awards.get(k, {}) for k in ("mvp", "cy_young", "roy")}
+
+    if verbose:
+        print(f"  Lahman last season: play {lahman_last_play}, All-Star {lahman_last_as}, "
+              f"awards {lahman_last_award}; later seasons from the Stats API "
+              f"({len(api_pa) + len(api_ip):,} MLB stat lines by player, "
+              f"{sum(len(v) for v in api_awards.values()):,} award winners)")
+
+    def _yearly(bbref: Optional[str], pid: str) -> tuple[list, list]:
+        pa = extend_yearly(bat_year_pa.get(bbref, []) if bbref else [],
+                           api_pa.get(pid, {}), lahman_last_play)
+        ip = extend_yearly(pit_year_ip.get(bbref, []) if bbref else [],
+                           api_ip.get(pid, {}), lahman_last_play)
+        return pa, ip
+
+    def _award_years(bbref: Optional[str], mlbam_key: Optional[str]) -> dict[str, list[int]]:
+        lahman_as = allstar_years.get(bbref, []) if bbref else []
+        out = {"all_star": extend_years(lahman_as, api_as.get(mlbam_key, []), lahman_last_as)}
+        lahman_major = lahman_award_years.get(bbref, []) if bbref else []
+        api_major = sorted(y for kind in api_kind_years.values()
+                           for y in kind.get(mlbam_key, []))
+        out["major"] = extend_years(lahman_major, api_major, lahman_last_award)
+        for kind, by_id in api_kind_years.items():
+            out[kind] = [y for y in by_id.get(mlbam_key, []) if y > lahman_last_award]
+        return out
 
     if verbose:
         print(f"  Lahman ready ({time.time()-t0:.1f}s)")
@@ -327,13 +398,24 @@ def pull_outcomes(
                         and not (isinstance(last_year, float) and np.isnan(last_year))
                         else None)
 
-            career_pa = int(bat_pa.get(bbref, 0) or 0)
-            career_ip = float(pitch_ip.get(bbref, 0.0) or 0.0)
-            n_sustained = len(_sustained_mlb_seasons(bbref))
-            allstar_n = int(allstar_counts.get(bbref, 0))
-            mvp_n = int(mvp_counts.get(bbref, 0))
-            cy_n = int(cy_counts.get(bbref, 0))
-            roy_n = int(roy_counts.get(bbref, 0))
+            mlbam_key = (str(int(mlbam)) if mlbam is not None
+                         and not (isinstance(mlbam, float) and np.isnan(mlbam)) else None)
+            pa_years, ip_years = _yearly(bbref, p["player_id"])
+            award_years = _award_years(bbref, mlbam_key)
+            n_late_as = sum(1 for y in award_years["all_star"] if y > lahman_last_as)
+
+            # Lahman totals plus the post-Lahman seasons. The Lahman counts are
+            # kept as-is (all_star_full has two rows in the 1959-62 two-game
+            # years), so only the years Lahman lacks are added.
+            career_pa = int(bat_pa.get(bbref, 0) or 0) + int(sum(
+                v for y, v in pa_years if y > lahman_last_play))
+            career_ip = float(pitch_ip.get(bbref, 0.0) or 0.0) + float(sum(
+                v for y, v in ip_years if y > lahman_last_play))
+            n_sustained = len(sustained_seasons(dict(pa_years), dict(ip_years)))
+            allstar_n = int(allstar_counts.get(bbref, 0)) + n_late_as
+            mvp_n = int(mvp_counts.get(bbref, 0)) + len(award_years["mvp"])
+            cy_n = int(cy_counts.get(bbref, 0)) + len(award_years["cy_young"])
+            roy_n = int(roy_counts.get(bbref, 0)) + len(award_years["roy"])
             is_hof = bbref in hof_inductees
 
             outcome = CareerOutcome(
@@ -373,17 +455,18 @@ def pull_outcomes(
         }
         if match is not None:
             bbref_id = getattr(match, "key_bbref", None)
-            if bbref_id:
-                trigger["year_established_mlb"] = _established_year(bbref_id)
-                as_yrs = allstar_years.get(bbref_id, [])
-                if as_yrs:
-                    trigger["year_all_star_once"] = as_yrs[0]
-                if len(as_yrs) >= 3:
-                    trigger["year_all_star_three"] = as_yrs[2]
-                if bbref_id in award_year_map:
-                    trigger["year_major_award"] = int(award_year_map[bbref_id])
-                if bbref_id in hof_year_map:
-                    trigger["year_hof_trajectory"] = int(hof_year_map[bbref_id])
+            # A player Lahman never saw (debut after its last season) has no
+            # bbref row there but does have Stats API seasons and awards.
+            trigger["year_established_mlb"] = established_year(pa_years, ip_years)
+            as_yrs = award_years["all_star"]
+            if as_yrs:
+                trigger["year_all_star_once"] = as_yrs[0]
+            if len(as_yrs) >= 3:
+                trigger["year_all_star_three"] = as_yrs[2]
+            if award_years["major"]:
+                trigger["year_major_award"] = award_years["major"][0]
+            if bbref_id and bbref_id in hof_year_map:
+                trigger["year_hof_trajectory"] = int(hof_year_map[bbref_id])
         db.set_event_trigger_years(p["player_id"], trigger)
 
         n_written += 1

@@ -25,6 +25,18 @@ One module per external source:
 - `baseballcube.py`, `baseballcube_xref.py`, `baseballcube_integrate.py` —
   historical org rankings (inputs in `reference/baseballcube/`).
 - `outcomes.py`, `mlb_draft.py` — career outcomes and draft cache.
+  Lahman stops at 2021, so `outcomes.py` takes every later season from the MLB
+  Stats API: playing time from the `season_stats` MLB rows written by
+  `backfills/mlb_seasons_stitch.py`, All-Star selections and MVP / Cy Young /
+  Rookie of the Year from `mlb_awards.py`. Lahman stays authoritative for the
+  years it covers. Before this, every player who established, made an All-Star
+  team or won an award in 2022+ was labeled as never having done so.
+- `mlb_awards.py` — All-Star and award recipients by MLBAM id, cached at
+  `reference/mlb_awards.csv` (`python -m prospects.data.sources.mlb_awards`
+  re-pulls it).
+
+Outcomes are not rebuilt by the scheduled jobs. After changing label sources,
+run `python -m prospects.data.pull --phase outcomes`, then retrain.
 
 `prospects/data/pull.py` orchestrates a bulk historical pull
 (`python -m prospects.data.pull --phase all`).
