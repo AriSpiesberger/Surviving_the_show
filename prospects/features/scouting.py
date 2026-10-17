@@ -49,6 +49,7 @@ import numpy as np
 from prospects.features.grades import (
     SCOUTING_GRADE_NAMES, scouting_grade_dict,
 )
+from prospects.features.roster import ROSTER40_NAMES, roster40_dict
 from prospects.core.storage import ProspectDB
 
 
@@ -342,6 +343,7 @@ def _build_feature_names() -> list[str]:
     names += ACCEL_HIT_FEATS + ACCEL_PIT_FEATS + ACCEL_SHARED_FEATS
     names += WINDOW_SUMMARY
     names += SCOUTING_GRADE_NAMES  # FG-board + TWTC point-in-time grades
+    names += ROSTER40_NAMES        # Nov 30 40-man status; empty unless ROSTER40_ON=1
     return names
 
 
@@ -1550,6 +1552,8 @@ def build_scouting_features(
     vec_dict.update(window_summary)
     # point-in-time scouting grades (season <= as_of_year), NaN where absent
     vec_dict.update(scouting_grade_dict(prospect.get("player_id"), as_of_year))
+    # point-in-time 40-man status (Nov 30 of as_of_year); no-op unless ROSTER40_ON=1
+    vec_dict.update(roster40_dict(prospect.get("mlbam_id"), as_of_year))
 
     vec = np.array([vec_dict[name] for name in FEATURE_NAMES], dtype=np.float64)
     assert vec.shape == (N_FEATURES,), (vec.shape, N_FEATURES)

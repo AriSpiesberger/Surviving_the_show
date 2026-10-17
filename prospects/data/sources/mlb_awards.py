@@ -21,9 +21,8 @@ import csv
 import datetime as dt
 from collections import defaultdict
 
-import requests
-
 from prospects.config import REFERENCE_DIR
+from prospects.data.sources.milb import _get_json
 
 AWARDS_CSV = REFERENCE_DIR / "mlb_awards.csv"
 FIRST_SEASON = 1990
@@ -44,17 +43,14 @@ def pull(first: int = FIRST_SEASON, last: int | None = None) -> list[dict]:
     returns 404 or an empty list and is skipped."""
     last = last or dt.date.today().year
     rows = []
-    with requests.Session() as s:
-        for season in range(first, last + 1):
-            for award, kind in AWARD_KIND.items():
-                r = s.get(_URL.format(award=award, season=season), timeout=60)
-                if r.status_code == 404:
-                    continue
-                r.raise_for_status()
-                for a in r.json().get("awards", []):
-                    rows.append({"season": season, "award": award, "kind": kind,
-                                 "mlbam_id": a["player"]["id"],
-                                 "name": a["player"].get("nameFirstLast", "")})
+    for season in range(first, last + 1):
+        for award, kind in AWARD_KIND.items():
+            # None = 404 (no game in 2020, season not yet awarded); transient
+            # faults are retried inside _get_json and raise if they persist
+            for a in (_get_json(_URL.format(award=award, season=season)) or {}).get("awards", []):
+                rows.append({"season": season, "award": award, "kind": kind,
+                             "mlbam_id": a["player"]["id"],
+                             "name": a["player"].get("nameFirstLast", "")})
     return rows
 
 

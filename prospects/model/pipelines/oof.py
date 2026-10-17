@@ -188,7 +188,8 @@ def _feature_sig(db_path: str | None = None) -> str:
     # signature, so a board refresh left the panel cache (and every model built on it)
     # silently stale while live scoring read the new file.
     from prospects import config as _cfg
-    for f in (_cfg.SCOUTING_GRADES, _cfg.FANGRAPHS_DIR / "category_codes.json"):
+    for f in (_cfg.SCOUTING_GRADES, _cfg.FANGRAPHS_DIR / "category_codes.json",
+              _cfg.ROSTER40_NOV):
         if Path(f).exists():
             parts.append(Path(f).read_bytes())
     code = hashlib.sha1(b"".join(parts)).hexdigest()[:10]

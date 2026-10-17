@@ -105,6 +105,7 @@ BASEBALLCUBE_DIR = REFERENCE_DIR / "baseballcube"          # xref + rankings CSV
 # features.grades; the rest of the directory is the regeneration workspace.
 FANGRAPHS_DIR = REFERENCE_DIR / "fangraphs_board"
 SCOUTING_GRADES = FANGRAPHS_DIR / "scouting_grades_pointintime.csv"
+ROSTER40_NOV = REFERENCE_DIR / "roster40_nov.csv"  # 40-man rosters each Nov 30 (sources/mlb_rosters)
 
 # Cross-run generated lookup consumed by both panel build and scoring: the
 # PA/IP-weighted modal position per player (overrides prospects.primary_position,

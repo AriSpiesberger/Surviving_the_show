@@ -21,6 +21,7 @@ what the production probabilities can do.
 """
 from __future__ import annotations
 
+import os
 import sqlite3
 from pathlib import Path
 
@@ -35,8 +36,11 @@ from prospects.model.hazards.survival import build_windowed_features
 
 HERE = Path(__file__).parent
 DB = HERE.parent.parent / "prospects.db"
-PANEL = HERE / "raw" / "light_panel.npz"
-OUT = HERE / "raw" / "light_preds.csv"
+# ROSTER40_ON=1 appends the 40-man features; keep that panel and its
+# predictions apart so the two runs can be compared
+_TAG = "_r40" if os.environ.get("ROSTER40_ON") == "1" else ""
+PANEL = HERE / "raw" / f"light_panel{_TAG}.npz"
+OUT = HERE / "raw" / f"light_preds{_TAG}.csv"
 FIRST_S, LAST_S = 2012, 2025
 PREDICT_YEARS = (2022, 2023, 2024, 2025)
 
