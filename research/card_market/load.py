@@ -81,19 +81,43 @@ def _match_players(cards: pd.DataFrame) -> pd.Series:
     card year; anything still ambiguous is left unmatched."""
     p = people()
     p = p.assign(entry=p.draft_year.fillna(p.mlb_debut_year))
+    # second pass (2026-10-22): players with minor-league time within a year of the card, used to
+    # break name ties (IFA namesakes) and for a last name + first initial fallback (Chris/Christopher)
+    yrs = pd.read_sql("select distinct player_id, season_year from season_stats where level != 'MLB'",
+                      sqlite3.connect(DB))
+    active = yrs.groupby("player_id").season_year.agg(["min", "max"])
+    p = p.join(active, on="player_id")
+    p["key2"] = p.norm.map(_initial_key)
     by = {k: g for k, g in p.groupby("norm")}
+    by2 = {k: g for k, g in p.groupby("key2")}
+
+    def live(g, yr):
+        return g[(g["min"] <= yr + 1) & (g["max"] >= yr - 1)]
+
     out = []
     for name, yr in zip(cards.norm, cards.card_year):
         g = by.get(name)
-        if g is None:
-            out.append(None)
-        elif len(g) == 1:
-            out.append(g.player_id.iloc[0])
-        else:
+        pid = None
+        if g is not None and len(g) == 1:
+            pid = g.player_id.iloc[0]
+        elif g is not None:
             gap = (yr - g.entry).where(yr >= g.entry - 1)
             gap = gap.dropna()
-            out.append(g.loc[gap.idxmin(), "player_id"] if len(gap) and (gap == gap.min()).sum() == 1 else None)
+            if len(gap) and (gap == gap.min()).sum() == 1:
+                pid = g.loc[gap.idxmin(), "player_id"]
+            elif len(lg := live(g, yr)) == 1:
+                pid = lg.player_id.iloc[0]
+        else:
+            g2 = by2.get(_initial_key(name))
+            if g2 is not None and len(lg := live(g2, yr)) == 1:
+                pid = lg.player_id.iloc[0]
+        out.append(pid)
     return pd.Series(out, index=cards.index)
+
+
+def _initial_key(norm: str) -> str:
+    parts = norm.split()
+    return f"{parts[0][0]} {parts[-1]}" if len(parts) >= 2 else norm
 
 
 @lru_cache

@@ -35,9 +35,12 @@ from prospects.model.hazards.survival import build_windowed_features
 
 HERE = Path(__file__).parent
 DB = HERE.parent.parent / "prospects.db"
-PANEL = HERE / "raw" / "light_panel.npz"
+PANEL = HERE / "raw" / f"light_panel_{__import__('os').environ.get('LIGHT_FIRST_S', '1990')}.npz"
 OUT = HERE / "raw" / "light_preds.csv"
-FIRST_S, LAST_S = 2012, 2025
+# first training landmark: 2012 originally; the DB now holds the 1988-2004 draft classes, so the
+# walk-forward can learn from 1990 on (LIGHT_FIRST_S overrides; the panel cache is keyed by it)
+FIRST_S = int(__import__("os").environ.get("LIGHT_FIRST_S", "1990"))
+LAST_S = 2025
 PREDICT_YEARS = (2022, 2023, 2024, 2025)
 
 

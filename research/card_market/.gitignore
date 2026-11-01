@@ -1,5 +1,5 @@
 # Derived from prospects.db — rebuild on the machine with the current DB
-raw/light_panel.npz
+raw/light_panel*.npz
 raw/light_preds.csv
 raw/*_positions.csv
 # scratch
@@ -7,3 +7,12 @@ raw/search.jsonl
 names_pipe.txt
 logs/
 __pycache__/
+raw/light_preds*.csv
+raw/callup_panel.parquet
+raw/callup_preds.csv
+raw/candidates_*.csv
+# derived from the production model / personal holdings
+raw/prod_probs_*.csv
+raw/ev_*.csv
+raw/holdings_eval.csv
+raw/*.bak

@@ -1,0 +1,180 @@
+<title>First-Auto EV Board</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Source+Sans+3:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a scouting-report sheet. Short brief up top, then one dense sortable ledger. */
+:root {
+  --bg: #f6f7f5; --panel: #ffffff; --fg: #1d2420; --muted: #5d6a63; --line: #d9dfdb;
+  --accent: #1f6f50; --accent-soft: #e2efe8; --good: #1f7a46; --bad: #b4412f; --warn: #a06a00;
+  --display: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #121614; --panel: #1a201d; --fg: #e4ebe6; --muted: #98a59e; --line: #2c3530;
+  --accent: #5fc196; --accent-soft: #1f3129; --good: #6bcf8f; --bad: #ef8a77; --warn: #e2b450; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #121614; --panel: #1a201d; --fg: #e4ebe6; --muted: #98a59e; --line: #2c3530;
+  --accent: #5fc196; --accent-soft: #1f3129; --good: #6bcf8f; --bad: #ef8a77; --warn: #e2b450; color-scheme: dark }
+body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-block: 28px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 28px; }
+h1, h2 { font-family: var(--display); font-weight: 700; letter-spacing: .01em; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(30px, 5vw, 44px); line-height: 1.05; }
+h2 { font-size: 22px; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); }
+.dek { color: var(--muted); max-width: 70ch; margin: 6px 0 0; }
+.brief { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 16px; }
+.brief section { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 16px 18px; min-width: 0; display: grid; gap: 8px; align-content: start; }
+.brief p, .brief ul { margin: 0; }
+.brief ul { padding-left: 18px; display: grid; gap: 4px; }
+.formula { font-family: var(--mono); font-size: 13px; background: var(--accent-soft); padding: 8px 10px; border-radius: 4px; overflow-x: auto; white-space: nowrap; }
+.num { font-variant-numeric: tabular-nums; }
+.controls { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+.controls label { display: inline-flex; gap: 6px; align-items: center; font-size: 14px; color: var(--muted); }
+.controls select, .controls input[type=search] { font: inherit; font-size: 14px; color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 5px 8px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.seg button { font: inherit; font-size: 13px; background: var(--panel); color: var(--muted); border: 0; padding: 5px 10px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--panel); }
+button:focus-visible, select:focus-visible, input:focus-visible, th:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tablebox { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { padding: 7px 9px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
+th:first-child, td:first-child, th.l, td.l { text-align: left; }
+thead th { position: sticky; top: 0; background: var(--panel); font-family: var(--display); font-weight: 600; font-size: 14px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); cursor: pointer; user-select: none; }
+thead th.grp { cursor: default; text-align: center; color: var(--accent); border-bottom: 2px solid var(--accent-soft); }
+thead th[aria-sort] { color: var(--fg); }
+tbody td { font-family: var(--mono); font-size: 13px; }
+tbody td.name { font-family: var(--body); font-weight: 600; font-size: 14px; }
+.sub { font-family: var(--body); font-weight: 400; color: var(--muted); font-size: 12px; }
+.pos { color: var(--good); font-weight: 500; }
+.neg { color: var(--bad); }
+.chip { display: inline-block; font-family: var(--body); font-size: 11px; padding: 1px 6px; border-radius: 3px; border: 1px solid var(--line); color: var(--muted); }
+.chip.bl { border-color: var(--accent); color: var(--accent); }
+.chip.warn { border-color: var(--warn); color: var(--warn); }
+.deal { background: var(--accent-soft); }
+a { color: var(--accent); }
+.foot { color: var(--muted); font-size: 13px; max-width: 90ch; }
+@media (prefers-reduced-motion: no-preference) { tbody tr { transition: background .12s; } }
+tbody tr:hover { background: var(--accent-soft); }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>First-Auto EV Board</h1>
+    <p class="dek">What buying a player's base 1st Bowman Chrome auto is worth this November, held until he debuts (sold in days 0–3 of the call-up) or until next October. Production v3.5 probabilities, SportsCardsPro sold prices, eBay asks pulled 22 Oct 2026.</p>
+  </header>
+
+  <div class="brief">
+    <section>
+      <h2>How EV is built</h2>
+      <div class="formula">E[exit] = P(debut '27) × M<sub>debut</sub> + (1 − P) × M<sub>miss</sub></div>
+      <p>The multiples come from 3,172 November positions (2022–25) per price band; the debut pop from ~200 players' sale-level debut windows. The miss path is higher for likely new Top-100 entrants. Costs: 13.25% + $0.40 to sell, 7% tax + $1.50 shipping to buy.</p>
+      <p><b>Max pay</b> is the price at which EV is zero. Buy a listing only under it.</p>
+    </section>
+    <section>
+      <h2>What held up out of sample</h2>
+      <ul>
+        <li>EV above +10% realized <span class="num">+17%</span> raw and <span class="num">+18%</span> PSA 10 (leave-one-year-out); above +20% realized <span class="num">+26%</span> raw.</li>
+        <li>EV between 0 and +10% lost money on raw cards.</li>
+        <li>At the fair price only the near-certain call-ups clear: P ≈ 0.65–0.8 earns +15–22% (all-years market), +30–40% if 2027 trades like 2024–25.</li>
+        <li>The market year swings everything: non-debuters returned 0.74× in 2022 and 1.11× in 2025.</li>
+      </ul>
+    </section>
+    <section>
+      <h2>Which debuts pop more</h2>
+      <ul>
+        <li>Days 0–3 pop measured on ~200 players' base autos and every priced parallel: <span class="num">2.5×</span> under $10, about <span class="num">1.5×</span> above $15.</li>
+        <li>Hype already in the price shrinks it: ever-Top-100 names popped 1.38× vs 1.78×, mostly through price. September call-ups pop less.</li>
+        <li>Team market and early-ETA effects did not replicate on sale-level data. The pop index is shown, not used.</li>
+        <li>Long run: a settled star's raw auto averages $44, an established player's $9. Holding past the pop is a star lottery.</li>
+      </ul>
+    </section>
+  </div>
+
+  <div class="controls">
+    <label for="q">Find <input type="search" id="q" placeholder="player or team"></label>
+    <label for="who">Show <select id="who"><option value="bl">Buy list</option><option value="all">All with positive EV + buy list</option></select></label>
+    <label>Market <span class="seg" id="mkt"><button type="button" data-m="all" aria-pressed="true">2022–25 avg</button><button type="button" data-m="recent" aria-pressed="false">2024–25</button></span></label>
+    <label>Copy <span class="seg" id="cp"><button type="button" data-c="raw" aria-pressed="true">Raw</button><button type="button" data-c="psa" aria-pressed="false">PSA 10</button></span></label>
+    <span class="sub" id="count"></span>
+  </div>
+
+  <div class="tablebox">
+    <table id="t">
+      <thead>
+        <tr><th class="grp l" colspan="3">Player</th><th class="grp" colspan="4">Model probabilities</th><th class="grp" colspan="5" id="grpPrice">Raw card</th><th class="grp" colspan="2">Pop / long run</th></tr>
+        <tr id="hdr"></tr>
+      </thead>
+      <tbody id="body"></tbody>
+    </table>
+  </div>
+
+  <p class="foot">Fair EV assumes you pay the SportsCardsPro sold-price estimate. "Ask EV" uses today's lowest eBay Buy-It-Now, calibrated to what that EV level realized historically. A green row means the ask is under max pay. Check the listing before buying: some cheap asks are signed base cards, slabs or variants, and asks outside 0.5–2.5× the sold price are flagged. Long-run value is the 6-year outcome-weighted price of a 2013–16-era card in today's dollars. Source: research/card_market/ev.py, raw/ev_2026.csv.</p>
+</div>
+
+<script>
+const ROWS = __ROWS__;
+const state = { sort: "p1", dir: -1, mkt: "all", copy: "raw", who: "bl", q: "" };
+const pct = v => v == null ? "–" : (v * 100).toFixed(0) + "%";
+const sgn = v => v == null ? "–" : (v > 0 ? "+" : "") + (v * 100).toFixed(0) + "%";
+const usd = v => v == null ? "–" : "$" + (v >= 100 ? v.toFixed(0) : v.toFixed(2));
+const cls = v => v == null ? "" : v > 0 ? "pos" : "neg";
+function cols() {
+  const r = state.copy === "raw", m = state.mkt === "recent";
+  return [
+    { k: "n", h: "Player", l: true }, { k: "org", h: "Team", l: true }, { k: "lv", h: "Lvl", l: true },
+    { k: "p1", h: "Debut '27", f: pct }, { k: "t1", h: "New T100", f: pct }, { k: "est", h: "Estab 6y", f: pct }, { k: "star", h: "Star 6y", f: pct },
+    { k: r ? "rp" : "pp", h: "Sold price", f: usd },
+    ...(r ? [{ k: "ask", h: "Lowest ask", f: usd }] : [{ k: "pp", h: "Ask n/a", f: () => "–", nosort: true }]),
+    { k: r ? (m ? "rmpr" : "rmp") : (m ? "pmpr" : "pmp"), h: "Max pay", f: usd },
+    { k: r ? (m ? "rfr" : "rf") : (m ? "pfr" : "pf"), h: "Fair EV", f: sgn, c: true },
+    ...(r ? [{ k: "rask", h: "Ask EV", f: sgn, c: true }] : [{ k: m ? "pf" : "pfr", h: m ? "EV 22–25 mkt" : "EV 24–25 mkt", f: sgn, c: true }]),
+    { k: "pop", h: "Pop index", f: v => v == null ? "–" : v.toFixed(2) + "×" },
+    { k: r ? "lr" : "plr", h: "Long-run", f: usd },
+  ];
+}
+function render() {
+  const C = cols();
+  document.getElementById("grpPrice").textContent = state.copy === "raw" ? "Raw card" : "PSA 10";
+  const hdr = document.getElementById("hdr");
+  hdr.innerHTML = "";
+  C.forEach(c => {
+    const th = document.createElement("th");
+    th.textContent = c.h; if (c.l) th.className = "l"; th.tabIndex = 0;
+    if (state.sort === c.k) th.setAttribute("aria-sort", state.dir < 0 ? "descending" : "ascending");
+    const go = () => { if (c.nosort) return; state.dir = state.sort === c.k ? -state.dir : (c.l ? 1 : -1); state.sort = c.k; render(); };
+    th.addEventListener("click", go); th.addEventListener("keydown", e => { if (e.key === "Enter") go(); });
+    hdr.appendChild(th);
+  });
+  const q = state.q.toLowerCase();
+  let rows = ROWS.filter(r => (state.who === "all" || r.bl) && (!q || (r.n + " " + r.org).toLowerCase().includes(q)));
+  rows.sort((a, b) => { const x = a[state.sort], y = b[state.sort];
+    if (x == null) return 1; if (y == null) return -1;
+    return (typeof x === "string" ? x.localeCompare(y) : x - y) * state.dir; });
+  const mpKey = C[9].k;
+  const body = document.getElementById("body");
+  body.innerHTML = rows.map(r => {
+    const deal = state.copy === "raw" && r.ask != null && r[mpKey] != null && r.ask <= r[mpKey] && !r.flag;
+    return `<tr class="${deal ? "deal" : ""}">` + C.map((c, i) => {
+      const v = r[c.k];
+      if (i === 0) return `<td class="name">${r.url ? `<a href="${r.url}" target="_blank" rel="noopener">${r.n}</a>` : r.n} ${r.bl ? '<span class="chip bl">buy list</span>' : ""}${r.flag ? ' <span class="chip warn">check listing</span>' : ""}</td>`;
+      if (c.l) return `<td class="l sub">${v ?? ""}</td>`;
+      return `<td class="${c.c ? cls(v) : ""}">${c.f(v)}</td>`;
+    }).join("") + "</tr>";
+  }).join("");
+  document.getElementById("count").textContent = rows.length + " players";
+}
+document.getElementById("q").addEventListener("input", e => { state.q = e.target.value; render(); });
+document.getElementById("who").addEventListener("change", e => { state.who = e.target.value; render(); });
+for (const [id, key, attr] of [["mkt", "mkt", "m"], ["cp", "copy", "c"]]) {
+  document.getElementById(id).addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    state[key] = b.dataset[attr];
+    document.querySelectorAll(`#${id} button`).forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+    render();
+  });
+}
+render();
+</script>
