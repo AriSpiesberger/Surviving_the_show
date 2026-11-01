@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "surviving-the-show"
-version = "2.1.0"
+version = "3.5.0"
 description = "Prospect outcome model and card buy list"
 requires-python = ">=3.11"
 dependencies = [
@@ -14,6 +14,7 @@ dependencies = [
     "scipy",
     "scikit-learn",
     "xgboost",
+    "torch",          # v3 sequence encoder and neural hazard
     "tqdm",
     "pybaseball",     # MLB outcomes, Lahman/Chadwick, draft-scrape fallback
     "ncaa_bbStats",   # packaged draft cache (1965-2025) + NCAA college stats
@@ -21,6 +22,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest"]
+research = ["pyarrow", "playwright"]
 
 [project.scripts]
 # The full historical data pull, packaged as one command. Defaults to the

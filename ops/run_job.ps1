@@ -3,7 +3,7 @@
 Wrapper for the four scheduled jobs. Invoked by Windows Task Scheduler.
 
 Usage:
-    powershell -ExecutionPolicy Bypass -File scripts\local\run_job.ps1 -Job daily_data
+    powershell -ExecutionPolicy Bypass -File ops\run_job.ps1 -Job daily_data
 
 Behavior:
   - cd's to repo root
@@ -44,7 +44,7 @@ if (Test-Path $EnvPath) {
 # Local path overrides (modules default to Railway's /data/* otherwise)
 $env:DATA_DIR          = $RepoRoot
 $env:PROSPECT_DB       = Join-Path $RepoRoot 'prospects.db'
-$env:PRICES_DIR        = Join-Path $RepoRoot 'prices'
+$env:PRICES_DIR        = Join-Path $RepoRoot 'reference\prices\daily'
 $env:HOLDINGS_PATH     = Join-Path $RepoRoot 'portfolio\holdings.csv'
 $env:ALERTS_STATE_PATH = Join-Path $RepoRoot 'portfolio\alerts_state.json'
 # Force UTF-8 stdout/stderr so debut-alert subject lines containing

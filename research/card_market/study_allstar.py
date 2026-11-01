@@ -14,7 +14,7 @@ market already expects). Logistic regression (L2, standardised) and a small GBM,
 
 Trade: buy the first auto in January Y (monthly SportsCardsPro price), sell in August Y (after the
 selection), net of study_basket.COSTS; every pick counts, hits and misses. Labels: Stats API rosters
-(raw/allstars.csv, fetch_allstars.py).
+(raw/allstars.csv, scrapers/fetch_allstars.py).
 
     python study_allstar.py
 """

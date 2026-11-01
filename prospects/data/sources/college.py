@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import site
 import unicodedata
 from typing import Optional
 
@@ -29,7 +30,8 @@ from prospects.core.schema import SeasonStats
 from prospects.core.storage import ProspectDB
 
 
-NCAA_DATA = r"C:\Users\arisp\anaconda3\Lib\site-packages\data\player_stats_cache"
+NCAA_DATA = os.environ.get(
+    "NCAA_DATA", os.path.join(site.getsitepackages()[-1], "data", "player_stats_cache"))
 
 
 def _norm(s) -> str:

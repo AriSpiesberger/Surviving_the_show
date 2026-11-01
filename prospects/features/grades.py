@@ -1,7 +1,7 @@
 """Point-in-time scouting-grade features (FanGraphs Board + TWTC).
 
 Loads reference/fangraphs_board/scouting_grades_pointintime.csv (built by
-tools/build_scouting_grades.py) and exposes a no-lookahead lookup: for a
+tools/scouting/build_scouting_grades.py) and exposes a no-lookahead lookup: for a
 player at as_of_year S, return the most recent grade snapshot with season <= S.
 Overlap seasons prefer fg_board over twtc.
 

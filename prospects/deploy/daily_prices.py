@@ -5,10 +5,10 @@ Pulls base 1st Bowman Chrome auto raw-card prices for:
   2) every player_id in holdings (from --holdings, optional)
 
 Writes:
-  - prices/prices_buylist_YYYY-MM-DD.csv          (today's snapshot)
-  - prices/prices_buylist_latest.csv              (symlink-like; rewritten)
-  - prices/prices_holdings_YYYY-MM-DD.csv         (if holdings provided)
-  - prices/prices_holdings_latest.csv             (if holdings provided)
+  - reference/prices/daily/prices_buylist_YYYY-MM-DD.csv          (today's snapshot)
+  - reference/prices/daily/prices_buylist_latest.csv              (symlink-like; rewritten)
+  - reference/prices/daily/prices_holdings_YYYY-MM-DD.csv         (if holdings provided)
+  - reference/prices/daily/prices_holdings_latest.csv             (if holdings provided)
 
 The output schema includes lowest_buynow_price + lowest_buynow_url, which is
 what the alerts job consumes for 2x triggers and what you use for buys.
@@ -17,7 +17,7 @@ Usage (local):
     python -m prospects.deploy.daily_prices \\
         --buy-list results/buy_lists/buy_list_v1.18_FINAL.csv \\
         --db prospects.db \\
-        --out-dir prices \\
+        --out-dir reference/prices/daily \\
         --holdings portfolio/holdings.csv
 """
 from __future__ import annotations

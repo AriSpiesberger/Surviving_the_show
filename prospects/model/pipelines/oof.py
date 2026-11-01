@@ -72,7 +72,7 @@ from prospects import config
 from prospects.config import REPO_ROOT
 
 # First landmark (snapshot) year of the OOF panel: 1990 = two seasons after the first 1988 draft
-# class in the DB (tools/build_pre2005_ext.py --start 1988, production since 2026-10-01; 1998 for
+# class in the DB (tools/history/build_pre2005_ext.py --start 1988, production since 2026-10-01; 1998 for
 # the 1996+ build of 2026-09-25, 2007 before that). PROSPECT_MIN_LANDMARK overrides it.
 MIN_LANDMARK_YEAR = int(__import__("os").environ.get("PROSPECT_MIN_LANDMARK", "1990"))
 

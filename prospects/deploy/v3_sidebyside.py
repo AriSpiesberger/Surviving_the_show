@@ -20,7 +20,7 @@ import argparse
 import sys
 
 from prospects import config
-from prospects.config import REPO_ROOT
+from prospects.config import PRICES_DIR_DEFAULT, REPO_ROOT
 from prospects.deploy.weekly_score import run_step
 
 _RUN = config.run()
@@ -81,7 +81,7 @@ def v3_sheet_cmd(out_all, out_final, extra=None):
            "--calibrators", str(models / "calibrators_v3.5.pkl"),
            "--precision", "0", "--threshold", str(MIN_P_DEBUT_3Y),
            "--out-all", str(out_all), "--out-final", str(out_final)]
-    latest = REPO_ROOT / "prices" / "prices_buylist_latest.csv"
+    latest = PRICES_DIR_DEFAULT / "prices_buylist_latest.csv"
     if latest.exists():
         cmd += ["--prices", str(latest)]
     return cmd + (extra or [])

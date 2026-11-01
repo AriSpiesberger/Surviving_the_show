@@ -57,7 +57,7 @@ from pathlib import Path
 # run never trips it — anything listed here that retrain does NOT produce is
 # a real external dependency and is called out as such.
 from prospects import config
-from prospects.config import REPO_ROOT
+from prospects.config import PRICES_DIR_DEFAULT, REPO_ROOT
 
 _RUN = config.run()  # runs/current
 # Required artifacts, as absolute paths under the current run. check_artifacts
@@ -151,7 +151,7 @@ def sheet_cmd(extra: list[str] | None = None) -> list[str]:
            "--xgb", str(_RUN.models / "joint_xgb_v2.5.pkl"),
            "--calibrators", str(_RUN.models / "calibrators_v2.5.pkl"),
            "--yip-thresholds", str(_RUN.yip_thresholds(60))]
-    latest = REPO_ROOT / "prices" / "prices_buylist_latest.csv"
+    latest = PRICES_DIR_DEFAULT / "prices_buylist_latest.csv"
     if latest.exists():
         cmd += ["--prices", str(latest)]
     return cmd + (extra or [])

@@ -9,8 +9,8 @@ for non-R1 prospects who actually reach The Show, which is the population
 the buy-list filter excludes by design.
 
 Writes:
-  - prices/prices_debut_comps_YYYY-MM-DD.csv  (today's snapshot)
-  - prices/prices_debut_comps_latest.csv      (rewritten each run)
+  - reference/prices/daily/prices_debut_comps_YYYY-MM-DD.csv  (today's snapshot)
+  - reference/prices/daily/prices_debut_comps_latest.csv      (rewritten each run)
 
 Usage:
     python -m prospects.deploy.debut_comps --year 2026

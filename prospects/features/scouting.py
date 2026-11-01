@@ -142,7 +142,7 @@ PEDIGREE_FEATS = [
     #
     # Do not reintroduce from /people. A dated source exists for 2017+ only
     # (reference/fangraphs_board), which would trade a clean leak for a
-    # missingness confound across the 2017 boundary. See docs/MODEL_AND_DATA.md.
+    # missingness confound across the 2017 boundary. See docs/data/non-affiliate-and-biometrics.md.
     "bats_L",        # 1 if bats Left (R is baseline)
     "bats_S",        # 1 if switch
     "throws_L",      # 1 if throws Left (R is baseline)
@@ -372,7 +372,7 @@ def compute_baselines(
         }
     """
     with db._connect() as conn:
-        # 2005+ only: the 1996-2004 draft-class layer (tools/build_pre2005_ext.py, 2026-09-25) holds
+        # 2005+ only: the 1996-2004 draft-class layer (tools/history/build_pre2005_ext.py, 2026-09-25) holds
         # just the draftee cohort, not whole leagues, so it would bias league medians
         rows = [dict(r) for r in conn.execute("SELECT * FROM season_stats WHERE season_year >= 2005").fetchall()]
 

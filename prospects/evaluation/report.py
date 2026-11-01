@@ -1,4 +1,4 @@
-"""Regenerate evaluation/README.md from the CSVs in evaluation/v2.0b_landmark/.
+"""Regenerate the evaluation report (README.md + detail pages) from the CSVs in evaluation/.
 
 Static prose is templated here; every TABLE is rebuilt from the latest
 per_bucket / per_yip / per_level / thresholds CSVs + headline.json, so the
@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 
 import pandas as pd
@@ -101,6 +102,36 @@ def _per_horizon(df):
                 f"{r['ap_lift']:.1f}× | {r['brier']:.4f} | {calib} |")
         out.append(f"\n#### {ev}\n\n" + "\n".join(rows))
     return "\n".join(out)
+
+
+# Detail pages beside the README: file -> (page title, the report's H2 sections it holds).
+PAGES = {
+    "notes.md": ("Evaluation notes and corrections", None),
+    "stack.md": ("Stack", ["Stack"]),
+    "reliability.md": ("Reliability", ["Reliability"]),
+    "trajectory.md": ("Per-horizon trajectory", ["Per-horizon"]),
+    "slices.md": ("Per-bucket, per-yip and per-level metrics", ["Per-bucket", "Per-yip", "Per-level"]),
+    "reference.md": ("Glossary and reproduction", ["Statistics glossary", "Reproducing"]),
+}
+
+
+def _write_pages(md: str, out: Path) -> None:
+    """Split the rendered report: a short README (headline + index) and one page per topic."""
+    head, *rest = re.split(r"(?m)^(?=## )", md)
+    sections = {s.split("\n", 1)[0][3:]: s.rstrip() + "\n" for s in rest}
+    title, intro, *notes = head.strip().split("\n\n")
+
+    def pick(prefix):
+        return next(s for name, s in sections.items() if name.startswith(prefix))
+
+    index = "\n".join(f"- [{page}]({name})" for name, (page, _) in PAGES.items())
+    out.write_text(
+        f"{title}\n\n{intro}\n\nThe published sheet is scored by v3.5, which blends this stack with "
+        f"further components; its metrics are in [`../evaluation_v3`](../evaluation_v3).\n\n"
+        f"{pick('Headline')}\n## Details\n\n{index}\n", encoding="utf-8")
+    for name, (page, wanted) in PAGES.items():
+        body = "\n\n".join(notes) + "\n" if wanted is None else "\n".join(pick(w) for w in wanted)
+        (out.parent / name).write_text(f"# {page}\n\n{body}", encoding="utf-8")
 
 
 def main():
@@ -213,7 +244,7 @@ clean split; its dramatic "wins" were the leak rewarding memorization.
 post-cutoff entry cohorts' (2021+) resolved short-horizon (row, h) pairs,
 scored with val-excluded hazards (`model/train/score_recent_cohorts`). The
 random-split val below CANNOT see this gain (it holds only ≤2020 entries) —
-the original walk-forward A/B (`model/train/exp_walkforward3`) reported
+the original walk-forward A/B (`research/model_experiments/exp_walkforward3`) reported
 +0.04..+0.07 out-of-era debut@3 AP, but that figure predates the label-leak fix
 AND used a harness that stacked the joint layer on in-sample hazard features
 (see the era section). **It has not been re-measured and should be treated as
@@ -310,13 +341,13 @@ miscalibration. STAR_PLUS_ELITE below h=4 is a ranking signal, not a rate.
 held-out rows. Below 0.70 the printed debut probabilities are trustworthy as
 written; **above 0.70 they run 5–8 points hot** (printed 0.85 → realized ~0.79),
 in every slice. Six alternative calibrators (spline hinges, isotonic, fits on
-bag-matched cross-fit predictions; `model/train/exp_cal_topend`) all tie the
+bag-matched cross-fit predictions; `research/model_experiments/exp_cal_topend`) all tie the
 deployed one to the fourth decimal, so the residual is a held-out-population
 difference, not the calibrator's shape.
 
 **Era-shift bound (full-stack walk-forward, `model/train/exp_walkforward2`).**
 Re-measured 2026-09-19 on leak-free features with a corrected harness
-(`model/train/exp_walkforward_h`). The earlier harness scored the joint layer's
+(`research/model_experiments/exp_walkforward_h`). The earlier harness scored the joint layer's
 training rows with hazards fit on those same players — in-sample hazard
 features in training, out-of-sample at evaluation — which handicapped every
 stacked model; production stacks out-of-fold and so does the corrected harness.
@@ -423,8 +454,8 @@ The weekly retrain (`deploy/weekly_score.py`, ported 2026-09-05) now runs
 Stage C = the v2.4 steps above automatically after stage_a + prod; the
 Monday job produces the v2.3 buy list end-to-end.
 """
-    OUT.write_text(md, encoding="utf-8")
-    print(f"Wrote {OUT} ({len(md):,} chars)")
+    _write_pages(md, OUT)
+    print(f"Wrote {OUT} + {len(PAGES)} detail pages ({len(md):,} chars)")
     print(f"weighted-AP = {head['weighted_ap']:.4f}")
 
 
