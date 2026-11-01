@@ -1,10 +1,13 @@
-# runs/
+# runs
 
-| Folder | What it holds |
+Only the evaluation reports are in git. Everything else here is local.
+
+| Folder | Contents |
 |---|---|
-| `current/` | **Production.** Models, training longs, scored snapshot, evaluation packet, and the live buy sheet (`buy_lists/final.csv`). Everything the weekly jobs read and write. |
-| `current/buy_lists/history/` | Earlier sheets and side-by-side variants, kept for comparison. |
-| `backups/` | Point-in-time copies of `current/`: automatic `backup_v2.1c_<date>` snapshots from `promote_v22`, and manual backups before big switches (e.g. `current_pre_ext_20260925`). |
-| `experiments/` | One folder per experiment (the default `--out-dir` of each `prospects/model/train/exp_*.py`), plus the `ext` / `ext2` pre-2005 builds and the older `hz*` / `fs*` hazard and feature-selection runs. Not read by production. |
+| `current/` | Production: models, training data, scored snapshot and the buy sheet (`buy_lists/final.csv`) |
+| `current/evaluation_v3/` | [Metrics for the published v3.5 model](current/evaluation_v3/README.md) (in git) |
+| `current/evaluation/` | [Metrics for the v2.4 base layer](current/evaluation/README.md) (in git) |
+| `backups/` | Restore points written before a promotion |
+| `experiments/` | Experiment output. Some folders are live: the retrain writes `exp_cdf_timing5/` and reads it back |
 
-Loose run logs live in `logs/runs/`.
+Pass `--tag <name>` to a pipeline command to write to `runs/<name>/`.
